@@ -189,8 +189,8 @@ def _cute_matmul_2d(a: torch.Tensor, b: torch.Tensor, stage_idx: int, tag: str) 
     @cute.kernel
     def _matmul2d_tiled_device(x: cute.Tensor, y: cute.Tensor, z: cute.Tensor, mm, nn, kk, block_m: int, block_n: int):
         # Tile the output space
-        idx_m = cute.blockIdx.x * block_m
-        idx_n = cute.blockIdx.y * block_n
+        idx_m = cute.block_id_x() * block_m
+        idx_n = cute.block_id_y() * block_n
 
         for i in range(block_m):
             row = idx_m + i
