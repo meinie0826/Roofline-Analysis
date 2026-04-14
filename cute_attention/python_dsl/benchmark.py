@@ -27,7 +27,7 @@ def benchmark(stage_name, q, k, v, config, warmup=5, repeat=20):
 
 
 def benchmark_stage_with_fallback(stage_name, q, k, v, config, warmup=5, repeat=20):
-    if stage_name not in {"stage1", "stage4", "stage5", "stage6", "stage7"}:
+    if stage_name not in {"stage1", "stage4", "stage5", "stage6", "stage7", "stage8"}:
         return benchmark(stage_name, q, k, v, config, warmup=warmup, repeat=repeat), None
 
     block_m = config.block_m
@@ -60,6 +60,7 @@ def parse_stage_list(stages_arg: str) -> list[str]:
             "stage5",
             "stage6",
             "stage7",
+            "stage8",
             "baseline_fa4",
             "baseline_sdpa",
         ]
