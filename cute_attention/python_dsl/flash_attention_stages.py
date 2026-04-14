@@ -559,6 +559,21 @@ if __name__ == "__main__":
     
     if len(sys.argv) > 1 and sys.argv[1] == '--stages':
         print_stage_breakdown()
+    elif len(sys.argv) > 1 and sys.argv[1] == '--test':
+        stage = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+        print(f"\nTesting Stage {stage}...")
+        torch.manual_seed(42)
+        
+        B, S, H, D = 1, 4096, 16, 128
+        q = torch.randn(B, S, H, D, dtype=torch.bfloat16, device='cuda')
+        k = torch.randn(B, S, H, D, dtype=torch.bfloat16, device='cuda')
+        v = torch.randn(B, S, H, D, dtype=torch.bfloat16, device='cuda')
+        
+        out, metrics = flash_attention(q, k, v, stage=stage)
+        print(f"  {metrics['config']}")
+        print(f"  Time: {metrics['time_ms']:.3f} ms")
+        print(f"  TFLOPs: {metrics['tflops']:.1f}")
+        print(f"  TC Util: {metrics['tc_util_pct']:.1f}%")
     else:
         # Simple test
         print("\nTesting FlashAttention stages...")
