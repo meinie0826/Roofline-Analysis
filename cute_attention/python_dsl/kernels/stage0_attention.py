@@ -202,10 +202,13 @@ def attention_forward(Q, K, V, scale=None):
         
         # Launch
         try:
-            naive_attention_cute_kernel[grid, block](
+            naive_attention_cute_kernel(
                 Q_ptr, K_ptr, V_ptr, O_ptr,
                 N, N, d, scale,
                 BLOCK_M, BLOCK_N, BLOCK_K
+            ).launch(
+                grid=grid,
+                block=block
             )
         except Exception as e:
             print(f"ERROR: Kernel launch failed: {e}")
