@@ -119,8 +119,15 @@ def attention_fa4(q, k, v, causal=True, scale=None):
     """FlashAttention 4 (if available)"""
     try:
         from flash_attn.cute.interface import flash_attn_func as fa4_func
-        return fa4_func(q, k, v, causal=causal, softmax_scale=scale)
+        result = fa4_func(q, k, v, causal=causal, softmax_scale=scale)
+        # FA4 returns tuple: (output, lse, softmax_stats)
+        if isinstance(result, tuple):
+            return result[0]  # Return only the output
+        return result
     except ImportError:
+        return None
+    except Exception as e:
+        print(f"FA4 error: {e}")
         return None
 
 
@@ -243,12 +250,12 @@ def benchmark_kernel(kernel_fn, q, k, v, config: AttentionConfig,
     
     # Warmup
     for _ in range(warmup):
-        if kernel_fn.__name__ in ["attention_fa2", "attention_fa3", "attention_fa4"]:
-            out = kernel_fn(q, k, v, causal=config.causal, scale=scale)
-        else:
-            out = kernel_fn(q, k, v, causal=config.causal, scale=scale)
+        out = kernel_fn(q, k, v, causal=config.causal, scale=scale)
         if out is None:
             return {"error": "Kernel not available"}
+        # Handle tuple output
+        if isinstance(out, tuple):
+            out = out[0]
     
     torch.cuda.synchronize()
     
@@ -260,6 +267,9 @@ def benchmark_kernel(kernel_fn, q, k, v, config: AttentionConfig,
         out = kernel_fn(q, k, v, causal=config.causal, scale=scale)
         torch.cuda.synchronize()
         times.append((time.perf_counter() - start) * 1000)
+        
+        if out is None:
+            return {"error": "Kernel not available"}
     
     times = np.array(times)
     avg_ms = float(times.mean())
@@ -301,6 +311,10 @@ def verify_correctness(ref_fn, test_fn, q, k, v, config: AttentionConfig,
     
     if test_out is None:
         return False, float('inf')
+    
+    # FA4 returns tuple (output, lse, softmax_stats)
+    if isinstance(test_out, tuple):
+        test_out = test_out[0]
     
     # Convert to float for comparison
     ref_out = ref_out.float()
