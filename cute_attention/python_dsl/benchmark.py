@@ -104,6 +104,29 @@ def run_benchmark(seqlens=[128, 256, 512, 1024, 2048],
     
     print("="*70)
     
+    # Save results
+    import json
+    import os
+    from datetime import datetime
+    
+    os.makedirs("cute_attention/results", exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%dT%H%M%SZ")
+    result_file = f"cute_attention/results/benchmark_{timestamp}.json"
+    
+    with open(result_file, 'w') as f:
+        json.dump({
+            'timestamp': timestamp,
+            'stage': 0,
+            'config': {
+                'batch_size': batch_size,
+                'nheads': nheads,
+                'headdim': headdim,
+            },
+            'results': results
+        }, f, indent=2)
+    
+    print(f"\nResults saved to: {result_file}")
+    
     return results
 
 
