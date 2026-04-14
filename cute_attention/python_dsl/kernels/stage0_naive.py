@@ -7,7 +7,6 @@ from .common import (
     HAS_CUTE,
     cutlass,
     cute,
-    ensure_cute_ir_context,
     from_dlpack,
     require_torch,
     validate_qkv,
@@ -134,7 +133,6 @@ def stage0_forward(q, k, v, config: AttentionConfig | None = None):
             f"stage0 currently supports seq_len <= {MAX_SEQ_LEN_FOR_STAGE0_CUTE}, got {seq_len}."
         )
 
-    ensure_cute_ir_context()
     scale = config.resolve_scale(head_dim)
     q_flat = q.reshape(batch * heads, seq_len, head_dim).contiguous()
     k_flat = k.reshape(batch * heads, seq_len, head_dim).contiguous()
