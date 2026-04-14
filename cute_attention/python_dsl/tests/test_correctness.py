@@ -58,7 +58,7 @@ def test_attention_basic(func, verbose=True):
     """Basic correctness test"""
     torch.manual_seed(42)
     
-    B, H, N, d = 1, 1, 128, 64
+    B, H, N, d = 1, 1, 128, 128
     Q = torch.randn(B, H, N, d, device='cuda', dtype=torch.float32)
     K = torch.randn(B, H, N, d, device='cuda', dtype=torch.float32)
     V = torch.randn(B, H, N, d, device='cuda', dtype=torch.float32)
@@ -74,10 +74,10 @@ def test_attention_shapes(func, verbose=True):
     torch.manual_seed(42)
     
     test_cases = [
-        (1, 1, 64, 64),
-        (1, 2, 128, 64),
-        (2, 4, 256, 64),
-        (1, 8, 512, 64),
+        (1, 1, 64, 128),
+        (1, 2, 128, 128),
+        (2, 4, 256, 128),
+        (1, 8, 512, 128),
     ]
     
     all_passed = True
@@ -100,7 +100,7 @@ def test_attention_dtypes(func, verbose=True):
     """Test different dtypes"""
     torch.manual_seed(42)
     
-    B, H, N, d = 1, 2, 128, 64
+    B, H, N, d = 1, 2, 128, 128
     dtypes = [torch.float32, torch.float16, torch.bfloat16]
     
     all_passed = True
