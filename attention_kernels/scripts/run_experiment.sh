@@ -17,9 +17,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ATTN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-BUILD_DIR="$REPO_ROOT/build"
-OUT_DIR="$REPO_ROOT/results"
+BUILD_DIR="$ATTN_ROOT/build"
+OUT_DIR="$ATTN_ROOT/results"
 TIMESTAMP=$(date -u +"%Y%m%dT%H%M%SZ")
 
 echo "================================================================"
@@ -39,7 +40,7 @@ mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
 if [[ ! -f Makefile ]]; then
-    cmake ..
+    cmake "$ATTN_ROOT"
 fi
 
 make -j$(nproc)
@@ -89,8 +90,8 @@ echo "[4/4] Pushing results to git..."
 cd "$REPO_ROOT"
 
 # Add results
-git add results/
-git add build/libattention_kernels.so 2>/dev/null || true
+git add attention_kernels/results/ 2>/dev/null || true
+git add attention_kernels/build/libattention_kernels.so 2>/dev/null || true
 
 # Commit
 git commit -m "attention_kernels: add benchmark results $TIMESTAMP
