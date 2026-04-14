@@ -12,9 +12,7 @@ attention_kernels/build/
 *.so
 *.a
 
-# Results
-attention_kernels/results/
-results/
+build/
 
 # Python cache
 __pycache__/
