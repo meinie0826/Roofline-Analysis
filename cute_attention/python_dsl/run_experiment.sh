@@ -1,53 +1,25 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # =============================================================================
 # FlashAttention-4 Benchmark Runner
 # =============================================================================
 
-set -euo pipefail
-
+set -e
 cd "$(dirname "$0")/.."
 git pull
 
 echo "==============================================="
-echo " FlashAttention-4 Stage Benchmark"
+echo " FlashAttention-4 Optimization Analysis"
 echo "==============================================="
+
+# Run analysis
+python3 cute_attention/python_dsl/fa4_optimization_analysis.py
+
 echo ""
+echo "==============================================="
+echo " Run Benchmark (SDPA)"
+echo "==============================================="
 
-# Check Python and CUDA
-python3 -c "import torch; assert torch.cuda.is_available()" || {
-    echo "ERROR: CUDA required"
-    exit 1
-}
-
-# Run benchmark for different stages
-for stage in 0 2 6 12; do
-    echo ""
-    echo "=== Stage $stage ==="
-    python3 -c "
-import torch
-import sys
-sys.path.insert(0, 'python_dsl')
-from fa4_cute_stages import flash_attention, print_optimization_breakdown
-
-if $stage == 0:
-    print_optimization_breakdown()
-else:
-    B, S, H, D = 1, 4096, 16, 128
-    q = torch.randn(B, S, H, D, dtype=torch.bfloat16, device='cuda')
-    k = torch.randn(B, S, H, D, dtype=torch.bfloat16, device='cuda')
-    v = torch.randn(B, S, H, D, dtype=torch.bfloat16, device='cuda')
-    
-    print(f'Testing Stage $stage: B={B}, S={S}, H={H}, D={D}')
-    try:
-        out, lse = flash_attention(q, k, v, stage=$stage)
-        print(f'Output shape: {out.shape}')
-        print(f'Stage $stage: Implementation available')
-    except Exception as e:
-        print(f'Stage $stage: {e}')
-"
+# Run benchmark
+for seqlen in 1024 2048 4096 8192 16384; do
+    python3 cute_attention/python_dsl/fa4_optimization_analysis.py --benchmark $seqlen
 done
-
-echo ""
-echo "==============================================="
-echo " Benchmark Complete"
-echo "==============================================="
