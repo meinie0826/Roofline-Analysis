@@ -17,8 +17,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-BUILD_DIR="$SCRIPT_DIR/../build"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+BUILD_DIR="$REPO_ROOT/build"
 OUT_DIR="$REPO_ROOT/results"
 TIMESTAMP=$(date -u +"%Y%m%dT%H%M%SZ")
 
