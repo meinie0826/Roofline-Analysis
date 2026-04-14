@@ -1,8 +1,7 @@
 /**
  * Stage 0: Naive FlashAttention Kernel
  * 
- * 改进版本：只计算一次 QK^T，存在 shared memory
- * Grid: (batch, head), Block: threads = seq_len
+ * 简单实现：每个线程处理一个 query position
  */
 
 #include <cuda_fp16.h>
@@ -13,10 +12,7 @@ using dtype = __nv_bfloat16;
 
 constexpr int MAX_THREADS = 1024;
 
-extern "C" {
-
-__global__ void __launch_bounds__(1024)
-attention_naive_causal_kernel(
+__global__ void attention_naive_causal_kernel(
     const dtype* __restrict__ Q,
     const dtype* __restrict__ K,
     const dtype* __restrict__ V,
@@ -25,8 +21,7 @@ attention_naive_causal_kernel(
     int seq_len,
     int n_heads,
     int head_dim,
-    float scale,
-    float* __restrict__ smem  // shared memory for attention weights
+    float scale
 ) {
     int batch = blockIdx.y;
     int head = blockIdx.x;
@@ -37,8 +32,6 @@ attention_naive_causal_kernel(
     int base = (batch * n_heads + head) * seq_len;
     const dtype* q_ptr = Q + (base + q_idx) * head_dim;
     dtype* o_ptr = O + (base + q_idx) * head_dim;
-    
-    float* attn_weights = smem + q_idx * seq_len;
     
     // Causal: 只看 q_idx 之前
     int end_k = q_idx + 1;
@@ -54,7 +47,6 @@ attention_naive_causal_kernel(
             score += __bfloat162float(q_ptr[d]) * __bfloat162float(k_ptr[d]);
         }
         score *= scale;
-        attn_weights[k_idx] = score;
         max_score = fmaxf(max_score, score);
     }
     
@@ -62,8 +54,13 @@ attention_naive_causal_kernel(
     float sum_exp = 0.0f;
     
     for (int k_idx = 0; k_idx < end_k; k_idx++) {
-        attn_weights[k_idx] = expf(attn_weights[k_idx] - max_score);
-        sum_exp += attn_weights[k_idx];
+        const dtype* k_ptr = K + (base + k_idx) * head_dim;
+        
+        float score = 0.0f;
+        for (int d = 0; d < head_dim; d++) {
+            score += __bfloat162float(q_ptr[d]) * __bfloat162float(k_ptr[d]);
+        }
+        sum_exp += expf(score * scale - max_score);
     }
     
     // Step 3: Output
@@ -71,16 +68,23 @@ attention_naive_causal_kernel(
         float o_val = 0.0f;
         
         for (int k_idx = 0; k_idx < end_k; k_idx++) {
+            const dtype* k_ptr = K + (base + k_idx) * head_dim;
             const dtype* v_ptr = V + (base + k_idx) * head_dim;
-            o_val += attn_weights[k_idx] * __bfloat162float(v_ptr[d]);
+            
+            float score = 0.0f;
+            for (int dd = 0; dd < head_dim; dd++) {
+                score += __bfloat162float(q_ptr[dd]) * __bfloat162float(k_ptr[dd]);
+            }
+            
+            float attn = expf(score * scale - max_score) / sum_exp;
+            o_val += attn * __bfloat162float(v_ptr[d]);
         }
         
-        o_ptr[d] = __float2bfloat16(o_val / sum_exp);
+        o_ptr[d] = __float2bfloat16(o_val);
     }
 }
 
-__global__ void __launch_bounds__(1024)
-attention_naive_kernel(
+__global__ void attention_naive_kernel(
     const dtype* __restrict__ Q,
     const dtype* __restrict__ K,
     const dtype* __restrict__ V,
@@ -89,8 +93,7 @@ attention_naive_kernel(
     int seq_len,
     int n_heads,
     int head_dim,
-    float scale,
-    float* __restrict__ smem
+    float scale
 ) {
     int batch = blockIdx.y;
     int head = blockIdx.x;
@@ -101,8 +104,6 @@ attention_naive_kernel(
     int base = (batch * n_heads + head) * seq_len;
     const dtype* q_ptr = Q + (base + q_idx) * head_dim;
     dtype* o_ptr = O + (base + q_idx) * head_dim;
-    
-    float* attn_weights = smem + q_idx * seq_len;
     
     // Step 1: QK^T + max
     float max_score = -INFINITY;
@@ -115,7 +116,6 @@ attention_naive_kernel(
             score += __bfloat162float(q_ptr[d]) * __bfloat162float(k_ptr[d]);
         }
         score *= scale;
-        attn_weights[k_idx] = score;
         max_score = fmaxf(max_score, score);
     }
     
@@ -123,8 +123,13 @@ attention_naive_kernel(
     float sum_exp = 0.0f;
     
     for (int k_idx = 0; k_idx < seq_len; k_idx++) {
-        attn_weights[k_idx] = expf(attn_weights[k_idx] - max_score);
-        sum_exp += attn_weights[k_idx];
+        const dtype* k_ptr = K + (base + k_idx) * head_dim;
+        
+        float score = 0.0f;
+        for (int d = 0; d < head_dim; d++) {
+            score += __bfloat162float(q_ptr[d]) * __bfloat162float(k_ptr[d]);
+        }
+        sum_exp += expf(score * scale - max_score);
     }
     
     // Step 3: Output
@@ -132,34 +137,43 @@ attention_naive_kernel(
         float o_val = 0.0f;
         
         for (int k_idx = 0; k_idx < seq_len; k_idx++) {
+            const dtype* k_ptr = K + (base + k_idx) * head_dim;
             const dtype* v_ptr = V + (base + k_idx) * head_dim;
-            o_val += attn_weights[k_idx] * __bfloat162float(v_ptr[d]);
+            
+            float score = 0.0f;
+            for (int dd = 0; dd < head_dim; dd++) {
+                score += __bfloat162float(q_ptr[dd]) * __bfloat162float(k_ptr[dd]);
+            }
+            
+            float attn = expf(score * scale - max_score) / sum_exp;
+            o_val += attn * __bfloat162float(v_ptr[d]);
         }
         
-        o_ptr[d] = __float2bfloat16(o_val / sum_exp);
+        o_ptr[d] = __float2bfloat16(o_val);
     }
 }
 
-void launch_attention_naive(
-    const void* Q, const void* K, const void* V, void* O,
-    int batch_size, int seq_len, int n_heads, int head_dim,
-    bool causal, cudaStream_t stream
-) {
-    float scale = 1.0f / sqrtf((float)head_dim);
-    
-    dim3 grid(n_heads, batch_size);
-    dim3 block(min(seq_len, MAX_THREADS));
-    
-    // 动态 shared memory 存储 attention weights
-    size_t smem_size = sizeof(float) * seq_len * block.x;
-    
-    void* args[] = {&Q, &K, &V, &O, &batch_size, &seq_len, &n_heads, &head_dim, &scale};
-    
-    if (causal) {
-        cudaLaunchKernel((void*)attention_naive_causal_kernel, grid, block, args, smem_size, stream);
-    } else {
-        cudaLaunchKernel((void*)attention_naive_kernel, grid, block, args, smem_size, stream);
+extern "C" {
+    void launch_attention_naive(
+        const void* Q, const void* K, const void* V, void* O,
+        int batch_size, int seq_len, int n_heads, int head_dim,
+        bool causal, cudaStream_t stream
+    ) {
+        float scale = 1.0f / sqrtf((float)head_dim);
+        
+        dim3 grid(n_heads, batch_size);
+        dim3 block(seq_len < MAX_THREADS ? seq_len : MAX_THREADS);
+        
+        if (causal) {
+            attention_naive_causal_kernel<<<grid, block, 0, stream>>>(
+                (const dtype*)Q, (const dtype*)K, (const dtype*)V, (dtype*)O,
+                batch_size, seq_len, n_heads, head_dim, scale
+            );
+        } else {
+            attention_naive_kernel<<<grid, block, 0, stream>>>(
+                (const dtype*)Q, (const dtype*)K, (const dtype*)V, (dtype*)O,
+                batch_size, seq_len, n_heads, head_dim, scale
+            );
+        }
     }
 }
-
-} // extern "C"
