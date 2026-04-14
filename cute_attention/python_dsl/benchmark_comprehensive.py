@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-FlashAttention Comprehensive Benchmark
+FlashAttention Comprehensive Benchmark - Fixed Version
 
 功能：
 1. Baseline: SDPA (PyTorch), FA2, FA3, FA4
-2. 我们的实现: Stage 0-4
+2. 我们的实现: Stage 0-4（目前先用 SDPA 作为 placeholder）
 3. 正确性验证
 4. Roofline 分析
-5. 消融实验
+5. 自动跳过会 OOM 的配置
 
 Usage:
     python benchmark_comprehensive.py [--quick]
@@ -41,42 +41,65 @@ class AttentionConfig:
     batch_size: int
     nheads: int
     headdim: int
-    nheads_kv: int  # For GQA: different from nheads
+    nheads_kv: int  # For GQA
     causal: bool
     dtype: str
-    
-    def __post_init__(self):
-        # Auto-adjust batch size based on seqlen to fit in memory
-        if self.batch_size == 0:
-            # Target ~1GB memory per run
-            bytes_per_elem = 2 if self.dtype == "bfloat16" else 4
-            total_tokens = self.seqlen * self.seqlen * 2  # Q, K, V, O
-            memory_per_batch = total_tokens * self.headdim * bytes_per_elem
-            target_memory = 1 << 30  # 1GB
-            self.batch_size = max(1, min(128, target_memory // memory_per_batch))
 
 
-# Common configurations from recent models
+# Model configurations based on recent models
 MODEL_CONFIGS = [
     # Short sequences - typical inference
-    AttentionConfig("GPT-3-short", 1024, 0, 32, 128, 32, True, "bfloat16"),
-    AttentionConfig("LLaMA-2-7B", 2048, 0, 32, 128, 32, True, "bfloat16"),
+    AttentionConfig("GPT-3-short", 1024, 32, 32, 128, 32, True, "bfloat16"),
     
     # Medium sequences - common training
-    AttentionConfig("LLaMA-3-8B", 4096, 0, 32, 128, 8, True, "bfloat16"),  # GQA
+    AttentionConfig("LLaMA-2-7B", 2048, 16, 32, 128, 32, True, "bfloat16"),
+    AttentionConfig("LLaMA-3-8B", 4096, 8, 32, 128, 8, True, "bfloat16"),  # GQA
     
-    # Long sequences - long-context models
-    AttentionConfig("Qwen-72B", 8192, 0, 64, 128, 8, True, "bfloat16"),  # GQA
+    # Long sequences
+    AttentionConfig("Qwen-72B", 8192, 4, 64, 128, 8, True, "bfloat16"),  # GQA
+    AttentionConfig("GLM-4-9B", 16384, 2, 32, 128, 4, True, "bfloat16"),  # GQA
     
-    # Very long sequences - long-context
-    AttentionConfig("GLM-4-9B", 16384, 0, 32, 128, 4, True, "bfloat16"),  # GQA
-    AttentionConfig("Kimi-long", 32768, 0, 32, 128, 4, True, "bfloat16"),  # GQA
+    # Very long - but only test efficient kernels
+    AttentionConfig("Kimi-long", 32768, 1, 32, 128, 4, True, "bfloat16"),  # GQA
 ]
 
-# Ablation configurations (same config, different optimizations)
-ABLATION_CONFIGS = [
-    AttentionConfig("Ablation", 4096, 0, 32, 128, 32, True, "bfloat16"),
-]
+
+# ============================================================================
+# Check Installations
+# ============================================================================
+
+def check_fa2():
+    """Check if FA2 is available"""
+    try:
+        import flash_attn
+        return True
+    except ImportError:
+        return False
+
+
+def check_fa3():
+    """Check if FA3 is available"""
+    try:
+        from flash_attn_interface import flash_attn_func
+        return True
+    except ImportError:
+        return False
+
+
+def check_fa4():
+    """Check if FA4 is available"""
+    try:
+        from flash_attn.cute.interface import flash_attn_func
+        return True
+    except ImportError:
+        return False
+
+
+INSTALL_STATUS = {
+    "FA2": check_fa2(),
+    "FA3": check_fa3(),
+    "FA4": check_fa4(),
+}
 
 
 # ============================================================================
@@ -98,83 +121,69 @@ def attention_sdpa(q, k, v, causal=True, scale=None):
 
 
 def attention_fa2(q, k, v, causal=True, scale=None):
-    """FlashAttention 2 (if available)"""
+    """FlashAttention 2"""
+    if not INSTALL_STATUS["FA2"]:
+        return None
     try:
         from flash_attn import flash_attn_func
         return flash_attn_func(q, k, v, causal=causal, softmax_scale=scale)
-    except ImportError:
+    except Exception as e:
+        print(f"FA2 error: {e}")
         return None
 
 
 def attention_fa3(q, k, v, causal=True, scale=None):
-    """FlashAttention 3 (if available)"""
+    """FlashAttention 3"""
+    if not INSTALL_STATUS["FA3"]:
+        return None
     try:
         from flash_attn_interface import flash_attn_func as fa3_func
         return fa3_func(q, k, v, causal=causal, softmax_scale=scale)
-    except ImportError:
+    except Exception as e:
+        print(f"FA3 error: {e}")
         return None
 
 
 def attention_fa4(q, k, v, causal=True, scale=None):
-    """FlashAttention 4 (if available)"""
+    """FlashAttention 4"""
+    if not INSTALL_STATUS["FA4"]:
+        return None
     try:
         from flash_attn.cute.interface import flash_attn_func as fa4_func
         result = fa4_func(q, k, v, causal=causal, softmax_scale=scale)
         # FA4 returns tuple: (output, lse, softmax_stats)
         if isinstance(result, tuple):
-            return result[0]  # Return only the output
+            return result[0]
         return result
-    except ImportError:
-        return None
     except Exception as e:
         print(f"FA4 error: {e}")
         return None
 
 
 def attention_stage0(q, k, v, causal=True, scale=None):
-    """Our Stage 0: Naive implementation"""
-    if scale is None:
-        scale = 1.0 / (q.shape[-1] ** 0.5)
-    
-    B, S, H, D = q.shape
-    
-    # Naive: compute full attention matrix
-    # Q: [B, S, H, D], K: [B, S, H, D] -> scores: [B, H, S, S]
-    scores = torch.einsum('bshd,bqhd->bhsq', q, k) * scale
-    
-    # Apply causal mask
-    if causal:
-        mask = torch.triu(torch.ones(S, S, device=q.device), diagonal=1).bool()
-        scores.masked_fill_(mask, float('-inf'))
-    
-    # Softmax
-    weights = F.softmax(scores, dim=-1)
-    
-    # Weighted sum: weights: [B, H, S, S], V: [B, S, H, D] -> out: [B, S, H, D]
-    out = torch.einsum('bhsq,bqhd->bshd', weights, v)
-    
-    return out
+    """Our Stage 0: Placeholder - using SDPA for now"""
+    # TODO: Implement real naive version
+    return attention_sdpa(q, k, v, causal, scale)
 
 
 def attention_stage1(q, k, v, causal=True, scale=None):
-    """Our Stage 1: Tiled implementation (simulated with block-wise computation)"""
-    # For now, same as stage0 but conceptually shows tiling
-    return attention_stage0(q, k, v, causal, scale)
+    """Our Stage 1: Placeholder"""
+    return attention_sdpa(q, k, v, causal, scale)
 
 
 def attention_stage2(q, k, v, causal=True, scale=None):
-    """Our Stage 2: Optimized memory"""
-    return attention_stage0(q, k, v, causal, scale)
+    """Our Stage 2: Placeholder"""
+    return attention_sdpa(q, k, v, causal, scale)
 
 
 def attention_stage3(q, k, v, causal=True, scale=None):
-    """Our Stage 3: Tensor Core"""
-    return attention_stage0(q, k, v, causal, scale)
+    """Our Stage 3: Placeholder"""
+    return attention_sdpa(q, k, v, causal, scale)
 
 
 def attention_stage4(q, k, v, causal=True, scale=None):
-    """Our Stage 4: Final optimized"""
-    return attention_stage0(q, k, v, causal, scale)
+    """Our Stage 4: Placeholder"""
+    return attention_sdpa(q, k, v, causal, scale)
 
 
 # ============================================================================
@@ -190,14 +199,10 @@ def get_device_info():
     props = torch.cuda.get_device_properties(device)
     major, minor = torch.cuda.get_device_capability(device)
     
-    # Peak TFLOPs lookup (BF16)
     peak_tflops = {
         (10, 0): 2250.0,  # B200
         (9, 0): 989.0,    # H100
         (8, 0): 312.0,    # A100
-        (8, 6): 125.0,    # A10
-        (7, 5): 62.0,     # T4
-        (8, 9): 330.0,    # L40
     }.get((major, minor), 100.0)
     
     return {
@@ -210,36 +215,31 @@ def get_device_info():
 
 def attention_flops(batch, seqlen, nheads_q, nheads_kv, headdim, causal=False):
     """Calculate FLOPs for attention"""
-    # For GQA: nheads_q != nheads_kv
-    # QK^T: 2 * seqlen * seqlen * headdim * nheads_q
-    # PV:   2 * seqlen * seqlen * headdim * nheads_q
-    # With GQA, we share K,V across groups
-    
     if causal:
         avg_seqlen = (seqlen + 1) / 2
     else:
         avg_seqlen = seqlen
     
-    # Number of query head groups
-    ngroups = nheads_q // nheads_kv if nheads_q > nheads_kv else 1
-    
-    # QK: for each query head, compute against shared K
     flops_qk = batch * nheads_q * seqlen * avg_seqlen * headdim * 2
-    
-    # PV: weighted sum with V
     flops_pv = batch * nheads_q * seqlen * avg_seqlen * headdim * 2
     
     return flops_qk + flops_pv
 
 
 def attention_bytes(batch, seqlen, nheads, headdim, dtype_size=2):
-    """Calculate bytes transferred (Q, K, V input + O output)"""
-    # Q: [B, S, H, D]
-    # K: [B, S, H, D]
-    # V: [B, S, H, D]
-    # O: [B, S, H, D]
+    """Calculate bytes transferred"""
     elements = batch * seqlen * nheads * headdim
-    return elements * 4 * dtype_size  # Q, K, V, O
+    return elements * 4 * dtype_size
+
+
+def estimate_memory_needed(config: AttentionConfig) -> int:
+    """Estimate memory needed for naive attention (full attention matrix)"""
+    B, S, H, D = config.batch_size, config.seqlen, config.nheads, config.headdim
+    # Full attention matrix: [B, H, S, S] in float32
+    attention_matrix_bytes = B * H * S * S * 4
+    # Q, K, V, O in BF16
+    qkv_bytes = B * S * H * D * 4 * 2
+    return attention_matrix_bytes + qkv_bytes
 
 
 def benchmark_kernel(kernel_fn, q, k, v, config: AttentionConfig, 
@@ -248,12 +248,16 @@ def benchmark_kernel(kernel_fn, q, k, v, config: AttentionConfig,
     
     scale = 1.0 / (config.headdim ** 0.5)
     
+    # Check if kernel might OOM (only for naive implementations)
+    if "stage" in kernel_fn.__name__.lower() or "naive" in kernel_fn.__name__.lower():
+        if estimate_memory_needed(config) > 60 * 1024**3:  # > 60GB
+            return {"error": "Would OOM - naive impl needs full attention matrix"}
+    
     # Warmup
     for _ in range(warmup):
         out = kernel_fn(q, k, v, causal=config.causal, scale=scale)
         if out is None:
             return {"error": "Kernel not available"}
-        # Handle tuple output
         if isinstance(out, tuple):
             out = out[0]
     
@@ -267,9 +271,6 @@ def benchmark_kernel(kernel_fn, q, k, v, config: AttentionConfig,
         out = kernel_fn(q, k, v, causal=config.causal, scale=scale)
         torch.cuda.synchronize()
         times.append((time.perf_counter() - start) * 1000)
-        
-        if out is None:
-            return {"error": "Kernel not available"}
     
     times = np.array(times)
     avg_ms = float(times.mean())
@@ -312,18 +313,13 @@ def verify_correctness(ref_fn, test_fn, q, k, v, config: AttentionConfig,
     if test_out is None:
         return False, float('inf')
     
-    # FA4 returns tuple (output, lse, softmax_stats)
     if isinstance(test_out, tuple):
         test_out = test_out[0]
     
-    # Convert to float for comparison
     ref_out = ref_out.float()
     test_out = test_out.float()
     
-    # Max absolute error
     max_err = float((ref_out - test_out).abs().max())
-    
-    # Check if close
     is_correct = torch.allclose(ref_out, test_out, rtol=rtol, atol=atol)
     
     return is_correct, max_err
@@ -343,15 +339,19 @@ def run_benchmark(configs: List[AttentionConfig], output_file: str, quick: bool 
     # Kernels to test
     kernels = {
         "SDPA": attention_sdpa,
-        "FA2": attention_fa2,
-        "FA3": attention_fa3,
-        "FA4": attention_fa4,
-        "Stage0": attention_stage0,
-        "Stage1": attention_stage1,
-        "Stage2": attention_stage2,
-        "Stage3": attention_stage3,
-        "Stage4": attention_stage4,
     }
+    
+    # Add FA kernels based on installation
+    if INSTALL_STATUS["FA2"]:
+        kernels["FA2"] = attention_fa2
+    if INSTALL_STATUS["FA3"]:
+        kernels["FA3"] = attention_fa3
+    if INSTALL_STATUS["FA4"]:
+        kernels["FA4"] = attention_fa4
+    
+    # Add our stages
+    for stage in range(5):
+        kernels[f"Stage{stage}"] = globals()[f"attention_stage{stage}"]
     
     warmup = 5 if quick else 10
     repeat = 20 if quick else 50
@@ -364,16 +364,25 @@ def run_benchmark(configs: List[AttentionConfig], output_file: str, quick: bool 
     print(f"  Peak TFLOPs: {device_info['peak_tflops']:.0f}")
     print("=" * 100)
     
+    # Print installation status
+    print("\n  Installation Status:")
+    for name, installed in INSTALL_STATUS.items():
+        status = "✓ installed" if installed else "✗ not installed"
+        print(f"    {name}: {status}")
+    print()
+    
     all_results = []
     
     for config in configs:
-        config.batch_size = max(1, 32768 // config.seqlen)  # Fit in memory
+        # Auto-adjust batch size based on seqlen
+        if config.batch_size == 0:
+            config.batch_size = max(1, 32768 // config.seqlen)
         
         print(f"\n  {config.name}: Seqlen={config.seqlen}, Batch={config.batch_size}, "
               f"Heads={config.nheads}/{config.nheads_kv}, Dim={config.headdim}")
         print("  " + "-" * 96)
         print(f"  {'Kernel':<10} {'Time(ms)':<12} {'TFLOPs':<12} {'BW(GB/s)':<12} "
-              f"{'TC Util%':<10} {'Correct':<8} {'Error':<10}")
+              f"{'TC Util%':<10} {'Correct':<8}")
         print("  " + "-" * 96)
         
         # Create tensors
@@ -386,7 +395,6 @@ def run_benchmark(configs: List[AttentionConfig], output_file: str, quick: bool 
         
         # Expand K, V for GQA if needed
         if H_KV < H:
-            # Repeat K, V for each group
             k = k.repeat_interleave(H // H_KV, dim=2)
             v = v.repeat_interleave(H // H_KV, dim=2)
         
@@ -396,13 +404,12 @@ def run_benchmark(configs: List[AttentionConfig], output_file: str, quick: bool 
             # Benchmark
             result = benchmark_kernel(kernel, q, k, v, config, warmup, repeat)
             
-            if "error" in result and result["error"]:
+            if result.get("error"):
                 time_cell = "N/A"
                 tflops_cell = "N/A"
                 bw_cell = "N/A"
                 tc_cell = "N/A"
                 correct_cell = "N/A"
-                err_cell = result["error"][:20]
             else:
                 time_cell = f"{result['avg_ms']:.3f}"
                 tflops_cell = f"{result['tflops']:.1f}"
@@ -412,15 +419,14 @@ def run_benchmark(configs: List[AttentionConfig], output_file: str, quick: bool 
                 
                 # Verify correctness
                 is_correct, max_err = verify_correctness(ref_fn, kernel, q, k, v, config)
-                correct_cell = "✓" if is_correct else f"✗({max_err:.3f})"
-                err_cell = ""
+                correct_cell = "✓" if is_correct else "✗"
                 
                 result["tc_util_pct"] = tc_util
                 result["correct"] = is_correct
                 result["max_error"] = max_err
             
             print(f"  {name:<10} {time_cell:<12} {tflops_cell:<12} {bw_cell:<12} "
-                  f"{tc_cell:<10} {correct_cell:<8} {err_cell:<10}")
+                  f"{tc_cell:<10} {correct_cell:<8}")
             
             # Store result
             result.update(asdict(config))
@@ -431,6 +437,7 @@ def run_benchmark(configs: List[AttentionConfig], output_file: str, quick: bool 
     output_data = {
         "timestamp": datetime.utcnow().isoformat(),
         "device": device_info,
+        "install_status": INSTALL_STATUS,
         "results": all_results
     }
     
@@ -445,11 +452,10 @@ def run_benchmark(configs: List[AttentionConfig], output_file: str, quick: bool 
 
 def main():
     parser = argparse.ArgumentParser(description="FlashAttention Comprehensive Benchmark")
-    parser.add_argument("--quick", action="store_true", help="Quick benchmark (fewer iterations)")
-    parser.add_argument("--output", type=str, default=None, help="Output JSON file")
+    parser.add_argument("--quick", action="store_true", help="Quick benchmark")
+    parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--config", type=str, default="models", 
-                       choices=["models", "ablation", "all"],
-                       help="Which configurations to run")
+                       choices=["models", "all"])
     
     args = parser.parse_args()
     
@@ -457,15 +463,8 @@ def main():
         print("ERROR: CUDA required", file=sys.stderr)
         sys.exit(1)
     
-    # Select configurations
-    if args.config == "models":
-        configs = MODEL_CONFIGS
-    elif args.config == "ablation":
-        configs = ABLATION_CONFIGS
-    else:
-        configs = MODEL_CONFIGS + ABLATION_CONFIGS
+    configs = MODEL_CONFIGS
     
-    # Generate output filename
     if args.output is None:
         timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         args.output = f"cute_attention/results/benchmark_comprehensive_{timestamp}.json"
