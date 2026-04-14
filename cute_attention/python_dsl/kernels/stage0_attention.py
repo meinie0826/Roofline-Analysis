@@ -172,9 +172,12 @@ def attention_forward(Q, K, V, scale=None):
     
     # PyTorch baseline (when CuTe not available)
     if not HAS_CUTE:
+        print("INFO: Using PyTorch baseline (CuTe not available)")
         scores = torch.matmul(Q, K.transpose(-2, -1)) * scale
         weights = torch.softmax(scores, dim=-1)
         return torch.matmul(weights, V)
+    
+    print("INFO: Using CuTe kernel")
     
     # CuTe kernel path
     # Reshape to (B*H, N, d)
@@ -198,11 +201,19 @@ def attention_forward(Q, K, V, scale=None):
         block = (128, 1, 1)
         
         # Launch
-        naive_attention_cute_kernel[grid, block](
-            Q_ptr, K_ptr, V_ptr, O_ptr,
-            N, N, d, scale,
-            BLOCK_M, BLOCK_N, BLOCK_K
-        )
+        try:
+            naive_attention_cute_kernel[grid, block](
+                Q_ptr, K_ptr, V_ptr, O_ptr,
+                N, N, d, scale,
+                BLOCK_M, BLOCK_N, BLOCK_K
+            )
+        except Exception as e:
+            print(f"ERROR: Kernel launch failed: {e}")
+            print(f"  Grid: {grid}, Block: {block}")
+            print(f"  Kernel type: {type(naive_attention_cute_kernel)}")
+            import traceback
+            traceback.print_exc()
+            raise
     
     return O_flat.reshape(B, H, N, d)
 
