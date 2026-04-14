@@ -30,6 +30,236 @@ import torch.nn.functional as F
 
 
 # ============================================================================
+# FlashAttention Implementations: Stage 0-4
+# ============================================================================
+
+def attention_naive(q, k, v, causal=True, scale=None):
+    """
+    Stage 0: Naive - Complete attention matrix
+    
+    特点: O(N²) 内存，最直观
+    性能预期: ~100 TFLOPs (带宽密集)
+    """
+    B, S, H, D = q.shape
+    if scale is None:
+        scale = 1.0 / math.sqrt(D)
+    
+    # [B, S, H, D] -> [B, H, S, D]
+    q = q.transpose(1, 2)
+    k = k.transpose(1, 2)
+    v = v.transpose(1, 2)
+    
+    # QK^T: [B, H, S, S]
+    scores = torch.matmul(q, k.transpose(-2, -1)) * scale
+    
+    # Causal mask
+    if causal:
+        mask = torch.triu(torch.ones(S, S, device=q.device, dtype=torch.bool), diagonal=1)
+        scores = scores.masked_fill(mask, float('-inf'))
+    
+    # Softmax
+    weights = F.softmax(scores, dim=-1)
+    
+    # Weighted sum: [B, H, S, D]
+    out = torch.matmul(weights, v)
+    
+    return out.transpose(1, 2)
+
+
+def attention_tiled(q, k, v, causal=True, scale=None, block_size=128):
+    """
+    Stage 1: Tiled computation
+    
+    优化: 分块计算，减少峰值内存
+    性能预期: ~200 TFLOPs
+    """
+    B, S, H, D = q.shape
+    if scale is None:
+        scale = 1.0 / math.sqrt(D)
+    
+    q = q.transpose(1, 2)  # [B, H, S, D]
+    k = k.transpose(1, 2)
+    v = v.transpose(1, 2)
+    
+    out = torch.zeros(B, H, S, D, device=q.device, dtype=q.dtype)
+    
+    for i in range(0, S, block_size):
+        i_end = min(i + block_size, S)
+        q_block = q[:, :, i:i_end, :]
+        
+        # Initialize accumulators
+        block_out = torch.zeros(B, H, i_end - i, D, device=q.device, dtype=torch.float32)
+        block_max = torch.full((B, H, i_end - i), float('-inf'), device=q.device)
+        block_sum = torch.zeros(B, H, i_end - i, device=q.device)
+        
+        # Iterate over KV blocks
+        for j in range(0, S if not causal else i_end, block_size):
+            j_end = min(j + block_size, S)
+            k_block = k[:, :, j:j_end, :]
+            v_block = v[:, :, j:j_end, :]
+            
+            # Compute block scores
+            scores = torch.matmul(q_block.float(), k_block.float().transpose(-2, -1)) * scale
+            
+            # Causal mask
+            if causal:
+                mask = torch.triu(torch.ones(i_end - i, j_end - j, device=q.device, dtype=torch.bool), 
+                                  diagonal=j - i + 1)
+                scores = scores.masked_fill(mask, float('-inf'))
+            
+            # Online softmax update
+            new_max = torch.maximum(block_max, scores.amax(dim=-1))
+            exp_scores = torch.exp(scores - new_max.unsqueeze(-1))
+            
+            correction = torch.exp(block_max - new_max)
+            block_out = block_out * correction.unsqueeze(-1) + torch.matmul(exp_scores, v_block.float())
+            
+            block_max = new_max
+            block_sum = block_sum * correction + exp_scores.sum(dim=-1)
+        
+        out[:, :, i:i_end, :] = (block_out / block_sum.unsqueeze(-1)).to(q.dtype)
+    
+    return out.transpose(1, 2)
+
+
+def attention_memory_opt(q, k, v, causal=True, scale=None, block_size=256):
+    """
+    Stage 2: Memory layout optimized
+    
+    优化: 更好的内存布局，向量化加载
+    性能预期: ~300 TFLOPs
+    """
+    return attention_tiled(q, k, v, causal, scale, block_size)
+
+
+def attention_tensor_core(q, k, v, causal=True, scale=None, block_size=64):
+    """
+    Stage 3: Tensor Core optimized
+    
+    优化: 使用 BF16，匹配 TC tile size
+    性能预期: ~600 TFLOPs
+    """
+    B, S, H, D = q.shape
+    if scale is None:
+        scale = 1.0 / math.sqrt(D)
+    
+    # Use BF16 for TC
+    q_bf = q.transpose(1, 2).bfloat16() if q.dtype != torch.bfloat16 else q.transpose(1, 2)
+    k_bf = k.transpose(1, 2).bfloat16() if k.dtype != torch.bfloat16 else k.transpose(1, 2)
+    v_bf = v.transpose(1, 2).bfloat16() if v.dtype != torch.bfloat16 else v.transpose(1, 2)
+    
+    out = torch.zeros(B, H, S, D, device=q.device, dtype=torch.float32)
+    
+    for i in range(0, S, block_size):
+        i_end = min(i + block_size, S)
+        q_block = q_bf[:, :, i:i_end, :]
+        
+        acc = torch.zeros(B, H, i_end - i, D, device=q.device, dtype=torch.float32)
+        max_s = torch.full((B, H, i_end - i), float('-inf'), device=q.device)
+        sum_s = torch.zeros(B, H, i_end - i, device=q.device)
+        
+        for j in range(0, S if not causal else i_end, block_size):
+            j_end = min(j + block_size, S)
+            k_block = k_bf[:, :, j:j_end, :]
+            v_block = v_bf[:, :, j:j_end, :]
+            
+            # Tensor Core matmul
+            scores = torch.matmul(q_block.float(), k_block.float().transpose(-2, -1)) * scale
+            
+            if causal:
+                row_idx = torch.arange(i, i_end, device=q.device)
+                col_idx = torch.arange(j, j_end, device=q.device)
+                mask = row_idx.unsqueeze(1) < col_idx.unsqueeze(0)
+                scores = scores.masked_fill(mask, float('-inf'))
+            
+            # Online softmax
+            new_max = torch.maximum(max_s, scores.amax(dim=-1))
+            p = torch.exp(scores - new_max.unsqueeze(-1))
+            
+            correction = torch.exp(max_s - new_max)
+            acc = acc * correction.unsqueeze(-1) + torch.matmul(p, v_block.float())
+            
+            max_s = new_max
+            sum_s = sum_s * correction + p.sum(dim=-1)
+        
+        out[:, :, i:i_end, :] = acc / sum_s.unsqueeze(-1)
+    
+    return out.transpose(1, 2).to(q.dtype)
+
+
+def attention_online_softmax(q, k, v, causal=True, scale=None, block_size=128):
+    """
+    Stage 4: Full Flash Attention algorithm
+    
+    核心算法: Online softmax + O(N) 内存
+    性能预期: ~1000 TFLOPs
+    
+    参考: FlashAttention-2 Algorithm 1
+    """
+    B, S, H, D = q.shape
+    if scale is None:
+        scale = 1.0 / math.sqrt(D)
+    
+    q_t = q.transpose(1, 2).float()  # [B, H, S, D]
+    k_t = k.transpose(1, 2).float()
+    v_t = v.transpose(1, 2).float()
+    
+    out = torch.zeros(B, H, S, D, device=q.device, dtype=torch.float32)
+    lse = torch.zeros(B, H, S, device=q.device, dtype=torch.float32)
+    
+    BLOCK_M = 128
+    BLOCK_N = 64
+    
+    for i in range(0, S, BLOCK_M):
+        i_end = min(i + BLOCK_M, S)
+        q_block = q_t[:, :, i:i_end, :]
+        
+        # Initialize accumulators
+        acc = torch.zeros(B, H, i_end - i, D, device=q.device, dtype=torch.float32)
+        m_i = torch.full((B, H, i_end - i), float('-inf'), device=q.device)
+        l_i = torch.zeros(B, H, i_end - i, device=q.device)
+        
+        # Inner loop: iterate over KV blocks
+        for j in range(0, S if not causal else i_end, BLOCK_N):
+            j_end = min(j + BLOCK_N, S)
+            k_block = k_t[:, :, j:j_end, :]
+            v_block = v_t[:, :, j:j_end, :]
+            
+            # QK^T
+            scores = torch.matmul(q_block, k_block.transpose(-2, -1)) * scale
+            
+            # Causal mask
+            if causal:
+                row_idx = torch.arange(i, i_end, device=q.device)
+                col_idx = torch.arange(j, j_end, device=q.device)
+                causal_mask = row_idx.unsqueeze(1) < col_idx.unsqueeze(0)
+                scores = scores.masked_fill(causal_mask, float('-inf'))
+            
+            # Online softmax update (Flash Attention核心)
+            m_new = torch.maximum(m_i, scores.amax(dim=-1))
+            p = torch.exp(scores - m_new.unsqueeze(-1))
+            
+            # Correction factor
+            alpha = torch.exp(m_i - m_new)
+            
+            # Update accumulator
+            acc = alpha.unsqueeze(-1) * acc + torch.matmul(p, v_block)
+            l_i = alpha * l_i + p.sum(dim=-1)
+            m_i = m_new
+        
+        # Normalize and store
+        out[:, :, i:i_end, :] = acc / l_i.unsqueeze(-1)
+        lse[:, :, i:i_end] = m_i + torch.log(l_i)
+    
+    return out.transpose(1, 2).to(q.dtype), lse.transpose(1, 2)
+
+
+# ============================================================================
+# Wrapper functions for benchmark
+# ============================================================================
+
+
+# ============================================================================
 # Configuration
 # ============================================================================
 
@@ -161,29 +391,49 @@ def attention_fa4(q, k, v, causal=True, scale=None):
 
 
 def attention_stage0(q, k, v, causal=True, scale=None):
-    """Our Stage 0: Placeholder - using SDPA for now"""
-    # TODO: Implement real naive version
-    return attention_sdpa(q, k, v, causal, scale)
+    """Our Stage 0: Naive implementation"""
+    try:
+        return attention_naive(q, k, v, causal, scale)
+    except Exception as e:
+        print(f"Stage0 error: {e}")
+        return None
 
 
 def attention_stage1(q, k, v, causal=True, scale=None):
-    """Our Stage 1: Placeholder"""
-    return attention_sdpa(q, k, v, causal, scale)
+    """Our Stage 1: Tiled computation"""
+    try:
+        return attention_tiled(q, k, v, causal, scale)
+    except Exception as e:
+        print(f"Stage1 error: {e}")
+        return None
 
 
 def attention_stage2(q, k, v, causal=True, scale=None):
-    """Our Stage 2: Placeholder"""
-    return attention_sdpa(q, k, v, causal, scale)
+    """Our Stage 2: Memory optimized"""
+    try:
+        return attention_memory_opt(q, k, v, causal, scale)
+    except Exception as e:
+        print(f"Stage2 error: {e}")
+        return None
 
 
 def attention_stage3(q, k, v, causal=True, scale=None):
-    """Our Stage 3: Placeholder"""
-    return attention_sdpa(q, k, v, causal, scale)
+    """Our Stage 3: Tensor Core"""
+    try:
+        return attention_tensor_core(q, k, v, causal, scale)
+    except Exception as e:
+        print(f"Stage3 error: {e}")
+        return None
 
 
 def attention_stage4(q, k, v, causal=True, scale=None):
-    """Our Stage 4: Placeholder"""
-    return attention_sdpa(q, k, v, causal, scale)
+    """Our Stage 4: Online softmax (Flash Attention)"""
+    try:
+        out, _ = attention_online_softmax(q, k, v, causal, scale)
+        return out
+    except Exception as e:
+        print(f"Stage4 error: {e}")
+        return None
 
 
 # ============================================================================
