@@ -73,10 +73,9 @@ def run_benchmark(seqlens=[128, 256, 512, 1024, 2048],
     print("="*70)
     
     if not HAS_CUTE:
-        print("\nNOTE: CuTe DSL not available, using PyTorch reference")
-    else:
-        print("\nCuTe DSL: ✓ Available")
+        raise RuntimeError(f"CuTe DSL not available: {CUTE_ERROR}")
     
+    print("\nCuTe DSL: ✓ Available")
     print(f"\nConfig: B={batch_size}, H={nheads}, d={headdim}")
     print()
     

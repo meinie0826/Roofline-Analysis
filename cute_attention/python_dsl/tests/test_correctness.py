@@ -139,6 +139,8 @@ if __name__ == "__main__":
     import sys
     sys.path.insert(0, '.')
     
-    from kernels.stage0_attention import attention_forward
-    
-    run_all_tests(attention_forward)
+    try:
+        from kernels.stage0_attention import attention_forward
+        run_all_tests(attention_forward)
+    except RuntimeError as e:
+        print(f"\nCannot run tests: {e}")

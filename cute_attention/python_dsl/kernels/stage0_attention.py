@@ -137,21 +137,6 @@ if HAS_CUTE:
 
 
 # ============================================================
-# Python Fallback (Reference Implementation)
-# ============================================================
-def attention_forward_reference(Q, K, V, scale=None):
-    """PyTorch reference implementation"""
-    if scale is None:
-        scale = 1.0 / (Q.shape[-1] ** 0.5)
-    
-    scores = torch.matmul(Q, K.transpose(-2, -1)) * scale
-    weights = torch.softmax(scores, dim=-1)
-    output = torch.matmul(weights, V)
-    
-    return output
-
-
-# ============================================================
 # Launch Interface
 # ============================================================
 def attention_forward(Q, K, V, scale=None):
@@ -165,15 +150,17 @@ def attention_forward(Q, K, V, scale=None):
     Returns:
         O: (B, H, N, d) output tensor
     """
+    if not HAS_CUTE:
+        raise RuntimeError(f"CuTe DSL not available: {CUTE_ERROR}")
+    
+    if not Q.is_cuda:
+        raise RuntimeError("CuTe kernel requires CUDA tensors")
+    
     B, H, N, d = Q.shape
     assert d == HEAD_DIM, f"Expected HEAD_DIM={HEAD_DIM}, got {d}"
     
     if scale is None:
         scale = 1.0 / (d ** 0.5)
-    
-    # Use PyTorch if CuTe not available
-    if not HAS_CUTE or not Q.is_cuda:
-        return attention_forward_reference(Q, K, V, scale)
     
     # Reshape to (B*H, N, d)
     Q_flat = Q.reshape(B * H, N, d).contiguous()
@@ -229,41 +216,45 @@ if __name__ == "__main__":
     print("="*60)
     
     if not torch.cuda.is_available():
-        print("ERROR: CUDA required")
+        print("\nERROR: CUDA required")
         exit(1)
     
-    if not HAS_CUTE:
-        print(f"WARNING: CuTe not available ({CUTE_ERROR})")
-        print("Using PyTorch reference instead")
-    
-    torch.manual_seed(42)
-    
-    # Test config
-    B, H, N, d = 1, 1, 128, HEAD_DIM
-    
-    Q = torch.randn(B, H, N, d, device='cuda', dtype=torch.float32)
-    K = torch.randn(B, H, N, d, device='cuda', dtype=torch.float32)
-    V = torch.randn(B, H, N, d, device='cuda', dtype=torch.float32)
-    
-    print(f"\nConfig: B={B}, H={H}, N={N}, d={d}")
-    
-    # Our kernel
-    O_ours = attention_forward(Q, K, V)
-    
-    # Reference
-    O_ref = attention_forward_reference(Q, K, V)
-    
-    # Compare
-    max_diff = (O_ours - O_ref).abs().max().item()
-    mean_diff = (O_ours - O_ref).abs().mean().item()
-    
-    print(f"\nResults:")
-    print(f"  Max diff: {max_diff:.6f}")
-    print(f"  Mean diff: {mean_diff:.6f}")
-    
-    if max_diff < 1e-3:
-        print("  ✓ PASSED!")
-    else:
-        print("  ✗ FAILED!")
-    
-    print("\n" + "="*60)
+    try:
+        torch.manual_seed(42)
+        
+        # Test config
+        B, H, N, d = 1, 1, 128, HEAD_DIM
+        
+        Q = torch.randn(B, H, N, d, device='cuda', dtype=torch.float32)
+        K = torch.randn(B, H, N, d, device='cuda', dtype=torch.float32)
+        V = torch.randn(B, H, N, d, device='cuda', dtype=torch.float32)
+        
+        print(f"\nConfig: B={B}, H={H}, N={N}, d={d}")
+        
+        # Our kernel
+        O_ours = attention_forward(Q, K, V)
+        
+        # Reference
+        scale = 1.0 / (d ** 0.5)
+        attn_weights = torch.softmax(
+            torch.matmul(Q, K.transpose(-2, -1)) * scale, dim=-1
+        )
+        O_ref = torch.matmul(attn_weights, V)
+        
+        # Compare
+        max_diff = (O_ours - O_ref).abs().max().item()
+        mean_diff = (O_ours - O_ref).abs().mean().item()
+        
+        print(f"\nResults:")
+        print(f"  Max diff: {max_diff:.6f}")
+        print(f"  Mean diff: {mean_diff:.6f}")
+        
+        if max_diff < 1e-3:
+            print("  ✓ PASSED!")
+        else:
+            print("  ✗ FAILED!")
+        
+        print("\n" + "="*60)
+    except RuntimeError as e:
+        print(f"\nERROR: {e}")
+        exit(1)
