@@ -8,7 +8,7 @@ import torch
 
 # CuTe DSL imports
 from cutlass.cute.runtime import *
-from cutlass.cute import *
+from cutlass import cute
 import cutlass
 import numpy as np
 import torch
