@@ -6,3 +6,17 @@ __pycache__/
 
 # Keep results directory but ignore local-only scratch files
 fa4/results/.gitkeep
+
+# Attention kernels build artifacts
+attention_kernels/build/
+*.so
+*.a
+
+# Results
+attention_kernels/results/
+results/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
