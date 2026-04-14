@@ -89,7 +89,7 @@ if HAS_CUTE:
             acc = 0.0
             for kv_idx in range(query_idx + 1):
                 acc += scores[kv_idx] * inv_sum * v[bh_idx, kv_idx, d_idx]
-            o[bh_idx, query_idx, d_idx] = acc
+            o[bh_idx, query_idx, d_idx] = acc.to(o.element_type)
 
 
     @cute.jit
