@@ -41,9 +41,8 @@ if HAS_CUTE:
         """每个 CTA 处理一行 query"""
         
         # Grid: (N, BH) - 每个 CTA 负责 (query_row, batch_head)
-        query_idx = cute.blockIdx.x
-        bh_idx = cute.blockIdx.y
-        tid = cute.threadIdx.x
+        query_idx, bh_idx, _ = cute.arch.block_idx()
+        tid, _, _ = cute.arch.thread_idx()
         
         # 取出当前 batch-head 的 Q, K, V slice
         Q_bh = Q[bh_idx]      # (N, d)
