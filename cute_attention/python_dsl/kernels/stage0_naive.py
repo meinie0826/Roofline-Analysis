@@ -104,7 +104,6 @@ if HAS_CUTE:
     ):
         seq_len = cute.size(q.shape, mode=[1])
         batch_heads = cute.size(q.shape, mode=[0])
-        naive_causal_attention_kernel.set_name_prefix("cutlass_stage0_naive_causal")
         naive_causal_attention_kernel(
             q,
             k,
