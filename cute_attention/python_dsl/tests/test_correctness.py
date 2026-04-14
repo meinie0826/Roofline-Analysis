@@ -23,7 +23,7 @@ def make_inputs(shape, dtype):
 @pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
 @pytest.mark.skipif(not backends["cute"], reason="CuTe DSL is not installed")
 @pytest.mark.parametrize("shape", [(1, 1, 64, 64), (1, 2, 128, 64), (2, 4, 128, 128)])
-@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+@pytest.mark.parametrize("dtype", [torch.float16])
 def test_stage0_matches_reference(shape, dtype):
     q, k, v = make_inputs(shape, dtype)
     config = AttentionConfig(block_n=64, num_threads=128)

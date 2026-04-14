@@ -9,6 +9,7 @@ from .common import (
     cute,
     from_dlpack,
     require_torch,
+    torch,
     validate_qkv,
 )
 
@@ -41,16 +42,14 @@ if HAS_CUTE:
 
         local_max = -cutlass.Float32.inf
         for kv_idx in range(tidx, seq_len, num_threads):
-            if kv_idx > query_idx:
-                scores[kv_idx] = -cutlass.Float32.inf
-                continue
-
-            score = 0.0
-            for d_idx in range(head_dim):
-                score += q[bh_idx, query_idx, d_idx] * k[bh_idx, kv_idx, d_idx]
-            score *= softmax_scale
+            score = -cutlass.Float32.inf
+            if kv_idx <= query_idx:
+                score = 0.0
+                for d_idx in range(head_dim):
+                    score += q[bh_idx, query_idx, d_idx] * k[bh_idx, kv_idx, d_idx]
+                score *= softmax_scale
+                local_max = score if local_max < score else local_max
             scores[kv_idx] = score
-            local_max = score if local_max < score else local_max
 
         reduce[tidx] = local_max
         cute.arch.barrier()
@@ -125,6 +124,8 @@ def stage0_forward(q, k, v, config: AttentionConfig | None = None):
         raise ValueError("stage0 only supports causal attention.")
     if not HAS_CUTE:
         raise RuntimeError("stage0 requires cutlass.cute. No PyTorch fallback is available.")
+    if q.dtype not in [torch.float16, torch.bfloat16]:
+        raise ValueError(f"stage0 currently only supports fp16/bf16 inputs, got {q.dtype}.")
 
     batch, heads, seq_len, head_dim = q.shape
     if seq_len > MAX_SEQ_LEN_FOR_STAGE0_CUTE:
