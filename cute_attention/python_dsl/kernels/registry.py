@@ -10,8 +10,9 @@ from .reference import (
     causal_attention_online_reference,
     causal_attention_reference,
 )
-from .future import stage3_forward, stage4_forward, stage5_forward
+from .future import stage4_forward, stage5_forward
 from .stage0_naive import stage0_forward
+from .stage3_blocked import stage3_forward
 
 
 StageFn = Callable
@@ -58,7 +59,7 @@ STAGES: dict[str, StageDefinition] = {
     ),
     "stage3": StageDefinition(
         name="stage3",
-        description="Reserved for our own shared-memory CuTe kernel.",
+        description="Blocked + online softmax CuTe kernel (our own implementation).",
         implementation=stage3_forward,
         backend="own-cute-dsl",
     ),

@@ -44,9 +44,9 @@
   - `stage0`
   - `stage1` 的 PyTorch online-softmax 参考版
   - `stage2` 的 PyTorch blocked 参考版
+  - `stage3` 的 CuTe blocked + online softmax 前向版
   - `baseline_fa4` 对照入口
 - 预留接口:
-  - `stage3`
   - `stage4`
   - `stage5`
 
@@ -61,5 +61,6 @@
 ## 当前默认行为
 
 - `stage0` 是纯 CuTe DSL 路径，不提供 PyTorch fallback。
-- `stage1 / stage2` 仍然是 PyTorch 参考实现，用于验证 online softmax 和 blocked 数学形式。
+- `stage1 / stage2` 是 PyTorch 参考实现，用于验证 online softmax 和 blocked 数学形式。
+- `stage3` 是我们自己的 CuTe blocked + online softmax 内核（causal/qkv-only/fwd）。
 - 真正的自研 CuTe 主线会继续落在 `stage3 -> stage5`。

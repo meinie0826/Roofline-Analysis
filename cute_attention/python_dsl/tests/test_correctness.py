@@ -40,3 +40,13 @@ def test_intermediate_reference_stages_match_reference(stage_name):
     ref = run_stage("reference", q, k, v, config)
     out = run_stage(stage_name, q, k, v, config)
     torch.testing.assert_close(out, ref, rtol=1e-3, atol=1e-3)
+
+
+@pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
+@pytest.mark.skipif(not backends["cute"], reason="CuTe DSL is not installed")
+def test_stage3_matches_reference_small():
+    q, k, v = make_inputs((1, 1, 64, 64), torch.float16)
+    config = AttentionConfig(block_n=32, num_threads=128)
+    ref = run_stage("reference", q, k, v, config)
+    out = run_stage("stage3", q, k, v, config)
+    torch.testing.assert_close(out, ref, rtol=2e-2, atol=2e-2)
