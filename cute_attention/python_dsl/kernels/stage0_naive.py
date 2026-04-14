@@ -38,15 +38,16 @@ if HAS_CUTE:
         reduce = cute.make_tensor(reduce_ptr, cute.make_layout((num_threads,)))
 
         local_max = -cutlass.Float32.inf
-        for kv_idx in range(tidx, seq_len, num_threads):
-            score = -cutlass.Float32.inf
-            if kv_idx <= query_idx:
-                score = 0.0
-                for d_idx in range(head_dim):
-                    score += q[bh_idx, query_idx, d_idx] * k[bh_idx, kv_idx, d_idx]
-                score *= softmax_scale
-                local_max = score if local_max < score else local_max
-            scores[kv_idx] = score
+        for kv_idx in cutlass.range_constexpr(seq_len):
+            if kv_idx % num_threads == tidx:
+                score = -cutlass.Float32.inf
+                if kv_idx <= query_idx:
+                    score = 0.0
+                    for d_idx in cutlass.range_constexpr(head_dim):
+                        score += q[bh_idx, query_idx, d_idx] * k[bh_idx, kv_idx, d_idx]
+                    score *= softmax_scale
+                    local_max = score if local_max < score else local_max
+                scores[kv_idx] = score
 
         reduce[tidx] = local_max
         cute.arch.barrier()
@@ -62,12 +63,13 @@ if HAS_CUTE:
 
         row_max = reduce[0]
         local_sum = 0.0
-        for kv_idx in range(tidx, seq_len, num_threads):
-            prob = 0.0
-            if kv_idx <= query_idx:
-                prob = cute.math.exp(scores[kv_idx] - row_max)
-            scores[kv_idx] = prob
-            local_sum += prob
+        for kv_idx in cutlass.range_constexpr(seq_len):
+            if kv_idx % num_threads == tidx:
+                prob = 0.0
+                if kv_idx <= query_idx:
+                    prob = cute.math.exp(scores[kv_idx] - row_max)
+                scores[kv_idx] = prob
+                local_sum += prob
 
         reduce[tidx] = local_sum
         cute.arch.barrier()
@@ -82,11 +84,13 @@ if HAS_CUTE:
         row_sum = reduce[0]
         inv_sum = 1.0 / (row_sum if row_sum != 0.0 else 1.0)
 
-        for d_idx in range(tidx, head_dim, num_threads):
-            acc = 0.0
-            for kv_idx in range(query_idx + 1):
-                acc += scores[kv_idx] * inv_sum * v[bh_idx, kv_idx, d_idx]
-            o[bh_idx, query_idx, d_idx] = acc.to(o.element_type)
+        for d_idx in cutlass.range_constexpr(head_dim):
+            if d_idx % num_threads == tidx:
+                acc = 0.0
+                for kv_idx in cutlass.range_constexpr(seq_len):
+                    if kv_idx <= query_idx:
+                        acc += scores[kv_idx] * inv_sum * v[bh_idx, kv_idx, d_idx]
+                o[bh_idx, query_idx, d_idx] = acc.to(o.element_type)
 
 
     @cute.jit
