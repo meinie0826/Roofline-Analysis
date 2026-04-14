@@ -17,6 +17,7 @@ from .stage5_pipeline import stage5_forward
 from .stage6_q16 import stage6_forward
 from .stage7_score16 import stage7_forward
 from .stage8_noscore import stage8_forward
+from .stage9_threadgroup import stage9_forward
 from .stage0_naive import stage0_forward
 from .stage3_blocked import stage3_forward
 
@@ -109,6 +110,12 @@ STAGES: dict[str, StageDefinition] = {
         name="stage8",
         description="Our own CuTe stage: stage6 math + remove score/prob tile (two-pass per block).",
         implementation=stage8_forward,
+        backend="own-cute-dsl",
+    ),
+    "stage9": StageDefinition(
+        name="stage9",
+        description="Our own CuTe stage: stage6 math + per-row thread-group reductions.",
+        implementation=stage9_forward,
         backend="own-cute-dsl",
     ),
 }

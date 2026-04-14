@@ -51,6 +51,7 @@
   - `stage6` 的 CuTe Q/K/V-tile shared-memory staging（Q 使用 fp16 缓存）前向版
   - `stage7` 的 CuTe Q/K/V/score-tile shared-memory staging（score/prob 使用 fp16 缓存）前向版
   - `stage8` 的 CuTe Q/K/V-tile shared-memory staging（去掉 score/prob tile，块内两遍计算）前向版
+  - `stage9` 的 CuTe Q/K/V/score-tile shared-memory staging（每行 thread-group 归约）前向版
   - `baseline_fa4` 对照入口
   - `baseline_sdpa`（PyTorch SDPA 对照）
 
@@ -73,11 +74,12 @@
 - `stage6` 是我们自己的 CuTe Q/K/V 缓存（Q 用 fp16，K/V 用 fp16）内核。
 - `stage7` 是我们自己的 CuTe Q/K/V/score 缓存（score/prob 用 fp16）内核。
 - `stage8` 是我们自己的 CuTe Q/K/V 缓存（无 score/prob 缓存，two-pass）内核。
+- `stage9` 是我们自己的 CuTe Q/K/V/score 缓存（row thread-group reduction）内核。
 - 真正的自研 CuTe 主线会继续落在 `stage3 -> stage5`。
 
 ## Benchmark
 
-对比 `stage0/stage1/stage2/stage3/stage4/stage5/stage6/stage7/stage8/baseline_fa4/baseline_sdpa`：
+对比 `stage0/stage1/stage2/stage3/stage4/stage5/stage6/stage7/stage8/stage9/baseline_fa4/baseline_sdpa`：
 
 ```bash
 python benchmark.py \
