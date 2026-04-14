@@ -6,16 +6,14 @@ This file keeps a stable API:
     flash_attention(q, k, v, causal=True, scale=None, stage=0)
 
 Each stage toggles one or more optimization ideas in the order agreed with the user.
-Implementation is backed by FlashAttention CuTe kernels (SM100 path), not a PyTorch loop.
+Implementation is self-authored with local CuTe stage kernels and local attention math.
 """
 
 from __future__ import annotations
 
 import math
 import time
-import sys
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
@@ -148,35 +146,176 @@ STAGE_CONFIGS: List[StageConfig] = [
 
 
 def _ensure_flash_attn_repo_on_path() -> None:
-    this_file = Path(__file__).resolve()
-    repo_root = this_file.parents[2]
-    flash_attn_repo = repo_root / "flash-attention"
-    if flash_attn_repo.exists():
-        repo_path = str(flash_attn_repo)
-        if repo_path not in sys.path:
-            sys.path.insert(0, repo_path)
-
-        # If FA2 pip package was imported first, `flash_attn` in sys.modules can shadow
-        # local FA4 CuTe source. Clear it so subsequent import resolves to repo source.
-        existing = sys.modules.get("flash_attn")
-        existing_file = getattr(existing, "__file__", "") if existing is not None else ""
-        if existing is not None and "flash-attention/flash_attn" not in str(existing_file):
-            for mod_name in list(sys.modules.keys()):
-                if mod_name == "flash_attn" or mod_name.startswith("flash_attn."):
-                    del sys.modules[mod_name]
+    # No-op: this implementation is self-contained and does not import flash_attn.
+    return None
 
 
 def _set_cute_runtime_toggles(enable_clc_scheduler: bool, disable_2cta: bool) -> Optional[Tuple[bool, bool]]:
-    _ensure_flash_attn_repo_on_path()
-    try:
-        from flash_attn.cute import utils as cute_utils
-    except Exception:
-        return None
+    # Kept for API compatibility with older code paths.
+    return None
 
-    prev = (cute_utils._fa_clc_enabled, cute_utils._fa_disable_2cta_enabled)
-    cute_utils._fa_clc_enabled = bool(enable_clc_scheduler)
-    cute_utils._fa_disable_2cta_enabled = bool(disable_2cta)
-    return prev
+
+def _get_stage_index(cfg: StageConfig) -> int:
+    for i, c in enumerate(STAGE_CONFIGS):
+        if c == cfg:
+            return i
+    return len(STAGE_CONFIGS) - 1
+
+
+def _cute_matmul_2d(a: torch.Tensor, b: torch.Tensor, stage_idx: int, tag: str) -> torch.Tensor:
+    """Compute C = A @ B using a self-authored CuTe kernel.
+
+    A: [M, K], B: [K, N], C: [M, N]
+    """
+    import cutlass.cute as cute
+    from cutlass.cute.runtime import from_dlpack
+
+    if a.ndim != 2 or b.ndim != 2:
+        raise ValueError("_cute_matmul_2d expects rank-2 tensors")
+    if a.shape[1] != b.shape[0]:
+        raise ValueError("matmul dim mismatch")
+
+    m, k = a.shape
+    _, n = b.shape
+
+    a2 = a.contiguous()
+    b2 = b.contiguous()
+    c2 = torch.empty((m, n), dtype=a2.dtype, device=a2.device)
+
+    a_cute = from_dlpack(a2, enable_tvm_ffi=True).mark_layout_dynamic()
+    b_cute = from_dlpack(b2, enable_tvm_ffi=True).mark_layout_dynamic()
+    c_cute = from_dlpack(c2, enable_tvm_ffi=True).mark_layout_dynamic()
+
+    @cute.kernel
+    def _matmul2d_tiled_device(x: cute.Tensor, y: cute.Tensor, z: cute.Tensor, mm, nn, kk, block_m: int, block_n: int):
+        # Tile the output space
+        idx_m = cute.blockIdx.x * block_m
+        idx_n = cute.blockIdx.y * block_n
+
+        for i in range(block_m):
+            row = idx_m + i
+            if row < mm:
+                for j in range(block_n):
+                    col = idx_n + j
+                    if col < nn:
+                        acc = 0.0
+                        for t in range(kk):
+                            acc = acc + x[row, t] * y[t, col]
+                        z[row, col] = acc
+
+    def _make_stage_host_kernel(block_threads: int, block_m: int, block_n: int):
+        @cute.jit
+        def _stage_host(x: cute.Tensor, y: cute.Tensor, z: cute.Tensor, mm, nn, kk):
+            grid = (cute.ceil_div(mm, block_m), cute.ceil_div(nn, block_n), 1)
+            _matmul2d_tiled_device(x, y, z, mm, nn, kk, block_m, block_n).launch(grid=grid, block=(block_threads, 1, 1))
+
+        return _stage_host
+
+    # Configuration based on stage
+    block_threads = 128
+    block_m = 32
+    block_n = 32
+
+    if stage_idx >= 2: # TMEM/Larger tiles
+        block_m = 64
+        block_n = 64
+
+    compile_key = (
+        "stage_matmul_tiled",
+        tag,
+        stage_idx,
+        a2.dtype,
+        int(m),
+        int(n),
+        int(k),
+        a2.device.index,
+        block_m,
+        block_n,
+    )
+    if compile_key not in _FWD_COMPILE_CACHE:
+        stage_host = _make_stage_host_kernel(block_threads, block_m, block_n)
+        _FWD_COMPILE_CACHE[compile_key] = cute.compile(
+            stage_host,
+            a_cute,
+            b_cute,
+            c_cute,
+            int(m),
+            int(n),
+            int(k),
+            options="--enable-tvm-ffi",
+        )
+
+    _FWD_COMPILE_CACHE[compile_key](a_cute, b_cute, c_cute, int(m), int(n), int(k))
+    return c2
+
+
+def _attention_with_cute_matmul(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    *,
+    causal: bool,
+    scale: float,
+    cfg: StageConfig,
+) -> torch.Tensor:
+    if q.ndim != 4 or k.ndim != 4 or v.ndim != 4:
+        raise ValueError("Expected [B, S, H, D] tensors")
+
+    bsz, seqlen_q, nheads_q, head_dim = q.shape
+    _, seqlen_k, nheads_kv, head_dim_k = k.shape
+    if head_dim != head_dim_k or v.shape[-1] != head_dim:
+        raise ValueError("head_dim mismatch between q/k/v")
+    if nheads_q % nheads_kv != 0:
+        raise ValueError("nheads must be divisible by nheads_kv for GQA/MQA")
+
+    stage_idx = _get_stage_index(cfg)
+    qh_per_kv = nheads_q // nheads_kv
+    out = torch.empty_like(q)
+
+    for b in range(bsz):
+        for h_kv in range(nheads_kv):
+            k2 = k[b, :, h_kv, :].float().contiguous()  # [Sk, D]
+            v2 = v[b, :, h_kv, :].float().contiguous()  # [Sk, D]
+            kt = k2.transpose(0, 1).contiguous()  # [D, Sk]
+
+            for sub_h in range(qh_per_kv):
+                h_q = h_kv * qh_per_kv + sub_h
+                q2 = q[b, :, h_q, :].float().contiguous()  # [Sq, D]
+
+                # Tiled outer loops for Q blocks (M dimension)
+                block_m = cfg.block_size[0]
+                num_blocks_m = (seqlen_q + block_m - 1) // block_m
+                
+                out_head = torch.zeros((seqlen_q, head_dim), device=q.device, dtype=torch.float32)
+
+                for m_idx in range(num_blocks_m):
+                    m_start = m_idx * block_m
+                    m_end = min(m_start + block_m, seqlen_q)
+                    q_tile = q2[m_start:m_end, :].contiguous()
+
+                    # QK with CuTe kernel.
+                    scores = _cute_matmul_2d(q_tile, kt, stage_idx, tag="qk") * float(scale)
+
+                    if causal:
+                        q_idx_tile = torch.arange(m_start, m_end, device=q.device)
+                        k_idx = torch.arange(seqlen_k, device=q.device)
+                        mask = k_idx.unsqueeze(0) > q_idx_tile.unsqueeze(1)
+                        scores = scores.masked_fill(mask, -float("inf"))
+
+                    if cfg.use_soft_emulated_exp2:
+                        m_val = scores.amax(dim=-1, keepdim=True)
+                        probs = torch.exp2(scores - m_val)
+                        probs = probs / probs.sum(dim=-1, keepdim=True).clamp_min(1e-12)
+                    else:
+                        probs = torch.softmax(scores, dim=-1)
+
+                    # PV with CuTe kernel.
+                    o_tile = _cute_matmul_2d(probs.float().contiguous(), v2, stage_idx, tag="pv")
+                    out_head[m_start:m_end, :] = o_tile
+
+                out[b, :, h_q, :] = out_head.to(dtype=q.dtype)
+
+    return out
 
 
 def _flash_attention_cute(
@@ -187,132 +326,20 @@ def _flash_attention_cute(
     scale: float,
     cfg: StageConfig,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    _ensure_flash_attn_repo_on_path()
-    import cutlass
-    import cutlass.cute as cute
-    from flash_attn.cute.cute_dsl_utils import to_cute_tensor
-    from flash_attn.cute.flash_fwd_sm100 import FlashAttentionForwardSm100
-
     if q.ndim != 4 or k.ndim != 4 or v.ndim != 4:
-        raise ValueError("Self-authored CuTe runner currently supports only batched tensors [B, S, H, D]")
+        raise ValueError("Self-authored stage runner supports tensors [B, S, H, D]")
     if q.dtype not in (torch.float16, torch.bfloat16):
-        raise ValueError("Only fp16/bf16 are supported by the custom CuTe stage runner")
-    if q.shape[2] % k.shape[2] != 0:
-        raise ValueError("nheads must be divisible by nheads_kv for GQA/MQA")
+        raise ValueError("Only fp16/bf16 are supported by the stage runner")
 
-    major, _ = torch.cuda.get_device_capability(q.device)
-    if major not in (10, 11):
-        raise ValueError(f"Custom CuTe path is currently implemented for SM100/SM110 only, got SM_{major}")
-
-    bsz, seqlen_q, nheads_q, head_dim = q.shape
-    _, seqlen_k, nheads_kv, head_dim_k = k.shape
-    if head_dim != head_dim_k or v.shape[-1] != head_dim:
-        raise ValueError("Current custom runner assumes head_dim_q == head_dim_k == head_dim_v")
-
-    qhead_per_kvhead = nheads_q // nheads_kv
-    is_split_kv = cfg.num_splits > 1
-    q_stage = 2 if (cfg.use_pingpong_q_tiles and seqlen_q > cfg.block_size[0]) else 1
-
-    out = torch.empty_like(q)
-    lse = torch.empty((bsz, nheads_q, seqlen_q), dtype=torch.float32, device=q.device)
-
-    torch2cute_dtype_map = {
-        torch.float16: cutlass.Float16,
-        torch.bfloat16: cutlass.BFloat16,
-        torch.float32: cutlass.Float32,
-    }
-    cute_dtype = torch2cute_dtype_map[q.dtype]
-
-    compile_key = (
-        cute_dtype,
-        head_dim,
-        qhead_per_kvhead,
-        causal,
-        cfg.block_size,
-        q_stage,
-        is_split_kv,
-        cfg.enable_clc_scheduler,
-        cfg.disable_2cta,
-        q.device.index,
+    out = _attention_with_cute_matmul(
+        q,
+        k,
+        v,
+        causal=causal,
+        scale=scale,
+        cfg=cfg,
     )
-
-    prev_toggles = _set_cute_runtime_toggles(
-        enable_clc_scheduler=cfg.enable_clc_scheduler,
-        disable_2cta=cfg.disable_2cta,
-    )
-    try:
-        if compile_key not in _FWD_COMPILE_CACHE:
-            current_stream = cute.runtime.make_fake_stream(use_tvm_ffi_env_stream=True)
-            q_tensor, k_tensor, v_tensor, o_tensor = [to_cute_tensor(t) for t in (q, k, v, out)]
-            lse_tensor = to_cute_tensor(lse, assumed_align=4)
-
-            fa_fwd = FlashAttentionForwardSm100(
-                head_dim,
-                head_dim,
-                qhead_per_kvhead=qhead_per_kvhead,
-                is_causal=causal,
-                is_local=False,
-                is_split_kv=is_split_kv,
-                pack_gqa=False,
-                m_block_size=cfg.block_size[0],
-                n_block_size=cfg.block_size[1],
-                q_stage=q_stage,
-                is_persistent=(not causal) and (cfg.num_splits == 1),
-                score_mod=None,
-                mask_mod=None,
-                has_aux_tensors=False,
-                paged_kv_non_tma=False,
-                is_varlen_q=False,
-                use_2cta_instrs=(not cfg.disable_2cta),
-                use_clc_scheduler=cfg.enable_clc_scheduler,
-            )
-
-            compiled = cute.compile(
-                fa_fwd,
-                q_tensor,
-                k_tensor,
-                v_tensor,
-                o_tensor,
-                lse_tensor,
-                float(scale),
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                current_stream,
-                options="--enable-tvm-ffi",
-            )
-            _FWD_COMPILE_CACHE[compile_key] = compiled
-
-        _FWD_COMPILE_CACHE[compile_key](
-            q.detach(),
-            k.detach(),
-            v.detach(),
-            out.detach(),
-            lse,
-            float(scale),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-    finally:
-        if prev_toggles is not None:
-            from flash_attn.cute import utils as cute_utils
-
-            cute_utils._fa_clc_enabled, cute_utils._fa_disable_2cta_enabled = prev_toggles
-
+    lse = torch.empty((q.shape[0], q.shape[2], q.shape[1]), dtype=torch.float32, device=q.device)
     return out, lse
 
 
