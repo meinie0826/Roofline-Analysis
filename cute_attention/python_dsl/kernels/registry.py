@@ -15,6 +15,7 @@ from .stage1_fa2 import stage1_forward
 from .stage4_mma import stage4_forward
 from .stage5_pipeline import stage5_forward
 from .stage6_q16 import stage6_forward
+from .stage7_score16 import stage7_forward
 from .stage0_naive import stage0_forward
 from .stage3_blocked import stage3_forward
 
@@ -95,6 +96,12 @@ STAGES: dict[str, StageDefinition] = {
         name="stage6",
         description="Our own CuTe stage: stage5 math + Q shared-memory fp16 staging.",
         implementation=stage6_forward,
+        backend="own-cute-dsl",
+    ),
+    "stage7": StageDefinition(
+        name="stage7",
+        description="Our own CuTe stage: stage6 math + score/prob shared-memory fp16 staging.",
+        implementation=stage7_forward,
         backend="own-cute-dsl",
     ),
 }

@@ -63,10 +63,11 @@ def test_stage3_matches_reference_small():
 
 @pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
 @pytest.mark.skipif(not backends["cute"], reason="CuTe DSL is not installed")
-@pytest.mark.parametrize("stage_name", ["stage4", "stage5", "stage6"])
-def test_stage4_stage5_stage6_match_reference(stage_name):
+@pytest.mark.parametrize("stage_name", ["stage4", "stage5", "stage6", "stage7"])
+def test_stage4_stage5_stage6_stage7_match_reference(stage_name):
     q, k, v = make_inputs((1, 1, 64, 64), torch.float16)
     config = AttentionConfig(block_m=32, block_n=32, num_threads=128)
     ref = run_stage("reference", q, k, v, config)
     out = run_stage(stage_name, q, k, v, config)
-    torch.testing.assert_close(out, ref, rtol=2e-2, atol=2e-2)
+    rtol, atol = (3e-2, 3e-2) if stage_name == "stage7" else (2e-2, 2e-2)
+    torch.testing.assert_close(out, ref, rtol=rtol, atol=atol)
