@@ -71,10 +71,11 @@ cd "$REPO_ROOT"
 export PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}"
 export LD_LIBRARY_PATH="$BUILD_DIR:${LD_LIBRARY_PATH:-}"
 
-# Run with plots
+# Run with plots (causal only)
 python3 attention_kernels/python/benchmark.py \
     --seqlen 512,1024,2048,4096,8192 \
     --hdim 128 \
+    --causal-only \
     --csv "$OUT_DIR/benchmark_${TIMESTAMP}.csv" \
     --plot \
     --plot-dir "$OUT_DIR" \
