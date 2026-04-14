@@ -33,13 +33,22 @@ def test_stage0_matches_reference(shape, dtype):
 
 
 @pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
-@pytest.mark.parametrize("stage_name", ["stage1", "stage2"])
-def test_intermediate_reference_stages_match_reference(stage_name):
+def test_stage2_reference_matches_reference():
     q, k, v = make_inputs((1, 2, 96, 64), torch.float32)
     config = AttentionConfig(block_m=32, block_n=64)
     ref = run_stage("reference", q, k, v, config)
-    out = run_stage(stage_name, q, k, v, config)
+    out = run_stage("stage2", q, k, v, config)
     torch.testing.assert_close(out, ref, rtol=1e-3, atol=1e-3)
+
+
+@pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
+@pytest.mark.skipif(not backends["cute"], reason="CuTe DSL is not installed")
+def test_stage1_fa2_matches_reference_small():
+    q, k, v = make_inputs((1, 1, 64, 64), torch.float16)
+    config = AttentionConfig(block_n=32, num_threads=128)
+    ref = run_stage("reference", q, k, v, config)
+    out = run_stage("stage1", q, k, v, config)
+    torch.testing.assert_close(out, ref, rtol=2e-2, atol=2e-2)
 
 
 @pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")

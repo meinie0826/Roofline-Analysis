@@ -10,6 +10,7 @@ from .reference import (
     causal_attention_online_reference,
     causal_attention_reference,
 )
+from .stage1_fa2 import stage1_forward
 from .future import stage4_forward, stage5_forward
 from .stage0_naive import stage0_forward
 from .stage3_blocked import stage3_forward
@@ -41,6 +42,12 @@ STAGES: dict[str, StageDefinition] = {
     ),
     "stage1": StageDefinition(
         name="stage1",
+        description="Our own CuTe FA2-style kernel: blocked causal attention with online softmax.",
+        implementation=stage1_forward,
+        backend="own-cute-dsl",
+    ),
+    "stage1_ref": StageDefinition(
+        name="stage1_ref",
         description="PyTorch online-softmax reference for validating running max/sum math.",
         implementation=causal_attention_online_reference,
         backend="torch",
