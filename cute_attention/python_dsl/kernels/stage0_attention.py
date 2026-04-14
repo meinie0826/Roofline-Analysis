@@ -5,7 +5,6 @@ Stage 0: Naive Attention Kernel (CuTe DSL)
 """
 
 import torch
-import numpy as np
 
 # CuTe DSL imports
 try:
@@ -194,10 +193,7 @@ def attention_forward(Q, K, V, scale=None):
 def compute_tflops(Q, time_ms):
     """Compute achieved TFLOPs"""
     B, H, N, d = Q.shape
-    
-    # Attention FLOPs: 2 * B * H * N * N * d (Q@K^T + scores@V)
     flops = 2 * B * H * N * N * d
-    
     tflops = flops / time_ms / 1e9
     return tflops
 
@@ -205,56 +201,3 @@ def compute_tflops(Q, time_ms):
 def compute_tc_utilization(tflops, peak=2250):
     """Compute TC utilization percentage"""
     return tflops / peak * 100
-
-
-# ============================================================
-# Test
-# ============================================================
-if __name__ == "__main__":
-    print("="*60)
-    print(" Stage 0: Naive Attention Kernel")
-    print("="*60)
-    
-    if not torch.cuda.is_available():
-        print("\nERROR: CUDA required")
-        exit(1)
-    
-    try:
-        torch.manual_seed(42)
-        
-        # Test config
-        B, H, N, d = 1, 1, 128, HEAD_DIM
-        
-        Q = torch.randn(B, H, N, d, device='cuda', dtype=torch.float32)
-        K = torch.randn(B, H, N, d, device='cuda', dtype=torch.float32)
-        V = torch.randn(B, H, N, d, device='cuda', dtype=torch.float32)
-        
-        print(f"\nConfig: B={B}, H={H}, N={N}, d={d}")
-        
-        # Our kernel
-        O_ours = attention_forward(Q, K, V)
-        
-        # Reference
-        scale = 1.0 / (d ** 0.5)
-        attn_weights = torch.softmax(
-            torch.matmul(Q, K.transpose(-2, -1)) * scale, dim=-1
-        )
-        O_ref = torch.matmul(attn_weights, V)
-        
-        # Compare
-        max_diff = (O_ours - O_ref).abs().max().item()
-        mean_diff = (O_ours - O_ref).abs().mean().item()
-        
-        print(f"\nResults:")
-        print(f"  Max diff: {max_diff:.6f}")
-        print(f"  Mean diff: {mean_diff:.6f}")
-        
-        if max_diff < 1e-3:
-            print("  ✓ PASSED!")
-        else:
-            print("  ✗ FAILED!")
-        
-        print("\n" + "="*60)
-    except RuntimeError as e:
-        print(f"\nERROR: {e}")
-        exit(1)

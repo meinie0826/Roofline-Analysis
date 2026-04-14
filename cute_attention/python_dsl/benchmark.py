@@ -7,7 +7,6 @@ import torch
 import time
 import argparse
 from kernels.stage0_attention import attention_forward, compute_tflops, compute_tc_utilization, HAS_CUTE
-from tests.test_correctness import reference_attention, check_correctness
 
 
 def benchmark(func, Q, K, V, warmup=10, repeat=100, verbose=True):
