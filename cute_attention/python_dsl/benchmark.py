@@ -1,33 +1,34 @@
 #!/usr/bin/env python3
 """
-FlashAttention Benchmark
+FlashAttention Benchmark with SDPA Comparison
 """
 
 import torch
+import torch.nn.functional as F
 import time
 import argparse
+import math
 
 try:
-    from kernels.stage0_attention import attention_forward, compute_tflops, compute_tc_utilization, HAS_CUTE, CUTE_ERROR
+    from kernels.stage0_attention import attention_forward, compute_tflops, compute_tc_utilization, HEAD_DIM
+    HAS_KERNEL = True
 except ImportError as e:
-    HAS_CUTE = False
-    CUTE_ERROR = str(e)
+    HAS_KERNEL = False
+    KERNEL_ERROR = str(e)
+
+
+def sdpa_attention(Q, K, V, scale=None):
+    """PyTorch SDPA baseline"""
+    if scale is None:
+        scale = 1.0 / math.sqrt(Q.shape[-1])
+    
+    # Use scaled_dot_product_attention
+    output = F.scaled_dot_product_attention(Q, K, V, scale=scale)
+    return output
 
 
 def benchmark(func, Q, K, V, warmup=10, repeat=100, verbose=True):
-    """
-    Benchmark an attention function
-    
-    Args:
-        func: attention function
-        Q, K, V: input tensors
-        warmup: warmup iterations
-        repeat: benchmark iterations
-        verbose: print results
-    
-    Returns:
-        metrics: dict with time_ms, tflops, tc_util
-    """
+    """Benchmark an attention function"""
     # Warmup
     for _ in range(warmup):
         _ = func(Q, K, V)
@@ -60,7 +61,7 @@ def benchmark(func, Q, K, V, warmup=10, repeat=100, verbose=True):
     }
     
     if verbose:
-        print(f"  Time: {mean_time:.3f} ± {std_time:.3f} ms (min: {min_time:.3f})")
+        print(f"  Time: {mean_time:.3f} ± {std_time:.3f} ms")
         print(f"  TFLOPs: {tflops:.1f}")
         print(f"  TC Util: {tc_util:.2f}%")
     
@@ -71,20 +72,22 @@ def run_benchmark(seqlens=[1024, 2048, 4096, 8192, 16384, 32768],
                   batch_size=1, 
                   nheads=32, 
                   headdim=128):
-    """Run benchmark for different sequence lengths"""
-    print("="*70)
-    print(" FlashAttention Benchmark - Stage 0 (Naive)")
-    print("="*70)
+    """Run benchmark comparing Stage 0 and SDPA"""
     
-    if not HAS_CUTE:
-        raise RuntimeError(f"CuTe DSL not available: {CUTE_ERROR}")
+    print("="*90)
+    print(" FlashAttention Benchmark - Stage 0 vs SDPA")
+    print("="*90)
     
-    print("\nCuTe DSL: ✓ Available")
+    if not HAS_KERNEL:
+        print(f"\nWARNING: Custom kernel not available ({KERNEL_ERROR})")
+        print("Showing SDPA baseline only\n")
+    
     print(f"\nConfig: B={batch_size}, H={nheads}, d={headdim}")
     print()
     
-    print(f"{'N':<8} {'Time (ms)':<15} {'TFLOPs':<12} {'TC Util (%)':<12}")
-    print("-"*70)
+    # Header
+    print(f"{'N':<8} {'SDPA (ms)':<12} {'Stage0 (ms)':<12} {'Speedup':<10} {'SDPA TFLOPs':<12} {'Stage0 TFLOPs':<12}")
+    print("-"*90)
     
     results = []
     
@@ -98,16 +101,35 @@ def run_benchmark(seqlens=[1024, 2048, 4096, 8192, 16384, 32768],
         V = torch.randn(batch_size, nheads, N, headdim, 
                        device='cuda', dtype=torch.float32)
         
-        metrics = benchmark(attention_forward, Q, K, V, verbose=False)
+        # Benchmark SDPA
+        sdpa_metrics = benchmark(sdpa_attention, Q, K, V, verbose=False)
         
-        print(f"{N:<8} {metrics['time_ms']:<15.3f} {metrics['tflops']:<12.1f} {metrics['tc_util']:<12.2f}")
+        # Benchmark our kernel (if available)
+        if HAS_KERNEL:
+            try:
+                kernel_metrics = benchmark(attention_forward, Q, K, V, verbose=False)
+                speedup = sdpa_metrics['time_ms'] / kernel_metrics['time_ms']
+                kernel_time = f"{kernel_metrics['time_ms']:.3f}"
+                kernel_tflops = f"{kernel_metrics['tflops']:.1f}"
+            except Exception as e:
+                kernel_time = "ERROR"
+                kernel_tflops = "N/A"
+                speedup = 0.0
+        else:
+            kernel_time = "N/A"
+            kernel_tflops = "N/A"
+            speedup = 0.0
+        
+        print(f"{N:<8} {sdpa_metrics['time_ms']:<12.3f} {kernel_time:<12} {speedup:<10.2f} {sdpa_metrics['tflops']:<12.1f} {kernel_tflops:<12}")
         
         results.append({
             'seqlen': N,
-            **metrics
+            'sdpa': sdpa_metrics,
+            'kernel': kernel_metrics if HAS_KERNEL else None,
+            'speedup': speedup
         })
     
-    print("="*70)
+    print("="*90)
     
     # Save results
     import json
@@ -138,6 +160,15 @@ def run_benchmark(seqlens=[1024, 2048, 4096, 8192, 16384, 32768],
 def run_correctness_test():
     """Run correctness test"""
     from tests.test_correctness import run_all_tests
+    
+    print("="*60)
+    print(" Running Correctness Tests")
+    print("="*60)
+    
+    if not HAS_KERNEL:
+        print(f"\nERROR: Kernel not available ({KERNEL_ERROR})")
+        return False
+    
     run_all_tests(attention_forward)
 
 
