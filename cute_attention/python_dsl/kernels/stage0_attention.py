@@ -7,18 +7,22 @@ Stage 0: Naive Attention Kernel (CuTe DSL)
 import torch
 
 # CuTe DSL imports
-from cutlass.cute.runtime import *
+from cutlass.cute.runtime import from_dlpack
 from cutlass import cute
 import cutlass
-import numpy as np
-import torch
 
 
+# ============================================================
+# Hyperparameters
+# ============================================================
 HEAD_DIM = 128
 BLOCK_N = 64
 NUM_THREADS = 128
 
 
+# ============================================================
+# CuTe Kernel
+# ============================================================
 @cute.kernel
 def naive_attention_kernel(
     Q: cute.Tensor,      # (BH, N, d)
@@ -42,26 +46,33 @@ def naive_attention_kernel(
     
     q_vec = Q_bh[query_idx]  # (d,) 当前 query 行
     
-    # Shared memory
-    scores = cute.SharedMemory(float, shape=(seq_len,))
-    output = cute.SharedMemory(float, shape=(HEAD_DIM,))
-    smem_reduce = cute.SharedMemory(float, shape=(NUM_THREADS,))
+    # Shared memory allocation
+    scores_ptr = cute.arch.alloc_smem(cutlass.Float32, seq_len)
+    output_ptr = cute.arch.alloc_smem(cutlass.Float32, HEAD_DIM)
+    smem_reduce_ptr = cute.arch.alloc_smem(cutlass.Float32, NUM_THREADS)
+    
+    # Create tensors from pointers
+    scores = cute.make_tensor(scores_ptr, cute.make_layout(seq_len))
+    output = cute.make_tensor(output_ptr, cute.make_layout(HEAD_DIM))
+    smem_reduce = cute.make_tensor(smem_reduce_ptr, cute.make_layout(NUM_THREADS))
     
     # ----------------------------------------------------------
     # Step 1: Compute scores = Q @ K^T
     # 每个线程处理部分 kv positions
     # ----------------------------------------------------------
     # 初始化 output
-    for d_idx in cute.thread_partition(range(HEAD_DIM), tid, NUM_THREADS):
-        output[d_idx] = 0.0
+    for d_idx in range(HEAD_DIM):
+        if d_idx % NUM_THREADS == tid:
+            output[d_idx] = 0.0
     
     # Compute attention scores
-    for j in cute.thread_partition(range(seq_len), tid, NUM_THREADS):
-        k_vec = K_bh[j]  # (d,)
-        dot = float(0.0)
-        for dd in range(HEAD_DIM):
-            dot += q_vec[dd] * k_vec[dd]
-        scores[j] = dot * scale
+    for j in range(seq_len):
+        if j % NUM_THREADS == tid:
+            k_vec = K_bh[j]  # (d,)
+            dot = float(0.0)
+            for dd in range(HEAD_DIM):
+                dot += q_vec[dd] * k_vec[dd]
+            scores[j] = dot * scale
     
     cute.syncthreads()
     
@@ -70,10 +81,12 @@ def naive_attention_kernel(
     # ----------------------------------------------------------
     # 2a: Find max (reduction)
     local_max = float('-inf')
-    for j in cute.thread_partition(range(seq_len), tid, NUM_THREADS):
-        local_max = max(local_max, scores[j])
+    for j in range(seq_len):
+        if j % NUM_THREADS == tid:
+            local_max = max(local_max, scores[j])
     
-    smem_reduce[tid] = local_max
+    if tid < NUM_THREADS:
+        smem_reduce[tid] = local_max
     cute.syncthreads()
     
     # Tree reduction for max
@@ -89,12 +102,14 @@ def naive_attention_kernel(
     
     # 2b: Compute exp and sum
     local_sum = float(0.0)
-    for j in cute.thread_partition(range(seq_len), tid, NUM_THREADS):
-        val = cute.exp(scores[j] - global_max)
-        scores[j] = val
-        local_sum += val
+    for j in range(seq_len):
+        if j % NUM_THREADS == tid:
+            val = cutlass.exp(scores[j] - global_max)
+            scores[j] = val
+            local_sum += val
     
-    smem_reduce[tid] = local_sum
+    if tid < NUM_THREADS:
+        smem_reduce[tid] = local_sum
     cute.syncthreads()
     
     stride = NUM_THREADS // 2
@@ -108,8 +123,9 @@ def naive_attention_kernel(
     cute.syncthreads()
     
     # 2c: Normalize
-    for j in cute.thread_partition(range(seq_len), tid, NUM_THREADS):
-        scores[j] /= global_sum
+    for j in range(seq_len):
+        if j % NUM_THREADS == tid:
+            scores[j] /= global_sum
     
     cute.syncthreads()
     
@@ -117,17 +133,28 @@ def naive_attention_kernel(
     # Step 3: Compute output = scores @ V
     # 每个线程负责部分维度
     # ----------------------------------------------------------
-    for d_idx in cute.thread_partition(range(HEAD_DIM), tid, NUM_THREADS):
-        acc = float(0.0)
-        for j in range(seq_len):
-            acc += scores[j] * V_bh[j][d_idx]
-        O_bh[query_idx][d_idx] = acc
+    for d_idx in range(HEAD_DIM):
+        if d_idx % NUM_THREADS == tid:
+            acc = float(0.0)
+            for j in range(seq_len):
+                acc += scores[j] * V_bh[j][d_idx]
+            O_bh[query_idx][d_idx] = acc
 
 
 # ============================================================
 # Launch Interface
 # ============================================================
 def attention_forward(Q, K, V, scale=None):
+    """
+    Attention forward pass
+    
+    Args:
+        Q, K, V: (B, H, N, d) tensors, float32, on CUDA
+        scale: softmax scale
+    
+    Returns:
+        O: (B, H, N, d) output tensor
+    """
     B, H, N, d = Q.shape
     assert d == HEAD_DIM, f"Expected HEAD_DIM={HEAD_DIM}, got {d}"
     
@@ -149,18 +176,17 @@ def attention_forward(Q, K, V, scale=None):
     O_cute = from_dlpack(O_flat)
     
     # Launch kernel
-    grid = (N, BH)
-    block = (NUM_THREADS,)
+    grid = (N, BH, 1)
+    block = (NUM_THREADS, 1, 1)
     
-    # Compile kernel first
-    compiled_kernel = cute.compile(
+    # Compile and launch
+    compiled = cute.compile(
         naive_attention_kernel,
         Q_cute, K_cute, V_cute, O_cute,
         scale, N
     )
     
-    # Then launch
-    compiled_kernel.launch(
+    compiled.launch(
         grid=grid, block=block,
         args=(Q_cute, K_cute, V_cute, O_cute, scale, N)
     )
