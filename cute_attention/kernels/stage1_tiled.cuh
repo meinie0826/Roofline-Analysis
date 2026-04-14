@@ -14,7 +14,6 @@
 #include <cute/tensor.hpp>
 #include <cutlass/cutlass.h>
 #include <cutlass/numeric_types.h>
-#include <cutlass/fast_math.h>
 
 using namespace cute;
 
@@ -38,37 +37,17 @@ struct FlashAttentionTiled {
         float sum_exp[kBlockM];
     };
     
-    // CuTe Layouts
-    using LayoutQ = Layout<Shape<Int<kBlockM>, Int<kHeadDim>>, Stride<Int<kHeadDim>, _1>>;
-    using LayoutK = Layout<Shape<Int<kBlockN>, Int<kHeadDim>>, Stride<Int<kHeadDim>, _1>>;
-    using LayoutV = Layout<Shape<Int<kHeadDim>, Int<kBlockN>>, Stride<Int<kBlockN>, _1>>;
-    using LayoutS = Layout<Shape<Int<kBlockM>, Int<kBlockN>>, Stride<Int<kBlockN>, _1>>;
-    
-    // Tiled copy for loading Q
-    using TiledCopyQ = decltype(make_tiled_copy(
-        Copy_Atom<AutoVectorizingCopyWithAssumedAlignment<128>, Element>{},
-        Layout<Shape<Int<kThreads / 4>, Int<4>>>>{},  // Thread layout
-        Layout<Shape<_1, Int<sizeof(uint128_t) / sizeof(Element)>>>{}  // Value layout
-    ));
-    
-    // Tiled copy for loading K, V
-    using TiledCopyKV = decltype(make_tiled_copy(
-        Copy_Atom<AutoVectorizingCopyWithAssumedAlignment<128>, Element>{},
-        Layout<Shape<Int<kThreads / 8>, Int<8>>>>{},
-        Layout<Shape<_1, Int<sizeof(uint128_t) / sizeof(Element)>>>{}
-    ));
-    
     template <typename TensorQ, typename TensorK, typename TensorV, typename TensorO>
     __device__ static void apply(
         TensorQ&& gQ,
-        TensorK&& gK,  
+        TensorK&& gK,
         TensorV&& gV,
         TensorO&& gO,
         int seq_len,
         float scale
     ) {
         int tid = threadIdx.x;
-        int m_tile = blockIdx.x;  // Which query tile
+        int m_tile = blockIdx.x;
         int m_start = m_tile * kBlockM;
         
         if (m_start >= seq_len) return;
@@ -79,14 +58,7 @@ struct FlashAttentionTiled {
         extern __shared__ char smem[];
         SharedStorage& storage = *reinterpret_cast<SharedStorage*>(smem);
         
-        // Create shared memory tensors
-        auto sQ_tensor = make_tensor(make_smem_ptr(storage.sQ), LayoutQ{});
-        auto sK_tensor = make_tensor(make_smem_ptr(storage.sK), LayoutK{});
-        auto sV_tensor = make_tensor(make_smem_ptr(storage.sV), LayoutV{});
-        auto sO_tensor = make_tensor(make_smem_ptr(storage.sO), LayoutQ{});
-        auto sS_tensor = make_tensor(make_smem_ptr(storage.sScores), LayoutS{});
-        
-        // Initialize accumulators
+        // Initialize output accumulator
         for (int i = tid; i < kBlockM * kHeadDim; i += kThreads) {
             storage.sO[i] = ElementAccum(0);
         }

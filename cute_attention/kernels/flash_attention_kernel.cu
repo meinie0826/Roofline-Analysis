@@ -1,17 +1,17 @@
 /**
  * FlashAttention Kernels Implementation
+ * 
+ * 简化版本，避免模板特化问题
  */
 
 #include "flash_attention.cuh"
 #include <cute/tensor.hpp>
+#include <cuda_runtime.h>
 
 using namespace cute;
 using namespace flash_attention;
 
-// Kernel templates for each stage
-
-// Stage 0: Naive
-template <typename Element, int kHeadDim>
+// Stage 0: Naive kernel
 __global__ void flash_attention_stage0_kernel(
     const Element* __restrict__ Q,
     const Element* __restrict__ K,
@@ -75,8 +75,8 @@ __global__ void flash_attention_stage0_kernel(
     }
 }
 
-// Stage 1: Tiled with SMEM
-template <typename Element, int kBlockM, int kBlockN, int kHeadDim, int kThreads>
+// Stage 1: Tiled kernel
+template <int kBlockM, int kBlockN, int kHeadDim>
 __global__ void flash_attention_stage1_kernel(
     const Element* __restrict__ Q,
     const Element* __restrict__ K,
@@ -97,32 +97,32 @@ __global__ void flash_attention_stage1_kernel(
     
     extern __shared__ char smem[];
     
-    // Shared memory allocation
     Element* sQ = reinterpret_cast<Element*>(smem);
     Element* sK = sQ + kBlockM * kHeadDim;
     Element* sV = sK + kBlockN * kHeadDim;
     float* sO = reinterpret_cast<float*>(sV + kHeadDim * kBlockN);
-    float* max_scores = reinterpret_cast<float*>(sO + kBlockM * kHeadDim);
+    float* max_scores = sO + kBlockM * kHeadDim;
     float* sum_exp = max_scores + kBlockM;
     
     int base_idx = (batch * nheads + head) * seq_len * head_dim;
+    int tid = threadIdx.x;
     
     // Initialize
-    for (int i = threadIdx.x; i < kBlockM; i += kThreads) {
+    for (int i = tid; i < kBlockM; i += blockDim.x) {
         max_scores[i] = -INFINITY;
         sum_exp[i] = 0.0f;
     }
-    for (int i = threadIdx.x; i < kBlockM * kHeadDim; i += kThreads) {
+    for (int i = tid; i < kBlockM * kHeadDim; i += blockDim.x) {
         sO[i] = 0.0f;
     }
     
     __syncthreads();
     
     // Load Q tile
-    for (int i = threadIdx.x; i < m_size * kHeadDim; i += kThreads) {
+    for (int i = tid; i < m_size * kHeadDim; i += blockDim.x) {
         int m = i / kHeadDim;
         int d = i % kHeadDim;
-        sQ[m * kHeadDim + d] = Q[base_idx + (m_start + m) * head_dim + d];
+        sQ[i] = Q[base_idx + (m_start + m) * head_dim + d];
     }
     
     __syncthreads();
@@ -132,27 +132,25 @@ __global__ void flash_attention_stage1_kernel(
         int n_end_local = min(n_start + kBlockN, seq_len);
         int n_size = n_end_local - n_start;
         
-        // Causal check
         if (causal && n_start >= m_end) break;
         
         // Load K, V tiles
-        for (int i = threadIdx.x; i < n_size * kHeadDim; i += kThreads) {
+        for (int i = tid; i < n_size * kHeadDim; i += blockDim.x) {
             int n = i / kHeadDim;
             int d = i % kHeadDim;
-            sK[n * kHeadDim + d] = K[base_idx + (n_start + n) * head_dim + d];
+            sK[i] = K[base_idx + (n_start + n) * head_dim + d];
             sV[d * kBlockN + n] = V[base_idx + (n_start + n) * head_dim + d];
         }
         
         __syncthreads();
         
-        // Compute attention for this tile
-        for (int m = threadIdx.x; m < m_size; m += kThreads) {
-            int n_limit = causal ? min(n_size, m_end - m_start + n_start - n_start) : n_size;
-            
+        // Compute attention
+        for (int m = tid; m < m_size; m += blockDim.x) {
             float row_max = max_scores[m];
             float row_sum = 0.0f;
             
-            // Compute QK for this row
+            int n_limit = causal ? min(n_size, m_end - m_start + n_start - n_start) : n_size;
+            
             for (int n = 0; n < n_limit; ++n) {
                 float score = 0.0f;
                 for (int d = 0; d < kHeadDim; ++d) {
@@ -160,49 +158,35 @@ __global__ void flash_attention_stage1_kernel(
                              static_cast<float>(sK[n * kHeadDim + d]);
                 }
                 score *= scale;
-                row_max = fmaxf(row_max, score);
-            }
-            
-            // Update global max
-            atomicMax(reinterpret_cast<int*>(&max_scores[m]), __float_as_int(row_max));
-            __threadfence();
-            
-            float new_max = max_scores[m];
-            
-            // Rescale and compute exp
-            for (int n = 0; n < n_limit; ++n) {
-                float score = 0.0f;
-                for (int d = 0; d < kHeadDim; ++d) {
-                    score += static_cast<float>(sQ[m * kHeadDim + d]) * 
-                             static_cast<float>(sK[n * kHeadDim + d]);
-                }
-                score = expf(score * scale - new_max);
-                row_sum += score;
                 
-                // Accumulate PV
+                float old_max = row_max;
+                row_max = fmaxf(row_max, score);
+                float rescale = expf(old_max - row_max);
+                row_sum = row_sum * rescale + expf(score - row_max);
+                
                 for (int d = 0; d < kHeadDim; ++d) {
-                    float v = static_cast<float>(sV[d * kBlockN + n]);
-                    sO[m * kHeadDim + d] += score * v;
+                    sO[m * kHeadDim + d] = sO[m * kHeadDim + d] * rescale +
+                        expf(score - row_max) * static_cast<float>(sV[d * kBlockN + n]);
                 }
             }
             
-            atomicAdd(&sum_exp[m], row_sum);
+            max_scores[m] = row_max;
+            sum_exp[m] = sum_exp[m] * expf(max_scores[m] - row_max) + row_sum;
         }
         
         __syncthreads();
     }
     
     // Normalize and write output
-    for (int i = threadIdx.x; i < m_size * kHeadDim; i += kThreads) {
+    for (int i = tid; i < m_size * kHeadDim; i += blockDim.x) {
         int m = i / kHeadDim;
         int d = i % kHeadDim;
-        float o_val = sO[i] / sum_exp[m];
-        O[base_idx + (m_start + m) * head_dim + d] = static_cast<Element>(o_val);
+        O[base_idx + (m_start + m) * head_dim + d] = 
+            static_cast<Element>(sO[i] / sum_exp[m]);
     }
 }
 
-// Launcher implementations
-template <>
+// Launcher functions
 void FlashAttentionKernel<0>::launch(
     const Element* Q, const Element* K, const Element* V, Element* O,
     int batch_size, int nheads, int seq_len, int head_dim,
@@ -213,12 +197,11 @@ void FlashAttentionKernel<0>::launch(
     dim3 grid(seq_len, nheads, batch_size);
     dim3 block(128);
     
-    flash_attention_stage0_kernel<Element, 128><<<grid, block, 0, stream>>>(
+    flash_attention_stage0_kernel<<<grid, block, 0, stream>>>(
         Q, K, V, O, batch_size, nheads, seq_len, head_dim, scale, causal
     );
 }
 
-template <>
 void FlashAttentionKernel<1>::launch(
     const Element* Q, const Element* K, const Element* V, Element* O,
     int batch_size, int nheads, int seq_len, int head_dim,
@@ -226,23 +209,23 @@ void FlashAttentionKernel<1>::launch(
 ) {
     constexpr int kBlockM = 64;
     constexpr int kBlockN = 64;
-    constexpr int kThreads = 128;
+    constexpr int kHeadDim = 128;
     
     float scale = 1.0f / sqrtf(static_cast<float>(head_dim));
     
     dim3 grid((seq_len + kBlockM - 1) / kBlockM, nheads, batch_size);
-    dim3 block(kThreads);
+    dim3 block(128);
     
-    size_t smem_size = sizeof(Element) * (kBlockM + kBlockN + kBlockN) * head_dim +
-                        sizeof(float) * (kBlockM * head_dim + kBlockM * 2);
+    size_t smem_size = sizeof(Element) * (kBlockM + kBlockN + kBlockN) * kHeadDim +
+                       sizeof(float) * (kBlockM * kHeadDim + kBlockM * 2);
     
-    flash_attention_stage1_kernel<Element, kBlockM, kBlockN, 128, kThreads>
+    flash_attention_stage1_kernel<kBlockM, kBlockN, kHeadDim>
         <<<grid, block, smem_size, stream>>>(
             Q, K, V, O, batch_size, nheads, seq_len, head_dim, scale, causal
         );
 }
 
-// Similar for stages 2-4...
+// Add similar launchers for stages 2-4...
 
 extern "C" {
     void launch_flash_attention(
@@ -250,22 +233,21 @@ extern "C" {
         int batch_size, int nheads, int seq_len, int head_dim,
         int stage, bool causal, cudaStream_t stream
     ) {
+        const Element* Q_cast = static_cast<const Element*>(Q);
+        const Element* K_cast = static_cast<const Element*>(K);
+        const Element* V_cast = static_cast<const Element*>(V);
+        Element* O_cast = static_cast<Element*>(O);
+        
         switch (stage) {
             case 0:
                 FlashAttentionKernel<0>::launch(
-                    static_cast<const Element*>(Q),
-                    static_cast<const Element*>(K),
-                    static_cast<const Element*>(V),
-                    static_cast<Element*>(O),
+                    Q_cast, K_cast, V_cast, O_cast,
                     batch_size, nheads, seq_len, head_dim, causal, stream
                 );
                 break;
             case 1:
                 FlashAttentionKernel<1>::launch(
-                    static_cast<const Element*>(Q),
-                    static_cast<const Element*>(K),
-                    static_cast<const Element*>(V),
-                    static_cast<Element*>(O),
+                    Q_cast, K_cast, V_cast, O_cast,
                     batch_size, nheads, seq_len, head_dim, causal, stream
                 );
                 break;
