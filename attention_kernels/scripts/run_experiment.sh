@@ -18,7 +18,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-BUILD_DIR="$REPO_ROOT/build"
+BUILD_DIR="$SCRIPT_DIR/../build"
 OUT_DIR="$REPO_ROOT/results"
 TIMESTAMP=$(date -u +"%Y%m%dT%H%M%SZ")
 
@@ -67,8 +67,8 @@ echo ""
 echo "[3/4] Running benchmarks..."
 
 cd "$REPO_ROOT"
-export PYTHONPATH="$REPO_ROOT:$PYTHONPATH"
-export LD_LIBRARY_PATH="$BUILD_DIR:$LD_LIBRARY_PATH"
+export PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}"
+export LD_LIBRARY_PATH="$BUILD_DIR:${LD_LIBRARY_PATH:-}"
 
 # Run with plots
 python3 attention_kernels/python/benchmark.py \
