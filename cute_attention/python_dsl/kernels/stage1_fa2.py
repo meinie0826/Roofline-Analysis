@@ -46,9 +46,9 @@ if HAS_CUTE:
                 row = lin // head_dim
                 d_idx = lin - row * head_dim
                 q_idx = m_start + row
-                q_val = 0.0
+                q_val = cutlass.Float32(0.0)
                 if q_idx < seq_len:
-                    q_val = q[bh_idx, q_idx, d_idx]
+                    q_val = q[bh_idx, q_idx, d_idx].to(cutlass.Float32)
                 q_tile[lin] = q_val
                 acc_tile[lin] = 0.0
 
@@ -70,10 +70,10 @@ if HAS_CUTE:
                     kv_idx = n_start + blk_j
                     score = -cutlass.Float32.inf
                     if q_idx < seq_len and kv_idx < seq_len and kv_idx <= q_idx:
-                        dot = 0.0
+                        dot = cutlass.Float32(0.0)
                         q_base = row * head_dim
                         for d_idx in range(head_dim):
-                            dot += q_tile[q_base + d_idx] * k[bh_idx, kv_idx, d_idx]
+                            dot += q_tile[q_base + d_idx] * k[bh_idx, kv_idx, d_idx].to(cutlass.Float32)
                         score = dot * softmax_scale
                     score_tile[lin] = score
                 cute.arch.barrier()
@@ -118,7 +118,7 @@ if HAS_CUTE:
                         for blk_j in range(block_n):
                             kv_idx = n_start + blk_j
                             if kv_idx < seq_len and kv_idx <= q_idx:
-                                acc += score_tile[row_base + blk_j] * v[bh_idx, kv_idx, d_idx]
+                                acc += score_tile[row_base + blk_j] * v[bh_idx, kv_idx, d_idx].to(cutlass.Float32)
                         acc_tile[lin] = acc
                 cute.arch.barrier()
 
