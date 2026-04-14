@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+.codeflicker/
+
+# Keep results directory but ignore local-only scratch files
+fa4/results/.gitkeep

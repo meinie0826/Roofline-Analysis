@@ -1,76 +1,102 @@
-# FA4 Roofline Analysis
+# Roofline-Analysis
 
-Performance analysis of FlashAttention-4 (FA4) on NVIDIA Blackwell B200 (SM100).
-Decomposes each optimization's contribution by mapping it to a specific hardware bottleneck,
-and visualizes how each technique raises a particular roofline ceiling.
-
-## Key Insight
-
-B200 doubled Tensor Core throughput (H100: 989T → B200: 2250T BF16) but left
-MUFU (exp2) and SMEM bandwidth **unchanged**. This asymmetry creates new co-bottlenecks
-that FA4 is specifically designed to address.
+Per-kernel hardware roofline analysis. Each subdirectory analyzes one kernel family.
 
 ```
-Per-tile cycle counts on B200 (M=N=D=128):
-  TC  (BF16 MMA):      1024 cycles   ← halved from H100's 2048
-  EXP (MUFU.EX2):      1024 cycles   ← UNCHANGED → now co-bottleneck!
-  SMEM bandwidth:       768 cycles   ← UNCHANGED
+Roofline-Analysis/
+├── fa4/          ← FlashAttention-4 (B200/SM100)
+└── ...           ← future kernels (FlashMLA, GEMM, ...)
 ```
 
-## Optimization → Hardware Mapping
+---
 
-| Stage | Optimization | Hardware Target | Ceiling Effect |
-|-------|-------------|-----------------|----------------|
-| S0 | Baseline (serial) | Pipeline stall | 1125 TFLOPs/s (50% util) |
-| S1 | +ping-pong (q_stage=2) | TC idle time | **2250T (100%) ← 2× gain** |
-| S2 | +conditional rescaling | Correction warpgroup | +5-10% |
-| S3 | +FMA exp2 emulation | MUFU throughput | EXP ceil: 2250→4091T |
-| S4 | +LPT scheduler | SM utilization (causal) | +4-14% causal |
-| S5 | +2-CTA MMA | SMEM bandwidth | SMEM ceil: 3000→4500T |
+## FA4 — FlashAttention-4 on B200
 
-## Charts
+### What this measures
 
-| File | Description |
-|------|-------------|
-| `plots/fa4_hopper_vs_blackwell_asymmetry.png` | Hardware asymmetry: why B200 needs new opts |
-| `plots/fa4_roofline_ladder_b200_D128_causal.png` | Roofline ladder (causal, hdim=128) |
-| `plots/fa4_roofline_ladder_b200_D128_noncausal.png` | Roofline ladder (non-causal, +2-CTA) |
-| `plots/fa4_per_resource_ceiling_b200_D128.png` | Per-resource ceiling progression |
-| `plots/fa4_hdim_bottleneck_b200.png` | Bottleneck heatmap by head dimension |
-| `plots/FA4_Roofline_Analysis_Report.md` | Full written analysis report |
+5-stage ablation ladder: each optimization is enabled one at a time.
+Measured TFLOPs/s is compared against theoretical hardware ceilings
+derived purely from NVIDIA public datasheets.
 
-## Usage
+| Stage | What changes |
+|-------|-------------|
+| S0 | Baseline: q_stage=1 (serial), MUFU-only exp, no cond-rescale, linear sched |
+| S1 | +ping-pong: q_stage=2 (async TMEM MMA↔softmax overlap) |
+| S2 | +conditional rescaling: skip O correction when Δmax < 8.0 |
+| S3 | +exp2 FMA emulation: polynomial approx on FP32 units alongside MUFU |
+| S4 | +LPT scheduler: load-balance causal tiles across SMs |
 
-### Generate all charts (no GPU required)
+Theory ceilings (D=128, M=N=128, B200):
+
+```
+TC  cycles = 1024c  →  TC ceiling  = 2250 TFLOPs/s  (= B200 peak)
+EXP cycles = 1024c  →  EXP ceiling = 2250 TFLOPs/s  ← co-bottleneck with TC!
+SMEM cycles = 768c  →  SMEM ceiling = 3000 TFLOPs/s
+Serial (TC+EXP)     →  Serial ceil  = 1125 TFLOPs/s  (50% utilization)
+```
+
+### How to run (on B200 machine)
+
+**1. Clone and set up:**
 ```bash
+git clone git@github.com:meinie0826/Roofline-Analysis.git
+cd Roofline-Analysis
+
+# Install FA4
+git clone https://github.com/Dao-AILab/flash-attention
+cd flash-attention && pip install -e . && cd ..
+
+# Copy benchmark into FA4 repo
+cp fa4/benchmark_ablation_sm100.py flash-attention/benchmarks/
+
+# Dependencies
 pip install matplotlib numpy
-python fa4_roofline_analysis.py --out-dir ./plots --report
 ```
 
-### Run actual ablation benchmark (requires B200/SM100)
+**2. Run everything (benchmark + NSight + push results):**
 ```bash
-# Theory only (no GPU)
-python benchmark_ablation_sm100.py --roofline-only
-
-# Full ablation
-python benchmark_ablation_sm100.py --seqlen 1024,2048,4096,8192 --causal-only --csv results.csv --plot
-
-# NSight profiling
-ncu --metrics sm__sass_inst_executed_op_mufu_ex2.sum,\
-        sm__sass_inst_executed_op_ffma.sum,\
-        l1tex__t_bytes_pipe_lsu_mem_shared_op_ld.sum,\
-        sm__cycles_elapsed.avg \
-    python benchmark_ablation_sm100.py --seqlen 4096 --no-correctness --rep 3
+bash fa4/run_experiment.sh ./flash-attention ./fa4/results origin
 ```
 
-## Requirements
+This will:
+- Run ablation benchmark (non-causal + causal, seqlen=512..8192, warmup=10, rep=50)
+- Run NSight hardware counter profiling (seqlen=4096) if `ncu` is available
+- Save all CSVs, plots, and a full stdout log to `fa4/results/`
+- `git commit` and `git push` the results automatically
 
-- Python 3.10+
-- `matplotlib`, `numpy` (for charts, no GPU needed)
-- For `benchmark_ablation_sm100.py`: FA4 repository (`flash-attention`), CUDA, B200 GPU
+**3. Pull results on your local machine:**
+```bash
+git pull origin main
+```
 
-## Source
+Then compare measured vs theory:
+```bash
+python3 fa4/fa4_compare_measured_vs_theory.py \
+    --csv fa4/results/ablation_noncausal_D128.csv \
+    --out-dir fa4/results
 
-Analysis based on FA4 paper and CuTe-DSL implementation:
-- https://github.com/Dao-AILab/flash-attention (flash_attn/cute/flash_fwd_sm100.py)
-- https://tridao.me/blog/2025/flash4/
+python3 fa4/fa4_compare_measured_vs_theory.py \
+    --csv fa4/results/ablation_causal_D128.csv \
+    --causal \
+    --out-dir fa4/results
+```
+
+### Scripts
+
+| File | Description | Needs GPU? |
+|------|-------------|------------|
+| `fa4/fa4_roofline_theory.py` | Theory ceilings from hardware specs only | No |
+| `fa4/benchmark_ablation_sm100.py` | Actual TFLOPs/s measurement | Yes (B200) |
+| `fa4/run_experiment.sh` | End-to-end runner + git push | Yes (B200) |
+| `fa4/fa4_compare_measured_vs_theory.py` | Plot measured CSV vs theory | No |
+
+### Output files (after running)
+
+```
+fa4/results/
+├── run_<timestamp>.log              ← full stdout capture
+├── ablation_noncausal_D128.csv      ← raw TFLOPs/s per stage × seqlen
+├── ablation_causal_D128.csv
+├── ncu_counters_<timestamp>.csv     ← NSight hardware counters
+└── *.png                            ← roofline ladder plots
+```
