@@ -14,40 +14,26 @@ Stage 4: +LPT         → LPT 调度器 (causal +4-14%)
 
 ## 快速开始
 
-### Step 1: 检查环境支持
+**重要**：pip 安装的 `flash-attn-4` 不支持 ablation 接口，必须从源码编译。
 
+### 方案一：一键脚本（推荐）
+
+在 B200 服务器上：
 ```bash
-python fa4/check_fa4_ablation_support.py
+git clone git@github.com:meinie0826/Roofline-Analysis.git
+cd Roofline-Analysis
+bash fa4/setup_and_run.sh
 ```
 
-这会检查：
-- flash_attn 是否安装
-- `_flash_attn_fwd` 是否可用
-- `_ablation_*` 参数是否支持
-- GPU 是否为 SM100+ (B200/B100)
+### 方案二：手动步骤
 
-### Step 2a: 如果检查通过 (pip 安装版本支持 ablation)
+详见 [QUICKSTART.md](QUICKSTART.md)
+
+### 本地拉取数据
 
 ```bash
-bash fa4/run_experiment_with_pip.sh
-```
-
-### Step 2b: 如果检查失败 (需要源码安装)
-
-```bash
-# 1. Clone FA4 源码
-git clone https://github.com/Dao-AILab/flash-attention.git
-cd flash-attention
-
-# 2. 复制 benchmark 脚本
-cp /path/to/Roofline-Analysis/fa4/benchmark_ablation_sm100.py benchmarks/
-
-# 3. 从源码安装
-pip install -e . --no-build-isolation
-
-# 4. 运行实验
-cd /path/to/Roofline-Analysis
-bash fa4/run_experiment.sh /path/to/flash-attention
+git pull origin main
+ls fa4/results/
 ```
 
 ## 输出文件
