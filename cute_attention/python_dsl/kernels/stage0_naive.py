@@ -26,13 +26,13 @@ if HAS_CUTE:
         v: cute.Tensor,
         o: cute.Tensor,
         softmax_scale: cutlass.Float32,
+        seq_len: cutlass.Constexpr[int],
+        head_dim: cutlass.Constexpr[int],
         log2e: float,
         num_threads: cutlass.Constexpr[int],
     ):
         tidx, _, _ = cute.arch.thread_idx()
         query_idx, bh_idx, _ = cute.arch.block_idx()
-        seq_len = cute.size(q.shape, mode=[1])
-        head_dim = cute.size(q.shape, mode=[2])
 
         smem = cutlass.utils.SmemAllocator()
         scores_ptr = smem.allocate_array(cutlass.Float32, num_elems=seq_len)
@@ -99,9 +99,10 @@ if HAS_CUTE:
         v: cute.Tensor,
         o: cute.Tensor,
         softmax_scale: cutlass.Float32,
+        seq_len: cutlass.Constexpr[int],
+        head_dim: cutlass.Constexpr[int],
         num_threads: cutlass.Constexpr[int],
     ):
-        seq_len = cute.size(q.shape, mode=[1])
         batch_heads = cute.size(q.shape, mode=[0])
         naive_causal_attention_kernel(
             q,
@@ -109,6 +110,8 @@ if HAS_CUTE:
             v,
             o,
             softmax_scale,
+            seq_len,
+            head_dim,
             math.log2(math.e),
             num_threads,
         ).launch(
@@ -146,7 +149,7 @@ def stage0_forward(q, k, v, config: AttentionConfig | None = None):
 
     cache_key = (tuple(q_flat.shape), str(q_flat.dtype), config.num_threads)
     compiled = _stage0_compile(cache_key, q_cute, k_cute, v_cute, o_cute, scale, config.num_threads)
-    compiled(q_cute, k_cute, v_cute, o_cute, scale, config.num_threads)
+    compiled(q_cute, k_cute, v_cute, o_cute, scale, seq_len, head_dim, config.num_threads)
 
     return o_flat.reshape(batch, heads, seq_len, head_dim)
 
@@ -161,6 +164,8 @@ def _stage0_compile(cache_key, q_cute, k_cute, v_cute, o_cute, scale, num_thread
             v_cute,
             o_cute,
             scale,
+            cache_key[0][1],
+            cache_key[0][2],
             num_threads,
         )
         _STAGE0_COMPILED_CACHE[cache_key] = compiled
