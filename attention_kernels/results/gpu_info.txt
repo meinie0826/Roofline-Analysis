@@ -1,2 +1,0 @@
-NVIDIA B200, 580.82.07, 183359 MiB
-unknown

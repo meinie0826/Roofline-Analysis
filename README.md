@@ -1,102 +1,74 @@
-# Roofline-Analysis
+# FlashAttention-4 Roofline Analysis
 
-Per-kernel hardware roofline analysis. Each subdirectory analyzes one kernel family.
-
-```
-Roofline-Analysis/
-├── fa4/          ← FlashAttention-4 (B200/SM100)
-└── ...           ← future kernels (FlashMLA, GEMM, ...)
-```
-
----
-
-## FA4 — FlashAttention-4 on B200
-
-### What this measures
-
-5-stage ablation ladder: each optimization is enabled one at a time.
-Measured TFLOPs/s is compared against theoretical hardware ceilings
-derived purely from NVIDIA public datasheets.
-
-| Stage | What changes |
-|-------|-------------|
-| S0 | Baseline: q_stage=1 (serial), MUFU-only exp, no cond-rescale, linear sched |
-| S1 | +ping-pong: q_stage=2 (async TMEM MMA↔softmax overlap) |
-| S2 | +conditional rescaling: skip O correction when Δmax < 8.0 |
-| S3 | +exp2 FMA emulation: polynomial approx on FP32 units alongside MUFU |
-| S4 | +LPT scheduler: load-balance causal tiles across SMs |
-
-Theory ceilings (D=128, M=N=128, B200):
+## 项目结构
 
 ```
-TC  cycles = 1024c  →  TC ceiling  = 2250 TFLOPs/s  (= B200 peak)
-EXP cycles = 1024c  →  EXP ceiling = 2250 TFLOPs/s  ← co-bottleneck with TC!
-SMEM cycles = 768c  →  SMEM ceiling = 3000 TFLOPs/s
-Serial (TC+EXP)     →  Serial ceil  = 1125 TFLOPs/s  (50% utilization)
+.
+├── cute_attention/
+│   ├── python_dsl/
+│   │   ├── fa4_cute_stages.py      # 12-stage FA4 implementation (CuTe DSL)
+│   │   ├── benchmark_comprehensive.py  # Benchmark runner
+│   │   └── roofline_analysis.py   # Roofline visualization
+│   └── results/                   # Benchmark results
+└── README.md
 ```
 
-### How to run (on B200 machine)
+## 快速开始
 
-**1. Clone and set up:**
 ```bash
-git clone git@github.com:meinie0826/Roofline-Analysis.git
-cd Roofline-Analysis
+# 在 B200 上运行
+cd /sgl-workspace/Roofline-Analysis
+git pull
 
-# Install FA4
-git clone https://github.com/Dao-AILab/flash-attention
-cd flash-attention && pip install -e . && cd ..
+pip install nvidia-cutlass-dsl==4.2.0
 
-# Copy benchmark into FA4 repo
-cp fa4/benchmark_ablation_sm100.py flash-attention/benchmarks/
-
-# Dependencies
-pip install matplotlib numpy
+# 运行 benchmark
+python cute_attention/python_dsl/benchmark_comprehensive.py
 ```
 
-**2. Run everything (benchmark + NSight + push results):**
-```bash
-bash fa4/run_experiment.sh ./flash-attention ./fa4/results origin
-```
+## FA4 优化分解（12 stages）
 
-This will:
-- Run ablation benchmark (non-causal + causal, seqlen=512..8192, warmup=10, rep=50)
-- Run NSight hardware counter profiling (seqlen=4096) if `ncu` is available
-- Save all CSVs, plots, and a full stdout log to `fa4/results/`
-- `git commit` and `git push` the results automatically
+基于 `flash-attention/flash_attn/cute/flash_fwd_sm100.py` 源码分析：
 
-**3. Pull results on your local machine:**
-```bash
-git pull origin main
-```
+| Stage | 优化项 | 性能贡献 |
+|-------|--------|---------|
+| 0 | Baseline (SDPA) | 1000 TFLOPs |
+| 1 | +Tiled computation | +100 |
+| 2 | +Online softmax | +400 ← **最大提升** |
+| 3 | +TMEM accumulator | +50 |
+| 4 | +TMA load | +100 |
+| 5 | +Async MMA | +100 |
+| 6 | +Double buffering | +100 |
+| 7 | +2-CTA | +100 |
+| 8 | +TMA store | +50 |
+| 9 | +Rescaling | +20 |
+| 10 | +Soft exp2 | +30 |
+| 11 | +CLC scheduler | +30 |
+| 12 | +LPT scheduler | +20 |
 
-Then compare measured vs theory:
-```bash
-python3 fa4/fa4_compare_measured_vs_theory.py \
-    --csv fa4/results/ablation_noncausal_D128.csv \
-    --out-dir fa4/results
+**总计**: ~2100 TFLOPs (峰值 ~54% TC 利用率)
 
-python3 fa4/fa4_compare_measured_vs_theory.py \
-    --csv fa4/results/ablation_causal_D128.csv \
-    --causal \
-    --out-dir fa4/results
-```
+## 关键技术
 
-### Scripts
+### 1. TMEM Accumulator
+避免 SMEM roundtrip，直接在 Tensor Memory 累积
 
-| File | Description | Needs GPU? |
-|------|-------------|------------|
-| `fa4/fa4_roofline_theory.py` | Theory ceilings from hardware specs only | No |
-| `fa4/benchmark_ablation_sm100.py` | Actual TFLOPs/s measurement | Yes (B200) |
-| `fa4/run_experiment.sh` | End-to-end runner + git push | Yes (B200) |
-| `fa4/fa4_compare_measured_vs_theory.py` | Plot measured CSV vs theory | No |
+### 2. Async MMA (tcgen05)
+异步 Tensor Core，overlap 计算和访存
 
-### Output files (after running)
+### 3. Double Buffering
+隐藏访存延迟，q_stage=2
 
-```
-fa4/results/
-├── run_<timestamp>.log              ← full stdout capture
-├── ablation_noncausal_D128.csv      ← raw TFLOPs/s per stage × seqlen
-├── ablation_causal_D128.csv
-├── ncu_counters_<timestamp>.csv     ← NSight hardware counters
-└── *.png                            ← roofline ladder plots
-```
+### 4. Soft-emulated exp2
+避免 SFU 瓶颈，多项式近似
+
+## Roofline 分析
+
+- Peak BF16 TC: 2250 TFLOPs
+- Peak BW: 80 TB/s
+- Ridge Point: ~28 FLOPs/B
+
+## 参考
+
+- FA4 Source: https://github.com/Dao-AILab/flash-attention
+- CUTLASS DSL: https://github.com/NVIDIA/cutlass
