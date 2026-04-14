@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import math
-
 from .common import (
     AttentionConfig,
     HAS_CUTE,
@@ -28,7 +26,6 @@ if HAS_CUTE:
         softmax_scale: cutlass.Float32,
         seq_len: cutlass.Constexpr[int],
         head_dim: cutlass.Constexpr[int],
-        log2e: float,
         num_threads: cutlass.Constexpr[int],
     ):
         tidx, _, _ = cute.arch.thread_idx()
@@ -68,7 +65,7 @@ if HAS_CUTE:
         for kv_idx in range(tidx, seq_len, num_threads):
             prob = 0.0
             if kv_idx <= query_idx:
-                prob = cute.math.exp2((scores[kv_idx] - row_max) * log2e, fastmath=True)
+                prob = cute.math.exp(scores[kv_idx] - row_max)
             scores[kv_idx] = prob
             local_sum += prob
 
@@ -83,7 +80,7 @@ if HAS_CUTE:
             stride //= 2
 
         row_sum = reduce[0]
-        inv_sum = cute.arch.rcp_approx(row_sum if row_sum != 0.0 else 1.0)
+        inv_sum = 1.0 / (row_sum if row_sum != 0.0 else 1.0)
 
         for d_idx in range(tidx, head_dim, num_threads):
             acc = 0.0
@@ -112,7 +109,6 @@ if HAS_CUTE:
             softmax_scale,
             seq_len,
             head_dim,
-            math.log2(math.e),
             num_threads,
         ).launch(
             grid=(seq_len, batch_heads, 1),
