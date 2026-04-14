@@ -1,14 +1,10 @@
 /**
  * FlashAttention Kernels Implementation
- * 
- * 简化版本，避免模板特化问题
  */
 
 #include "flash_attention.cuh"
-#include <cute/tensor.hpp>
 #include <cuda_runtime.h>
 
-using namespace cute;
 using namespace flash_attention;
 
 // Stage 0: Naive kernel
@@ -30,46 +26,41 @@ __global__ void flash_attention_stage0_kernel(
     const Element* q_ptr = Q + base_idx + m_idx * head_dim;
     Element* o_ptr = O + base_idx + m_idx * head_dim;
     
-    // Step 1: Find max score
     float max_score = -INFINITY;
     int n_end = causal ? min(m_idx + 1, seq_len) : seq_len;
     
+    // Find max
     for (int n = 0; n < n_end; ++n) {
         float score = 0.0f;
         for (int d = 0; d < head_dim; ++d) {
-            float q_val = static_cast<float>(q_ptr[d]);
-            float k_val = static_cast<float>(K[base_idx + n * head_dim + d]);
-            score += q_val * k_val;
+            score += static_cast<float>(q_ptr[d]) * 
+                     static_cast<float>(K[base_idx + n * head_dim + d]);
         }
-        score *= scale;
-        max_score = fmaxf(max_score, score);
+        max_score = fmaxf(max_score, score * scale);
     }
     
-    // Step 2: Compute sum(exp)
+    // Compute sum(exp)
     float sum_exp = 0.0f;
     for (int n = 0; n < n_end; ++n) {
         float score = 0.0f;
         for (int d = 0; d < head_dim; ++d) {
-            float q_val = static_cast<float>(q_ptr[d]);
-            float k_val = static_cast<float>(K[base_idx + n * head_dim + d]);
-            score += q_val * k_val;
+            score += static_cast<float>(q_ptr[d]) * 
+                     static_cast<float>(K[base_idx + n * head_dim + d]);
         }
         sum_exp += expf(score * scale - max_score);
     }
     
-    // Step 3: Compute output
+    // Compute output
     for (int d = 0; d < head_dim; ++d) {
         float o_val = 0.0f;
         for (int n = 0; n < n_end; ++n) {
             float score = 0.0f;
             for (int dd = 0; dd < head_dim; ++dd) {
-                float q_val = static_cast<float>(q_ptr[dd]);
-                float k_val = static_cast<float>(K[base_idx + n * head_dim + dd]);
-                score += q_val * k_val;
+                score += static_cast<float>(q_ptr[dd]) * 
+                         static_cast<float>(K[base_idx + n * head_dim + dd]);
             }
-            float attn = expf(score * scale - max_score) / sum_exp;
-            float v_val = static_cast<float>(V[base_idx + n * head_dim + d]);
-            o_val += attn * v_val;
+            o_val += expf(score * scale - max_score) / sum_exp * 
+                     static_cast<float>(V[base_idx + n * head_dim + d]);
         }
         o_ptr[d] = static_cast<Element>(o_val);
     }
@@ -96,7 +87,6 @@ __global__ void flash_attention_stage1_kernel(
     int m_size = m_end - m_start;
     
     extern __shared__ char smem[];
-    
     Element* sQ = reinterpret_cast<Element*>(smem);
     Element* sK = sQ + kBlockM * kHeadDim;
     Element* sV = sK + kBlockN * kHeadDim;
@@ -147,11 +137,10 @@ __global__ void flash_attention_stage1_kernel(
         // Compute attention
         for (int m = tid; m < m_size; m += blockDim.x) {
             float row_max = max_scores[m];
-            float row_sum = 0.0f;
             
-            int n_limit = causal ? min(n_size, m_end - m_start + n_start - n_start) : n_size;
-            
-            for (int n = 0; n < n_limit; ++n) {
+            for (int n = 0; n < n_size; ++n) {
+                if (causal && (n_start + n) > (m_start + m)) continue;
+                
                 float score = 0.0f;
                 for (int d = 0; d < kHeadDim; ++d) {
                     score += static_cast<float>(sQ[m * kHeadDim + d]) * 
@@ -162,22 +151,22 @@ __global__ void flash_attention_stage1_kernel(
                 float old_max = row_max;
                 row_max = fmaxf(row_max, score);
                 float rescale = expf(old_max - row_max);
-                row_sum = row_sum * rescale + expf(score - row_max);
+                
+                float p = expf(score - row_max);
+                max_scores[m] = row_max;
+                sum_exp[m] = sum_exp[m] * rescale + p;
                 
                 for (int d = 0; d < kHeadDim; ++d) {
                     sO[m * kHeadDim + d] = sO[m * kHeadDim + d] * rescale +
-                        expf(score - row_max) * static_cast<float>(sV[d * kBlockN + n]);
+                        p * static_cast<float>(sV[d * kBlockN + n]);
                 }
             }
-            
-            max_scores[m] = row_max;
-            sum_exp[m] = sum_exp[m] * expf(max_scores[m] - row_max) + row_sum;
         }
         
         __syncthreads();
     }
     
-    // Normalize and write output
+    // Write output
     for (int i = tid; i < m_size * kHeadDim; i += blockDim.x) {
         int m = i / kHeadDim;
         int d = i % kHeadDim;
@@ -186,7 +175,8 @@ __global__ void flash_attention_stage1_kernel(
     }
 }
 
-// Launcher functions
+// Launcher implementations with template<> syntax
+template<>
 void FlashAttentionKernel<0>::launch(
     const Element* Q, const Element* K, const Element* V, Element* O,
     int batch_size, int nheads, int seq_len, int head_dim,
@@ -202,6 +192,7 @@ void FlashAttentionKernel<0>::launch(
     );
 }
 
+template<>
 void FlashAttentionKernel<1>::launch(
     const Element* Q, const Element* K, const Element* V, Element* O,
     int batch_size, int nheads, int seq_len, int head_dim,
@@ -225,8 +216,7 @@ void FlashAttentionKernel<1>::launch(
         );
 }
 
-// Add similar launchers for stages 2-4...
-
+// C interface
 extern "C" {
     void launch_flash_attention(
         const void* Q, const void* K, const void* V, void* O,
@@ -251,8 +241,12 @@ extern "C" {
                     batch_size, nheads, seq_len, head_dim, causal, stream
                 );
                 break;
-            // Add cases for stages 2-4
             default:
+                // Use stage 0 as fallback
+                FlashAttentionKernel<0>::launch(
+                    Q_cast, K_cast, V_cast, O_cast,
+                    batch_size, nheads, seq_len, head_dim, causal, stream
+                );
                 break;
         }
     }
