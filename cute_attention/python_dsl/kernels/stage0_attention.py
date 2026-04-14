@@ -7,7 +7,7 @@ Stage 0: Naive Attention Kernel (CuTe DSL)
 import torch
 
 # CuTe DSL imports
-import cuda.cooperative.experimental as cudax
+
 from cutlass.cute.runtime import from_dlpack
 from cutlass import cute
 import cutlass
