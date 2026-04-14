@@ -26,6 +26,29 @@ def benchmark(stage_name, q, k, v, config, warmup=5, repeat=20):
     return sum(times) / len(times)
 
 
+def benchmark_stage_with_fallback(stage_name, q, k, v, config, warmup=5, repeat=20):
+    if stage_name != "stage1":
+        return benchmark(stage_name, q, k, v, config, warmup=warmup, repeat=repeat), None
+
+    block_m = config.block_m
+    while block_m >= 1:
+        cfg = AttentionConfig(
+            softmax_scale=config.softmax_scale,
+            causal=config.causal,
+            block_m=block_m,
+            block_n=config.block_n,
+            num_threads=config.num_threads,
+        )
+        try:
+            t = benchmark(stage_name, q, k, v, cfg, warmup=warmup, repeat=repeat)
+            return t, block_m
+        except ValueError as exc:
+            if "shared memory footprint too large" not in str(exc):
+                raise
+            block_m //= 2
+    raise ValueError("stage1 failed all fallback block_m candidates for shared memory.")
+
+
 def parse_stage_list(stages_arg: str) -> list[str]:
     if stages_arg == "all":
         return [
@@ -90,8 +113,13 @@ def main():
     print("stage,time_ms,status")
     for stage_name in stages:
         try:
-            time_ms = benchmark(stage_name, q, k, v, config, warmup=args.warmup, repeat=args.repeat)
-            print(f"{stage_name},{time_ms:.3f},ok")
+            time_ms, adjusted_block_m = benchmark_stage_with_fallback(
+                stage_name, q, k, v, config, warmup=args.warmup, repeat=args.repeat
+            )
+            if adjusted_block_m is not None and adjusted_block_m != config.block_m:
+                print(f"{stage_name},{time_ms:.3f},ok:block_m={adjusted_block_m}")
+            else:
+                print(f"{stage_name},{time_ms:.3f},ok")
         except Exception as exc:
             print(f"{stage_name},nan,failed:{type(exc).__name__}:{exc}")
 
