@@ -6,11 +6,11 @@ Stage 0: Naive Attention Kernel (CuTe DSL)
 
 import torch
 
-# CuTe DSL imports (correct way from FA4 source)
+# CuTe DSL imports
 try:
-    import cutlass
-    import cutlass.cute as cute
+    import cuda.cooperative.experimental as cudax
     from cutlass.cute.runtime import from_dlpack
+    from cutlass import cute
     HAS_CUTE = True
     CUTE_ERROR = None
 except ImportError as e:
@@ -21,7 +21,7 @@ except ImportError as e:
 # ============================================================
 # Hyperparameters
 # ============================================================
-HEAD_DIM = 64
+HEAD_DIM = 128
 BLOCK_N = 64
 NUM_THREADS = 128
 
@@ -180,9 +180,17 @@ def attention_forward(Q, K, V, scale=None):
     grid = (N, BH)
     block = (NUM_THREADS,)
     
-    naive_attention_kernel[grid, block](
+    # Compile kernel first
+    compiled_kernel = cute.compile(
+        naive_attention_kernel,
         Q_cute, K_cute, V_cute, O_cute,
         scale, N
+    )
+    
+    # Then launch
+    compiled_kernel.launch(
+        grid=grid, block=block,
+        args=(Q_cute, K_cute, V_cute, O_cute, scale, N)
     )
     
     return O_flat.reshape(B, H, N, d)

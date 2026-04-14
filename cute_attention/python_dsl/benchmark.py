@@ -69,8 +69,8 @@ def benchmark(func, Q, K, V, warmup=10, repeat=100, verbose=True):
 
 def run_benchmark(seqlens=[128, 256, 512, 1024, 2048], 
                   batch_size=1, 
-                  nheads=16, 
-                  headdim=64):
+                  nheads=32, 
+                  headdim=128):
     """Run benchmark for different sequence lengths"""
     print("="*70)
     print(" FlashAttention Benchmark - Stage 0 (Naive)")
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     parser.add_argument('--bench', action='store_true', help='Run benchmark')
     parser.add_argument('--seqlen', type=int, nargs='+', default=[128, 256, 512, 1024])
     parser.add_argument('--batch', type=int, default=1)
-    parser.add_argument('--heads', type=int, default=16)
+    parser.add_argument('--heads', type=int, default=32)
     args = parser.parse_args()
     
     if not torch.cuda.is_available():
