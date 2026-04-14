@@ -12,7 +12,8 @@ from .reference import (
     causal_attention_reference,
 )
 from .stage1_fa2 import stage1_forward
-from .future import stage4_forward, stage5_forward
+from .stage4_mma import stage4_forward
+from .stage5_pipeline import stage5_forward
 from .stage0_naive import stage0_forward
 from .stage3_blocked import stage3_forward
 
@@ -79,13 +80,13 @@ STAGES: dict[str, StageDefinition] = {
     ),
     "stage4": StageDefinition(
         name="stage4",
-        description="Reserved for our own pipelined MMA CuTe kernel.",
+        description="MMA stage scaffold (currently routed to stage1 kernel; to be replaced by tiled_mma kernel).",
         implementation=stage4_forward,
         backend="own-cute-dsl",
     ),
     "stage5": StageDefinition(
         name="stage5",
-        description="Final target: our own full causal FlashAttention-style CuTe kernel.",
+        description="Pipeline stage scaffold (currently routed to stage4; target is cp.async + pipeline kernel).",
         implementation=stage5_forward,
         backend="own-cute-dsl",
     ),

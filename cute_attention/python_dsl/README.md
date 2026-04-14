@@ -66,11 +66,12 @@
 - `stage1` 是自研 CuTe FA2 风格实现。
 - `stage1_ref / stage2` 是 PyTorch 参考实现，用于验证数学形式。
 - `stage3` 是我们自己的 CuTe blocked + online softmax 内核（causal/qkv-only/fwd）。
+- `stage4`、`stage5` 已拆成独立 kernel stage（当前为脚手架，后续逐步替换成 MMA / pipeline 真实现）。
 - 真正的自研 CuTe 主线会继续落在 `stage3 -> stage5`。
 
 ## Benchmark
 
-对比 `stage0/stage1/stage2/stage3/baseline_fa4/baseline_sdpa`：
+对比 `stage0/stage1/stage2/stage3/stage4/stage5/baseline_fa4/baseline_sdpa`：
 
 ```bash
 python benchmark.py \
