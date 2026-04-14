@@ -4,7 +4,7 @@ FlashAttention Comprehensive Benchmark - Fixed Version
 
 功能：
 1. Baseline: SDPA (PyTorch), FA2, FA3, FA4
-2. 我们的实现: Stage 0-4（目前先用 SDPA 作为 placeholder）
+2. 我们的实现: Unified Stage pipeline（按新顺序渐进优化）
 3. 正确性验证
 4. Roofline 分析
 5. 自动跳过会 OOM 的配置
@@ -165,57 +165,34 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from flash_attention_stages import flash_attention
+from flash_attention_stages import flash_attention, STAGE_CONFIGS
 
 
-def attention_stage0(q, k, v, causal=True, scale=None):
-    """Stage 0: Baseline (FA2-equivalent)"""
-    try:
-        out, _ = flash_attention(q, k, v, causal, scale, stage=0)
-        return out
-    except Exception as e:
-        print(f"Stage0 error: {e}")
-        return None
+def make_attention_stage(stage_idx: int, stage_name: str):
+    def _attention_stage(q, k, v, causal=True, scale=None):
+        try:
+            out, metrics = flash_attention(q, k, v, causal, scale, stage=stage_idx)
+            _attention_stage._last_metrics = metrics
+            return out
+        except Exception as e:
+            _attention_stage._last_metrics = {}
+            print(f"Stage{stage_idx} error: {e}")
+            return None
+
+    _attention_stage.__name__ = f"attention_stage{stage_idx}"
+    _attention_stage.__doc__ = f"Stage {stage_idx}: {stage_name}"
+    return _attention_stage
 
 
-def attention_stage1(q, k, v, causal=True, scale=None):
-    """Stage 1: +TMEM accumulator"""
-    try:
-        out, _ = flash_attention(q, k, v, causal, scale, stage=1)
-        return out
-    except Exception as e:
-        print(f"Stage1 error: {e}")
-        return None
-
-
-def attention_stage2(q, k, v, causal=True, scale=None):
-    """Stage 2: +async MMA (tcgen05)"""
-    try:
-        out, _ = flash_attention(q, k, v, causal, scale, stage=2)
-        return out
-    except Exception as e:
-        print(f"Stage2 error: {e}")
-        return None
-
-
-def attention_stage3(q, k, v, causal=True, scale=None):
-    """Stage 3: +ping-pong 2Q tiles"""
-    try:
-        out, _ = flash_attention(q, k, v, causal, scale, stage=3)
-        return out
-    except Exception as e:
-        print(f"Stage3 error: {e}")
-        return None
-
-
-def attention_stage4(q, k, v, causal=True, scale=None):
-    """Stage 4: FA4 full"""
-    try:
-        out, _ = flash_attention(q, k, v, causal, scale, stage=4)
-        return out
-    except Exception as e:
-        print(f"Stage4 error: {e}")
-        return None
+def build_stage_kernels(max_stage: int | None = None) -> Dict[str, Any]:
+    if max_stage is None:
+        max_stage = len(STAGE_CONFIGS) - 1
+    max_stage = min(max_stage, len(STAGE_CONFIGS) - 1)
+    return {
+        f"Stage{idx}": make_attention_stage(idx, cfg.name)
+        for idx, cfg in enumerate(STAGE_CONFIGS)
+        if idx <= max_stage
+    }
 
 
 # ============================================================================
@@ -275,13 +252,17 @@ def estimate_memory_needed(config: AttentionConfig) -> int:
 
 
 def benchmark_kernel(kernel_fn, q, k, v, config: AttentionConfig, 
-                     warmup=10, repeat=50) -> Dict[str, float]:
+                     warmup=10, repeat=50) -> Dict[str, Any]:
     """Benchmark a single kernel"""
     
     scale = 1.0 / (config.headdim ** 0.5)
     
-    # Check if kernel might OOM (only for naive implementations)
-    if "stage" in kernel_fn.__name__.lower() or "naive" in kernel_fn.__name__.lower():
+    # CuTe stage kernels can have very high compile/runtime overhead for ultra-long context.
+    if "attention_stage" in kernel_fn.__name__.lower() and config.seqlen > 4096:
+        return {"error": "Skipped - staged CuTe ablation is too expensive for seqlen > 4096"}
+
+    # Keep OOM check for explicit naive/full-matrix kernels.
+    if "naive" in kernel_fn.__name__.lower():
         if estimate_memory_needed(config) > 60 * 1024**3:  # > 60GB
             return {"error": "Would OOM - naive impl needs full attention matrix"}
     
@@ -361,7 +342,12 @@ def verify_correctness(ref_fn, test_fn, q, k, v, config: AttentionConfig,
 # Main
 # ============================================================================
 
-def run_benchmark(configs: List[AttentionConfig], output_file: str, quick: bool = False):
+def run_benchmark(
+    configs: List[AttentionConfig],
+    output_file: str,
+    quick: bool = False,
+    max_stage: int = 3,
+):
     """Run comprehensive benchmark"""
     
     device_info = get_device_info()
@@ -381,9 +367,9 @@ def run_benchmark(configs: List[AttentionConfig], output_file: str, quick: bool 
     if INSTALL_STATUS["FA4"]:
         kernels["FA4"] = attention_fa4
     
-    # Add our stages
-    for stage in range(5):
-        kernels[f"Stage{stage}"] = globals()[f"attention_stage{stage}"]
+    # Add unified staged kernels (early-stage focus by default)
+    stage_kernels = build_stage_kernels(max_stage=max_stage)
+    kernels.update(stage_kernels)
     
     warmup = 5 if quick else 10
     repeat = 20 if quick else 50
@@ -435,6 +421,10 @@ def run_benchmark(configs: List[AttentionConfig], output_file: str, quick: bool 
         for name, kernel in kernels.items():
             # Benchmark
             result = benchmark_kernel(kernel, q, k, v, config, warmup, repeat)
+
+            if name.startswith("Stage") and hasattr(kernel, "_last_metrics") and isinstance(kernel._last_metrics, dict):
+                for k_metric, v_metric in kernel._last_metrics.items():
+                    result[f"stage_cfg_{k_metric}"] = v_metric
             
             if result.get("error"):
                 time_cell = "N/A"
@@ -470,6 +460,18 @@ def run_benchmark(configs: List[AttentionConfig], output_file: str, quick: bool 
         "timestamp": datetime.utcnow().isoformat(),
         "device": device_info,
         "install_status": INSTALL_STATUS,
+        "stage_definitions": [
+            {
+                "stage": idx,
+                "name": cfg.name,
+                "block_size": list(cfg.block_size),
+                "num_splits": cfg.num_splits,
+                "enable_clc_scheduler": cfg.enable_clc_scheduler,
+                "disable_2cta": cfg.disable_2cta,
+            }
+            for idx, cfg in enumerate(STAGE_CONFIGS)
+            if idx <= max_stage
+        ],
         "results": all_results
     }
     
@@ -488,6 +490,12 @@ def main():
     parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--config", type=str, default="models", 
                        choices=["models", "all"])
+    parser.add_argument(
+        "--max-stage",
+        type=int,
+        default=3,
+        help="Highest stage index to run (default: 3 for first-round bring-up)",
+    )
     
     args = parser.parse_args()
     
@@ -501,7 +509,7 @@ def main():
         timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         args.output = f"cute_attention/results/benchmark_comprehensive_{timestamp}.json"
     
-    run_benchmark(configs, args.output, args.quick)
+    run_benchmark(configs, args.output, args.quick, max_stage=args.max_stage)
 
 
 if __name__ == "__main__":

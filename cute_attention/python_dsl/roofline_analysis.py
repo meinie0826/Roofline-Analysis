@@ -91,17 +91,19 @@ def plot_roofline_with_results(data: dict, output_dir: Path):
     ax.fill_between(ai[ai >= ridge_point], roofline[ai >= ridge_point],
                     alpha=0.1, color="red", label="Compute Bound")
     
+    stage_defs = data.get("stage_definitions", [])
+    stage_name_map = {
+        int(item["stage"]): item.get("name", f"Stage{item['stage']}")
+        for item in stage_defs
+        if "stage" in item
+    }
+
     # Kernel 颜色和标记
     kernel_styles = {
         "SDPA": {"color": "blue", "marker": "o", "size": 100},
         "FA2": {"color": "cyan", "marker": "s", "size": 100},
         "FA3": {"color": "green", "marker": "^", "size": 100},
         "FA4": {"color": "lime", "marker": "D", "size": 120},
-        "Stage0": {"color": "gray", "marker": "x", "size": 80},
-        "Stage1": {"color": "orange", "marker": "v", "size": 80},
-        "Stage2": {"color": "yellow", "marker": "<", "size": 80},
-        "Stage3": {"color": "red", "marker": ">", "size": 100},
-        "Stage4": {"color": "darkred", "marker": "*", "size": 150},
     }
     
     # 绘制各 kernel 的点
@@ -110,10 +112,22 @@ def plot_roofline_with_results(data: dict, output_dir: Path):
             continue
         
         kernel = r.get("kernel", "Unknown")
-        if kernel not in kernel_styles:
+        style = kernel_styles.get(kernel)
+        if style is None and kernel.startswith("Stage"):
+            try:
+                stage_idx = int(kernel.replace("Stage", ""))
+            except ValueError:
+                continue
+            color = plt.cm.plasma(stage_idx / max(1, len(stage_name_map) - 1 if stage_name_map else 7))
+            markers = ["x", "v", "<", ">", "P", "*", "X", "d", "h"]
+            style = {
+                "color": color,
+                "marker": markers[stage_idx % len(markers)],
+                "size": 90 + 8 * stage_idx,
+            }
+        if style is None:
             continue
-        
-        style = kernel_styles[kernel]
+
         ai_val = r.get("arithmetic_intensity", 10.0)
         tflops = r.get("tflops", 0.0)
         
@@ -141,7 +155,12 @@ def plot_roofline_with_results(data: dict, output_dir: Path):
             by_config[key][r["kernel"]] = r["tflops"]
     
     configs = sorted(by_config.keys())[:5]  # 只显示前5个配置
-    kernels = ["SDPA", "FA2", "FA3", "FA4", "Stage0", "Stage1", "Stage2", "Stage3", "Stage4"]
+    kernels = ["SDPA", "FA2", "FA3", "FA4"]
+    stage_kernels = sorted(
+        [k for k in {r.get("kernel", "") for r in results} if k.startswith("Stage")],
+        key=lambda k: int(k.replace("Stage", ""))
+    )
+    kernels.extend(stage_kernels)
     
     x = np.arange(len(configs))
     width = 0.08
@@ -176,7 +195,7 @@ def plot_roofline_with_results(data: dict, output_dir: Path):
     # ========== 消融分析图 ==========
     fig, ax = plt.subplots(figsize=(12, 8))
     
-    # 提取 Stage 0-4 的数据，计算每个优化的贡献
+    # 提取 Stage 数据，计算每个优化的贡献
     stage_data = defaultdict(list)
     for r in results:
         if r["kernel"].startswith("Stage") and not r.get("error"):
@@ -187,9 +206,8 @@ def plot_roofline_with_results(data: dict, output_dir: Path):
         stages = sorted(stage_data.keys())
         mean_tflops = [np.mean(stage_data[s]) for s in stages]
         
-        # 绘制阶梯图
-        ax.bar(stages, mean_tflops, color=["gray", "orange", "yellow", "lightcoral", "darkred"],
-               alpha=0.8, edgecolor="black", linewidth=2)
+        colors = [plt.cm.plasma(i / max(1, len(stages) - 1)) for i in range(len(stages))]
+        ax.bar(stages, mean_tflops, color=colors, alpha=0.8, edgecolor="black", linewidth=2)
         
         # 标注加速比
         baseline = mean_tflops[0]
@@ -200,11 +218,8 @@ def plot_roofline_with_results(data: dict, output_dir: Path):
         
         # 添加优化说明
         optimization_names = [
-            "Naive\n(Baseline)",
-            "Tiled\nComputation",
-            "Memory\nOptimization",
-            "Tensor Core\nMMA",
-            "Online Softmax\n+ Pipeline"
+            stage_name_map.get(s, f"Stage{s}").replace(" + ", "\n+")
+            for s in stages
         ]
         
         ax.set_xticks(stages)

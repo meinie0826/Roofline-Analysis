@@ -1,25 +1,24 @@
 #!/bin/bash
 # =============================================================================
-# FlashAttention-4 Benchmark Runner
+# Unified FlashAttention Stage Benchmark Runner
 # =============================================================================
 
 set -e
-cd "$(dirname "$0")/.."
-git pull
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_ROOT"
 
 echo "==============================================="
-echo " FlashAttention-4 Optimization Analysis"
+echo " Unified FlashAttention Stage Analysis"
 echo "==============================================="
 
-# Run analysis
-python3 cute_attention/python_dsl/fa4_optimization_analysis.py
+# Run quick comprehensive benchmark
+python3 "$SCRIPT_DIR/benchmark_comprehensive.py" --quick --max-stage 3
 
 echo ""
 echo "==============================================="
-echo " Run Benchmark (SDPA)"
+echo " Run Full Benchmark"
 echo "==============================================="
 
-# Run benchmark
-for seqlen in 1024 2048 4096 8192 16384; do
-    python3 cute_attention/python_dsl/fa4_optimization_analysis.py --benchmark $seqlen
-done
+# Run full benchmark and roofline pipeline
+bash "$SCRIPT_DIR/run_comprehensive.sh"
