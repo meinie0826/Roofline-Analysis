@@ -37,24 +37,24 @@ if HAS_CUTE:
             reduce = cute.make_tensor(reduce_ptr, cute.make_layout((num_threads,)))
             acc_vec = cute.make_tensor(acc_ptr, cute.make_layout((head_dim,)))
 
-            for d_idx in cutlass.range_constexpr(head_dim):
+            for d_idx in range(head_dim):
                 if d_idx % num_threads == tidx:
                     acc_vec[d_idx] = 0.0
 
             row_m = -1e20
             row_l = 0.0
 
-            for blk_start in cutlass.range_constexpr(0, seq_len, block_n):
+            for blk_start in range(0, seq_len, block_n):
                 if blk_start <= query_idx:
                     local_max = -cutlass.Float32.inf
 
-                    for blk_j in cutlass.range_constexpr(block_n):
+                    for blk_j in range(block_n):
                         if blk_j % num_threads == tidx:
                             kv_idx = blk_start + blk_j
                             score = -cutlass.Float32.inf
                             if kv_idx <= query_idx and kv_idx < seq_len:
                                 score = 0.0
-                                for d_idx in cutlass.range_constexpr(head_dim):
+                                for d_idx in range(head_dim):
                                     score += q[bh_idx, query_idx, d_idx] * k[bh_idx, kv_idx, d_idx]
                                 score *= softmax_scale
                                 local_max = score if local_max < score else local_max
@@ -77,7 +77,7 @@ if HAS_CUTE:
                     alpha = cute.math.exp(row_m - row_m_new)
 
                     local_sum = 0.0
-                    for blk_j in cutlass.range_constexpr(block_n):
+                    for blk_j in range(block_n):
                         if blk_j % num_threads == tidx:
                             kv_idx = blk_start + blk_j
                             prob = 0.0
@@ -99,10 +99,10 @@ if HAS_CUTE:
                     blk_sum = reduce[0]
                     row_l_new = row_l * alpha + blk_sum
 
-                    for d_idx in cutlass.range_constexpr(head_dim):
+                    for d_idx in range(head_dim):
                         if d_idx % num_threads == tidx:
                             acc = acc_vec[d_idx] * alpha
-                            for blk_j in cutlass.range_constexpr(block_n):
+                            for blk_j in range(block_n):
                                 kv_idx = blk_start + blk_j
                                 if kv_idx <= query_idx and kv_idx < seq_len:
                                     acc += score_blk[blk_j] * v[bh_idx, kv_idx, d_idx]
@@ -111,7 +111,7 @@ if HAS_CUTE:
                     row_m = row_m_new
                     row_l = row_l_new
 
-            for d_idx in cutlass.range_constexpr(head_dim):
+            for d_idx in range(head_dim):
                 if d_idx % num_threads == tidx:
                     o[bh_idx, query_idx, d_idx] = (acc_vec[d_idx] / row_l).to(o.element_type)
 
