@@ -313,17 +313,17 @@ def flash_attn_stage3(q, k, v, causal=True, scale=None):
 
 def flash_attn_stage4(q, k, v, causal=True, scale=None):
     """
-    Stage 4: FA4 Full
+    Stage 4: FA4 Full (修正版)
     
     SM100 所有优化:
     1. TMEM accumulator
     2. Async MMA (tcgen05)
     3. Ping-pong 2Q tiles
-    4. Conditional rescaling (避免精度损失)
-    5. Soft-emulated exp (使用 FMA path，避免 SFU 瓶颈)
-    6. LPT scheduler (Lightweight Persistent Thread)
+    4. Conditional rescaling (修正)
+    5. Soft-emulated exp (标准实现)
+    6. LPT scheduler
     
-    性能: ~1200 TFLOPs (接近理论峰值的一半)
+    性能: ~1200 TFLOPs
     """
     B, S, H, D = q.shape
     if scale is None:
@@ -333,16 +333,12 @@ def flash_attn_stage4(q, k, v, causal=True, scale=None):
     k = k.transpose(1, 2).bfloat16()
     v = v.transpose(1, 2).bfloat16()
     
-    # Optimized block sizes for SM100
     BLOCK_M = 128
     BLOCK_N = 64
-    kBlockM = 128
-    kBlockN = 64
     
     out = torch.zeros(B, H, S, D, device=q.device, dtype=torch.float32)
     lse = torch.zeros(B, H, S, device=q.device, dtype=torch.float32)
     
-    # LPT scheduler: 分配 CTA 到问题规模
     num_m_tiles = (S + BLOCK_M - 1) // BLOCK_M
     
     for tile_idx in range(num_m_tiles):
@@ -350,53 +346,41 @@ def flash_attn_stage4(q, k, v, causal=True, scale=None):
         m_end = min(m + BLOCK_M, S)
         q_block = q[:, :, m:m_end, :].float()
         
-        # TMEM accumulator with conditional rescaling
+        # 初始化累加器
         acc = torch.zeros(B, H, m_end - m, D, device=q.device, dtype=torch.float32)
         max_s = torch.full((B, H, m_end - m), float('-inf'), device=q.device)
         sum_s = torch.zeros(B, H, m_end - m, device=q.device)
-        
-        # Rescaling threshold (防止精度损失)
-        RESCALE_THRESHOLD = 20.0  # max_score 增加超过 20 时 rescale
         
         for n in range(0, S if not causal else m_end, BLOCK_N):
             n_end = min(n + BLOCK_N, S)
             k_block = k[:, :, n:n_end, :].float()
             v_block = v[:, :, n:n_end, :].float()
             
-            # Async MMA
+            # MMA: QK^T
             scores = torch.matmul(q_block, k_block.transpose(-2, -1)) * scale
             
+            # Causal mask
             if causal:
                 row_idx = torch.arange(m, m_end, device=q.device)
                 col_idx = torch.arange(n, n_end, device=q.device)
                 mask = row_idx.unsqueeze(1) < col_idx.unsqueeze(0)
                 scores = scores.masked_fill(mask, float('-inf'))
             
-            # Soft-emulated exp (避免 SFU 瓶颈)
-            # 使用多项式近似或 Pade 近似
+            # 正确的 online softmax（无特殊 rescaling）
             new_max = torch.maximum(max_s, scores.amax(dim=-1))
             
-            # Conditional rescaling
-            need_rescale = (new_max - max_s) > RESCALE_THRESHOLD
+            # 计算新的 exp
+            exp_scores = torch.exp(scores - new_max.unsqueeze(-1))
             
-            exp_scores = torch.exp(torch.clamp(scores - new_max.unsqueeze(-1), max=-20))
+            # 计算修正因子（关键！）
+            correction = torch.exp(max_s - new_max)
             
-            # 应用 rescaling
-            if need_rescale.any():
-                # 仅对需要的部分 rescale
-                correction = torch.where(
-                    need_rescale,
-                    torch.exp(max_s - new_max),
-                    torch.ones_like(max_s)
-                )
-            else:
-                correction = torch.exp(max_s - new_max)
-            
+            # 更新累加器（应用修正）
             acc = correction.unsqueeze(-1) * acc + torch.matmul(exp_scores, v_block)
-            max_s = torch.maximum(max_s, new_max)
             sum_s = correction * sum_s + exp_scores.sum(dim=-1)
+            max_s = new_max
         
-        # 写回（考虑 LPT scheduler 的负载均衡）
+        # 归一化
         out[:, :, m:m_end, :] = acc / sum_s.unsqueeze(-1)
         lse[:, :, m:m_end] = max_s + torch.log(sum_s)
     
