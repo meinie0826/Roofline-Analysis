@@ -1,25 +1,27 @@
 #!/usr/bin/env bash
 # =============================================================================
-# FA4 Ablation Experiment Runner
+# FA4 Ablation Experiment Runner (FA4 source build)
 # =============================================================================
-# Runs the complete ablation benchmark on a B200/SM100 machine.
-# All results (CSV, NSight counters, plots, stdout log) are saved to OUT_DIR,
-# then committed and pushed to git so you can pull them from another machine.
+# Use this script when you have FA4 built from source.
+# 
+# IMPORTANT: The installed flash-attn-4 pip package may NOT support ablation
+# interfaces. Run this check first:
+#   python fa4/check_fa4_ablation_support.py
+#
+# If NOT supported, you need to:
+#   1. Clone FA4: git clone https://github.com/Dao-AILab/flash-attention.git
+#   2. Copy this benchmark: cp fa4/benchmark_ablation_sm100.py flash-attention/benchmarks/
+#   3. Install from source: cd flash-attention && pip install -e . --no-build-isolation
+#   4. Run this script: bash fa4/run_experiment.sh /path/to/flash-attention
+#
+# All results (CSV, NSight counters, plots, log) are committed and pushed to git.
+# Pull from your local machine to see results.
 #
 # Usage:
-#   bash fa4/run_experiment.sh <flash-attention-repo> <output-dir> [git-remote]
+#   bash fa4/run_experiment.sh <flash-attention-repo> [output-dir] [git-remote]
 #
 # Example:
 #   bash fa4/run_experiment.sh ~/flash-attention ./fa4/results origin
-#
-# Arguments:
-#   $1  Path to flash-attention repo (must have FA4 installed: pip install -e .)
-#   $2  Output directory for all results (default: ./fa4/results)
-#   $3  Git remote to push results to   (default: origin)
-#
-# Prerequisites on the remote machine:
-#   pip install matplotlib numpy
-#   git remote set-url origin git@github.com:meinie0826/Roofline-Analysis.git
 # =============================================================================
 
 set -euo pipefail
