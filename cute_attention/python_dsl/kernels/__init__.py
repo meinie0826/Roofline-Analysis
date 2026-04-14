@@ -10,6 +10,7 @@ from .registry import STAGES, describe_stages, get_stage, run_stage
 from .stage1_fa2 import stage1_forward
 from .stage4_mma import stage4_forward
 from .stage5_pipeline import stage5_forward
+from .stage6_q16 import stage6_forward
 from .stage0_naive import stage0_forward
 from .stage3_blocked import stage3_forward
 
@@ -30,4 +31,5 @@ __all__ = [
     "stage3_forward",
     "stage4_forward",
     "stage5_forward",
+    "stage6_forward",
 ]

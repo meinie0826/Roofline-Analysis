@@ -48,6 +48,7 @@
   - `stage3` 的 CuTe blocked + online softmax 前向版
   - `stage4` 的 CuTe K-tile shared-memory staging 前向版
   - `stage5` 的 CuTe K/V-tile shared-memory staging 前向版
+  - `stage6` 的 CuTe Q/K/V-tile shared-memory staging（Q 使用 fp16 缓存）前向版
   - `baseline_fa4` 对照入口
   - `baseline_sdpa`（PyTorch SDPA 对照）
 
@@ -67,11 +68,12 @@
 - `stage3` 是我们自己的 CuTe blocked + online softmax 内核（causal/qkv-only/fwd）。
 - `stage4` 是我们自己的 CuTe K 缓存（SMEM staging）内核。
 - `stage5` 是我们自己的 CuTe K/V 缓存（SMEM staging）内核。
+- `stage6` 是我们自己的 CuTe Q/K/V 缓存（Q 用 fp16，K/V 用 fp16）内核。
 - 真正的自研 CuTe 主线会继续落在 `stage3 -> stage5`。
 
 ## Benchmark
 
-对比 `stage0/stage1/stage2/stage3/stage4/stage5/baseline_fa4/baseline_sdpa`：
+对比 `stage0/stage1/stage2/stage3/stage4/stage5/stage6/baseline_fa4/baseline_sdpa`：
 
 ```bash
 python benchmark.py \
