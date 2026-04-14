@@ -47,6 +47,7 @@
   - `stage2` 的 PyTorch blocked 参考版
   - `stage3` 的 CuTe blocked + online softmax 前向版
   - `baseline_fa4` 对照入口
+  - `baseline_sdpa`（PyTorch SDPA 对照）
 - 预留接口:
   - `stage4`
   - `stage5`
@@ -66,3 +67,15 @@
 - `stage1_ref / stage2` 是 PyTorch 参考实现，用于验证数学形式。
 - `stage3` 是我们自己的 CuTe blocked + online softmax 内核（causal/qkv-only/fwd）。
 - 真正的自研 CuTe 主线会继续落在 `stage3 -> stage5`。
+
+## Benchmark
+
+对比 `stage0/stage1/stage2/stage3/baseline_fa4/baseline_sdpa`：
+
+```bash
+python benchmark.py \
+  --stages all \
+  --batch 1 --heads 16 --seqlen 1024 --headdim 128 \
+  --dtype float16 --block-m 64 --block-n 128 --num-threads 128 \
+  --warmup 5 --repeat 20
+```

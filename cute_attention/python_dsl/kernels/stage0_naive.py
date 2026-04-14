@@ -36,12 +36,12 @@ if HAS_CUTE:
             reduce = cute.make_tensor(reduce_ptr, cute.make_layout((num_threads,)))
 
             local_max = -cutlass.Float32.inf
-            for kv_idx in cutlass.range_constexpr(seq_len):
+            for kv_idx in range(seq_len):
                 if kv_idx % num_threads == tidx:
                     score = -cutlass.Float32.inf
                     if kv_idx <= query_idx:
                         score = 0.0
-                        for d_idx in cutlass.range_constexpr(head_dim):
+                        for d_idx in range(head_dim):
                             score += q[bh_idx, query_idx, d_idx] * k[bh_idx, kv_idx, d_idx]
                         score *= softmax_scale
                         local_max = score if local_max < score else local_max
@@ -61,7 +61,7 @@ if HAS_CUTE:
 
             row_max = reduce[0]
             local_sum = 0.0
-            for kv_idx in cutlass.range_constexpr(seq_len):
+            for kv_idx in range(seq_len):
                 if kv_idx % num_threads == tidx:
                     prob = 0.0
                     if kv_idx <= query_idx:
@@ -82,10 +82,10 @@ if HAS_CUTE:
             row_sum = reduce[0]
             inv_sum = 1.0 / row_sum
 
-            for d_idx in cutlass.range_constexpr(head_dim):
+            for d_idx in range(head_dim):
                 if d_idx % num_threads == tidx:
                     acc = 0.0
-                    for kv_idx in cutlass.range_constexpr(seq_len):
+                    for kv_idx in range(seq_len):
                         if kv_idx <= query_idx:
                             acc += scores[kv_idx] * inv_sum * v[bh_idx, kv_idx, d_idx]
                     o[bh_idx, query_idx, d_idx] = acc.to(o.element_type)

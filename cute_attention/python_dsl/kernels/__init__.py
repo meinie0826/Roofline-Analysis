@@ -1,4 +1,5 @@
 from .baseline_fa4 import baseline_fa4_forward
+from .baseline_sdpa import baseline_sdpa_forward
 from .common import AttentionConfig, available_backends
 from .future import stage4_forward, stage5_forward
 from .reference import (
@@ -16,6 +17,7 @@ __all__ = [
     "STAGES",
     "available_backends",
     "baseline_fa4_forward",
+    "baseline_sdpa_forward",
     "causal_attention_reference",
     "causal_attention_online_reference",
     "causal_attention_blocked_reference",

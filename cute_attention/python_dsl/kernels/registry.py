@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .baseline_fa4 import baseline_fa4_forward
+from .baseline_sdpa import baseline_sdpa_forward
 from .common import AttentionConfig, available_backends
 from .reference import (
     causal_attention_blocked_reference,
@@ -63,6 +64,12 @@ STAGES: dict[str, StageDefinition] = {
         description="Baseline only: flash-attention CuTe implementation for comparison, not our final path.",
         implementation=baseline_fa4_forward,
         backend="flash-attention-cute-baseline",
+    ),
+    "baseline_sdpa": StageDefinition(
+        name="baseline_sdpa",
+        description="PyTorch SDPA baseline (causal, qkv only).",
+        implementation=baseline_sdpa_forward,
+        backend="torch-sdpa-baseline",
     ),
     "stage3": StageDefinition(
         name="stage3",
