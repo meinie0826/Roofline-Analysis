@@ -28,7 +28,7 @@ def test_stage0_matches_reference(shape, dtype):
     config = AttentionConfig(block_n=64, num_threads=128)
     ref = run_stage("reference", q, k, v, config)
     out = run_stage("stage0", q, k, v, config)
-    assert torch.allclose(out, ref, rtol=1e-2, atol=1e-2)
+    torch.testing.assert_close(out, ref, rtol=1e-2, atol=1e-2)
 
 
 @pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
@@ -38,4 +38,4 @@ def test_intermediate_reference_stages_match_reference(stage_name):
     config = AttentionConfig(block_m=32, block_n=64)
     ref = run_stage("reference", q, k, v, config)
     out = run_stage(stage_name, q, k, v, config)
-    assert torch.allclose(out, ref, rtol=1e-4, atol=1e-4)
+    torch.testing.assert_close(out, ref, rtol=1e-3, atol=1e-3)

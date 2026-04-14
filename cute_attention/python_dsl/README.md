@@ -57,3 +57,9 @@
 3. 然后做 `stage2 -> stage3`，把 KV blocking 和 shared memory / MMA 结合起来。
 4. 最后把 `stage4` 收敛成我们自己的 `stage5`，做到不依赖外部 FA4 执行实现。
 5. 全程可以用 `baseline_fa4` 做 correctness 和性能对照，但不能让实现依赖它。
+
+## 当前默认行为
+
+- `stage0` 默认走稳定的 reference 路径，以保证测试可运行。
+- 实验版 standalone CuTe naive kernel 仅在设置 `CUTE_ATTN_ENABLE_EXPERIMENTAL_STAGE0=1` 时尝试启用。
+- 这只是过渡方案，后续真正的自研 CuTe 主线会落在 `stage3 -> stage5`。

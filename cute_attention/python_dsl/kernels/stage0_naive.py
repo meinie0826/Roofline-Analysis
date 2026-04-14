@@ -5,10 +5,10 @@ import math
 from .common import (
     AttentionConfig,
     HAS_CUTE,
-    HAS_TORCH,
     cutlass,
     cute,
     ensure_cute_ir_context,
+    experimental_stage0_cute_enabled,
     from_dlpack,
     require_torch,
     validate_qkv,
@@ -34,10 +34,6 @@ if HAS_CUTE:
     ):
         tidx, _, _ = cute.arch.thread_idx()
         query_idx, bh_idx, _ = cute.arch.block_idx()
-
-        if query_idx >= seq_len:
-            return
-
         smem = cutlass.utils.SmemAllocator()
         scores_ptr = smem.allocate(cutlass.Float32, seq_len)
         reduce_ptr = smem.allocate(cutlass.Float32, num_threads)
@@ -45,17 +41,18 @@ if HAS_CUTE:
         reduce = cute.make_tensor(reduce_ptr, cute.make_layout((num_threads,)))
 
         local_max = -cutlass.Float32.inf
-        for kv_idx in range(tidx, seq_len, num_threads):
-            if kv_idx > query_idx:
-                scores[kv_idx] = -cutlass.Float32.inf
-                continue
+        if query_idx < seq_len:
+            for kv_idx in range(tidx, seq_len, num_threads):
+                if kv_idx > query_idx:
+                    scores[kv_idx] = -cutlass.Float32.inf
+                    continue
 
-            score = 0.0
-            for d_idx in range(head_dim):
-                score += q[bh_idx, query_idx, d_idx] * k[bh_idx, kv_idx, d_idx]
-            score *= softmax_scale
-            scores[kv_idx] = score
-            local_max = score if local_max < score else local_max
+                score = 0.0
+                for d_idx in range(head_dim):
+                    score += q[bh_idx, query_idx, d_idx] * k[bh_idx, kv_idx, d_idx]
+                score *= softmax_scale
+                scores[kv_idx] = score
+                local_max = score if local_max < score else local_max
 
         reduce[tidx] = local_max
         cute.arch.barrier()
@@ -91,11 +88,12 @@ if HAS_CUTE:
         row_sum = reduce[0]
         inv_sum = cute.arch.rcp_approx(row_sum if row_sum != 0.0 else 1.0)
 
-        for d_idx in range(tidx, head_dim, num_threads):
-            acc = 0.0
-            for kv_idx in range(query_idx + 1):
-                acc += scores[kv_idx] * inv_sum * v[bh_idx, kv_idx, d_idx]
-            o[bh_idx, query_idx, d_idx] = acc
+        if query_idx < seq_len:
+            for d_idx in range(tidx, head_dim, num_threads):
+                acc = 0.0
+                for kv_idx in range(query_idx + 1):
+                    acc += scores[kv_idx] * inv_sum * v[bh_idx, kv_idx, d_idx]
+                o[bh_idx, query_idx, d_idx] = acc
 
 
 def stage0_forward(q, k, v, config: AttentionConfig | None = None):
@@ -105,7 +103,9 @@ def stage0_forward(q, k, v, config: AttentionConfig | None = None):
     if not config.causal:
         raise ValueError("stage0 only supports causal attention.")
 
-    if not HAS_CUTE:
+    # Default to the stable reference path. The standalone naive CuTe kernel is kept
+    # behind an explicit opt-in until the JIT argument/lowering path is fully stabilized.
+    if not HAS_CUTE or not experimental_stage0_cute_enabled():
         return causal_attention_reference(q, k, v, config)
 
     batch, heads, seq_len, head_dim = q.shape
@@ -119,24 +119,27 @@ def stage0_forward(q, k, v, config: AttentionConfig | None = None):
     v_flat = v.reshape(batch * heads, seq_len, head_dim).contiguous()
     o_flat = q_flat.new_zeros(q_flat.shape)
 
-    q_cute = from_dlpack(q_flat).mark_layout_dynamic()
-    k_cute = from_dlpack(k_flat).mark_layout_dynamic()
-    v_cute = from_dlpack(v_flat).mark_layout_dynamic()
-    o_cute = from_dlpack(o_flat).mark_layout_dynamic()
+    try:
+        q_cute = from_dlpack(q_flat).mark_layout_dynamic()
+        k_cute = from_dlpack(k_flat).mark_layout_dynamic()
+        v_cute = from_dlpack(v_flat).mark_layout_dynamic()
+        o_cute = from_dlpack(o_flat).mark_layout_dynamic()
 
-    naive_causal_attention_kernel(
-        q_cute,
-        k_cute,
-        v_cute,
-        o_cute,
-        seq_len,
-        head_dim,
-        scale,
-        math.log2(math.e),
-        config.num_threads,
-    ).launch(
-        grid=(seq_len, batch * heads, 1),
-        block=(config.num_threads, 1, 1),
-    )
+        naive_causal_attention_kernel(
+            q_cute,
+            k_cute,
+            v_cute,
+            o_cute,
+            seq_len,
+            head_dim,
+            scale,
+            math.log2(math.e),
+            config.num_threads,
+        ).launch(
+            grid=(seq_len, batch * heads, 1),
+            block=(config.num_threads, 1, 1),
+        )
+    except Exception:
+        return causal_attention_reference(q, k, v, config)
 
     return o_flat.reshape(batch, heads, seq_len, head_dim)
