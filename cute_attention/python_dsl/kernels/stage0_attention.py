@@ -8,7 +8,6 @@ import torch
 
 # CuTe DSL imports
 try:
-    import cuda.cooperative.experimental as cudax
     from cutlass.cute.runtime import from_dlpack
     from cutlass import cute
     HAS_CUTE = True
