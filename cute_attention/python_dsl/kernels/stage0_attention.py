@@ -52,9 +52,9 @@ def naive_attention_kernel(
     smem_reduce_ptr = cute.arch.alloc_smem(cutlass.Float32, NUM_THREADS)
     
     # Create tensors from pointers
-    scores = cute.make_tensor(scores_ptr, cute.make_layout(seq_len))
-    output = cute.make_tensor(output_ptr, cute.make_layout(HEAD_DIM))
-    smem_reduce = cute.make_tensor(smem_reduce_ptr, cute.make_layout(NUM_THREADS))
+    scores = cute.make_tensor(scores_ptr, cute.make_layout((seq_len,)))
+    output = cute.make_tensor(output_ptr, cute.make_layout((HEAD_DIM,)))
+    smem_reduce = cute.make_tensor(smem_reduce_ptr, cute.make_layout((NUM_THREADS,)))
     
     # ----------------------------------------------------------
     # Step 1: Compute scores = Q @ K^T
