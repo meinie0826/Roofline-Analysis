@@ -80,13 +80,13 @@ STAGES: dict[str, StageDefinition] = {
     ),
     "stage4": StageDefinition(
         name="stage4",
-        description="MMA stage scaffold (currently routed to stage1 kernel; to be replaced by tiled_mma kernel).",
+        description="Our own CuTe stage: stage1 math + K-tile shared-memory staging.",
         implementation=stage4_forward,
         backend="own-cute-dsl",
     ),
     "stage5": StageDefinition(
         name="stage5",
-        description="Pipeline stage scaffold (currently routed to stage4; target is cp.async + pipeline kernel).",
+        description="Our own CuTe stage: stage4 math + K/V shared-memory staging.",
         implementation=stage5_forward,
         backend="own-cute-dsl",
     ),

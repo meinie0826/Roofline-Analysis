@@ -46,11 +46,10 @@
   - `stage1_ref` 的 PyTorch online-softmax 参考版
   - `stage2` 的 PyTorch blocked 参考版
   - `stage3` 的 CuTe blocked + online softmax 前向版
+  - `stage4` 的 CuTe K-tile shared-memory staging 前向版
+  - `stage5` 的 CuTe K/V-tile shared-memory staging 前向版
   - `baseline_fa4` 对照入口
   - `baseline_sdpa`（PyTorch SDPA 对照）
-- 预留接口:
-  - `stage4`
-  - `stage5`
 
 ## 建议推进顺序
 
@@ -66,7 +65,8 @@
 - `stage1` 是自研 CuTe FA2 风格实现。
 - `stage1_ref / stage2` 是 PyTorch 参考实现，用于验证数学形式。
 - `stage3` 是我们自己的 CuTe blocked + online softmax 内核（causal/qkv-only/fwd）。
-- `stage4`、`stage5` 已拆成独立 kernel stage（当前为脚手架，后续逐步替换成 MMA / pipeline 真实现）。
+- `stage4` 是我们自己的 CuTe K 缓存（SMEM staging）内核。
+- `stage5` 是我们自己的 CuTe K/V 缓存（SMEM staging）内核。
 - 真正的自研 CuTe 主线会继续落在 `stage3 -> stage5`。
 
 ## Benchmark
