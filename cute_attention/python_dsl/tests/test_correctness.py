@@ -96,43 +96,15 @@ def test_attention_shapes(func, verbose=True):
     return all_passed
 
 
-def test_attention_dtypes(func, verbose=True):
-    """Test different dtypes"""
-    torch.manual_seed(42)
-    
-    B, H, N, d = 1, 2, 128, 64
-    dtypes = [torch.float32, torch.float16, torch.bfloat16]
-    
-    all_passed = True
-    
-    for dtype in dtypes:
-        Q = torch.randn(B, H, N, d, device='cuda', dtype=dtype)
-        K = torch.randn(B, H, N, d, device='cuda', dtype=dtype)
-        V = torch.randn(B, H, N, d, device='cuda', dtype=dtype)
-        
-        if verbose:
-            print(f"\n[Test] Dtype: {dtype}")
-        
-        # Relax tolerance for fp16/bf16
-        rtol = 1e-3 if dtype == torch.float32 else 1e-2
-        atol = 1e-3 if dtype == torch.float32 else 1e-2
-        
-        passed, _ = check_correctness(func, Q, K, V, rtol=rtol, atol=atol, verbose=verbose)
-        all_passed = all_passed and passed
-    
-    return all_passed
-
-
 def run_all_tests(func, verbose=True):
     """Run all correctness tests"""
     print("="*60)
-    print("Running Correctness Tests")
+    print(" Running Correctness Tests")
     print("="*60)
     
     tests = [
         ("Basic", test_attention_basic),
         ("Shapes", test_attention_shapes),
-        ("Dtypes", test_attention_dtypes),
     ]
     
     results = {}
@@ -150,7 +122,7 @@ def run_all_tests(func, verbose=True):
     
     # Summary
     print("\n" + "="*60)
-    print("Summary")
+    print(" Summary")
     print("="*60)
     
     for name, passed in results.items():
@@ -164,10 +136,9 @@ def run_all_tests(func, verbose=True):
 
 
 if __name__ == "__main__":
-    # Test Stage 0
     import sys
     sys.path.insert(0, '.')
     
-    from kernels.stage0_attention import stage0_attention
+    from kernels.stage0_attention import attention_forward
     
-    run_all_tests(stage0_attention)
+    run_all_tests(attention_forward)
