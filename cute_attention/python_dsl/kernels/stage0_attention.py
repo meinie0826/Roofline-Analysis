@@ -70,10 +70,11 @@ def attention_forward(Q, K, V, scale=None):
     
     # Launch kernel for each batch-head
     for bh in range(BH):
-        Q_bh = Q_flat[bh]  # (N, d)
-        K_bh = K_flat[bh]  # (N, d)
-        V_bh = V_flat[bh]  # (N, d)
-        O_bh = O_flat[bh]  # (N, d)
+        # Convert to CuTe tensors
+        Q_bh = from_dlpack(Q_flat[bh])  # (N, d)
+        K_bh = from_dlpack(K_flat[bh])  # (N, d)
+        V_bh = from_dlpack(V_flat[bh])  # (N, d)
+        O_bh = from_dlpack(O_flat[bh])  # (N, d)
         
         # Grid: one block per query row
         grid = (N, 1, 1)
