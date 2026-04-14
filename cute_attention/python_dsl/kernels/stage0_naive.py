@@ -35,8 +35,8 @@ if HAS_CUTE:
         head_dim = cute.size(q.shape, mode=[2])
 
         smem = cutlass.utils.SmemAllocator()
-        scores_ptr = smem.allocate(cutlass.Float32, seq_len)
-        reduce_ptr = smem.allocate(cutlass.Float32, num_threads)
+        scores_ptr = smem.allocate_array(cutlass.Float32, num_elems=seq_len)
+        reduce_ptr = smem.allocate_array(cutlass.Float32, num_elems=num_threads)
         scores = cute.make_tensor(scores_ptr, cute.make_layout((seq_len,)))
         reduce = cute.make_tensor(reduce_ptr, cute.make_layout((num_threads,)))
 
