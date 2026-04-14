@@ -1,0 +1,59 @@
+# CuTe DSL Causal Attention Roadmap
+
+目标限定为 `q, k, v -> o` 的 `causal attention` forward，不处理 dropout、alibi、window、varlen、paged KV、GQA/MQA、backward，也不引入额外分支条件。
+
+工程分成 6 个实现阶段，统一输入输出接口，方便逐阶段验证正确性和性能。
+另外保留一个 `baseline_fa4` 对照入口，只用于 correctness / benchmark，不作为最终实现路径。
+
+## Stage 0: Naive
+
+- 计算图: `S = Q @ K^T -> causal mask -> softmax(S) -> O = P @ V`
+- 特点: 不做融合，显式 materialize score，CTA-per-row
+- 目的: 建立最直观的正确性基线
+
+## Stage 1: Online Softmax
+
+- 优化点: 去掉整行 `score` 的全量保存，改成 running max / running sum
+- 收益: 降低中间存储压力，接近 FlashAttention 的核心数值形式
+
+## Stage 2: KV Blocking
+
+- 优化点: 按 `N` 维分块遍历 KV
+- 收益: 为 shared memory staging 和主循环流水化做准备
+
+## Stage 3: Shared Memory + Warp MMA
+
+- 优化点: Q/K/V tile 化，shared memory staging，warp / tensor core MMA
+- 收益: 从“正确”切到“高吞吐”
+
+## Stage 4: Pipeline + Specialized Schedule
+
+- 优化点: cp.async / TMA、warp specialization、persistent tile scheduling
+- 收益: 进入 FA4 的主优化区间
+
+## Stage 5: Full Self-Hosted Kernel
+
+- 不调用 `flash-attention/flash_attn/cute` 的执行实现
+- 目标: 用我们自己的 CuTe DSL kernel 覆盖 full causal forward 路径
+- `flash-attention` 和 `cutlass/examples/77_blackwell_fmha` 只作为设计和性能参考
+
+## 当前代码状态
+
+- 已实现:
+  - `reference`
+  - `stage0`
+  - `stage1` 的 PyTorch online-softmax 参考版
+  - `stage2` 的 PyTorch blocked 参考版
+  - `baseline_fa4` 对照入口
+- 预留接口:
+  - `stage3`
+  - `stage4`
+  - `stage5`
+
+## 建议推进顺序
+
+1. 先用 `reference` 和 `stage0` 把 causal correctness 固定住。
+2. 再把 `stage1` 的 online softmax 数学形式迁移进 CuTe kernel。
+3. 然后做 `stage2 -> stage3`，把 KV blocking 和 shared memory / MMA 结合起来。
+4. 最后把 `stage4` 收敛成我们自己的 `stage5`，做到不依赖外部 FA4 执行实现。
+5. 全程可以用 `baseline_fa4` 做 correctness 和性能对照，但不能让实现依赖它。
