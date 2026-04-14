@@ -20,7 +20,11 @@ def load_results(results_dir: Path, filename: str = None) -> Dict[str, Any]:
     """加载 benchmark 结果"""
     
     if filename:
-        filepath = results_dir / filename
+        # 如果是绝对路径，直接使用
+        if Path(filename).is_absolute():
+            filepath = Path(filename)
+        else:
+            filepath = results_dir / filename
     else:
         # 找最新的文件
         files = sorted(results_dir.glob("benchmark_*.json"))
@@ -119,11 +123,15 @@ def main():
     parser = argparse.ArgumentParser(description="Analyze benchmark results")
     parser.add_argument("--latest", action="store_true", help="Analyze latest results")
     parser.add_argument("--file", type=str, help="Specific file to analyze")
-    parser.add_argument("--results-dir", type=str, default="cute_attention/results")
+    parser.add_argument("--results-dir", type=str, default=None)
     
     args = parser.parse_args()
     
-    results_dir = Path(args.results_dir)
+    if args.results_dir:
+        results_dir = Path(args.results_dir)
+    else:
+        # 使用默认的绝对路径
+        results_dir = Path(__file__).parent.parent / "results"
     
     if args.file:
         data = load_results(results_dir, args.file)
