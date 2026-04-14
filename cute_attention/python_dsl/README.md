@@ -60,6 +60,6 @@
 
 ## 当前默认行为
 
-- `stage0` 默认走稳定的 reference 路径，以保证测试可运行。
-- 实验版 standalone CuTe naive kernel 仅在设置 `CUTE_ATTN_ENABLE_EXPERIMENTAL_STAGE0=1` 时尝试启用。
-- 这只是过渡方案，后续真正的自研 CuTe 主线会落在 `stage3 -> stage5`。
+- `stage0` 是纯 CuTe DSL 路径，不提供 PyTorch fallback。
+- `stage1 / stage2` 仍然是 PyTorch 参考实现，用于验证 online softmax 和 blocked 数学形式。
+- 真正的自研 CuTe 主线会继续落在 `stage3 -> stage5`。

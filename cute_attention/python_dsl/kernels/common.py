@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -77,7 +76,3 @@ def available_backends() -> dict[str, bool]:
         "cute": HAS_CUTE,
         "fa4_repo": FLASH_ATTENTION_ROOT.exists(),
     }
-
-
-def experimental_stage0_cute_enabled() -> bool:
-    return os.environ.get("CUTE_ATTN_ENABLE_EXPERIMENTAL_STAGE0", "0") == "1"
