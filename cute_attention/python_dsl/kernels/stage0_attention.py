@@ -6,12 +6,13 @@ Stage 0: Naive Attention Kernel (CuTe DSL)
 
 import torch
 
-# CuTe DSL imports
+# CuTe DSL imports (correct way from FA4 source)
 try:
-    import cuda.cooperative.experimental as cudax
+    import cutlass
+    import cutlass.cute as cute
     from cutlass.cute.runtime import from_dlpack
-    from cutlass import cute
     HAS_CUTE = True
+    CUTE_ERROR = None
 except ImportError as e:
     HAS_CUTE = False
     CUTE_ERROR = str(e)

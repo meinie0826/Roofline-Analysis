@@ -6,7 +6,12 @@ FlashAttention Benchmark
 import torch
 import time
 import argparse
-from kernels.stage0_attention import attention_forward, compute_tflops, compute_tc_utilization, HAS_CUTE
+
+try:
+    from kernels.stage0_attention import attention_forward, compute_tflops, compute_tc_utilization, HAS_CUTE, CUTE_ERROR
+except ImportError as e:
+    HAS_CUTE = False
+    CUTE_ERROR = str(e)
 
 
 def benchmark(func, Q, K, V, warmup=10, repeat=100, verbose=True):
