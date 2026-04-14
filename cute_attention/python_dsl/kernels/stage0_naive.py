@@ -82,7 +82,9 @@ if HAS_CUTE:
             stride //= 2
 
         row_sum = reduce[0]
-        inv_sum = 1.0 / (row_sum if row_sum != 0.0 else 1.0)
+        # In causal attention each query always has at least one valid key (itself),
+        # so row_sum is positive and we can avoid Python-side dynamic boolean branching.
+        inv_sum = 1.0 / row_sum
 
         for d_idx in cutlass.range_constexpr(head_dim):
             if d_idx % num_threads == tidx:
