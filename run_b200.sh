@@ -57,7 +57,7 @@ echo "==============================================="
 echo " Running Performance Benchmark"
 echo "==============================================="
 
-python3 cute_attention/python_dsl/benchmark.py --bench --seqlen 128 256 512 1024 2048
+python3 cute_attention/python_dsl/benchmark.py --bench --seqlen 1024 2048 4096 8192 16384 32768
 
 echo ""
 echo "==============================================="

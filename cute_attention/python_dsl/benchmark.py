@@ -67,7 +67,7 @@ def benchmark(func, Q, K, V, warmup=10, repeat=100, verbose=True):
     return metrics
 
 
-def run_benchmark(seqlens=[128, 256, 512, 1024, 2048], 
+def run_benchmark(seqlens=[1024, 2048, 4096, 8192, 16384, 32768], 
                   batch_size=1, 
                   nheads=32, 
                   headdim=128):
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--test', action='store_true', help='Run correctness tests')
     parser.add_argument('--bench', action='store_true', help='Run benchmark')
-    parser.add_argument('--seqlen', type=int, nargs='+', default=[128, 256, 512, 1024])
+    parser.add_argument('--seqlen', type=int, nargs='+', default=[1024, 2048, 4096, 8192, 16384, 32768])
     parser.add_argument('--batch', type=int, default=1)
     parser.add_argument('--heads', type=int, default=32)
     args = parser.parse_args()
