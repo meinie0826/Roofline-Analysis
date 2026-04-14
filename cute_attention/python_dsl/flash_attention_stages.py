@@ -18,12 +18,13 @@ import time
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 
 
 _CUDART_PRELOAD_DONE = False
+_FWD_COMPILE_CACHE: Dict[Tuple[Any, ...], Any] = {}
 
 
 @dataclass(frozen=True)
@@ -251,22 +252,124 @@ def _flash_attention_cute(
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     _ensure_flash_attn_repo_on_path()
     _preload_cudart()
-    from flash_attn.cute.interface import flash_attn_func
+    import cutlass
+    import cutlass.cute as cute
+    from flash_attn.cute.cute_dsl_utils import to_cute_tensor
+    from flash_attn.cute.flash_fwd_sm100 import FlashAttentionForwardSm100
+
+    if q.ndim != 4 or k.ndim != 4 or v.ndim != 4:
+        raise ValueError("Self-authored CuTe runner currently supports only batched tensors [B, S, H, D]")
+    if q.dtype not in (torch.float16, torch.bfloat16):
+        raise ValueError("Only fp16/bf16 are supported by the custom CuTe stage runner")
+    if q.shape[2] % k.shape[2] != 0:
+        raise ValueError("nheads must be divisible by nheads_kv for GQA/MQA")
+
+    major, _ = torch.cuda.get_device_capability(q.device)
+    if major not in (10, 11):
+        raise ValueError(f"Custom CuTe path is currently implemented for SM100/SM110 only, got SM_{major}")
+
+    bsz, seqlen_q, nheads_q, head_dim = q.shape
+    _, seqlen_k, nheads_kv, head_dim_k = k.shape
+    if head_dim != head_dim_k or v.shape[-1] != head_dim:
+        raise ValueError("Current custom runner assumes head_dim_q == head_dim_k == head_dim_v")
+
+    qhead_per_kvhead = nheads_q // nheads_kv
+    is_split_kv = cfg.num_splits > 1
+    q_stage = 2 if (cfg.use_pingpong_q_tiles and seqlen_q > cfg.block_size[0]) else 1
+
+    out = torch.empty_like(q)
+    lse = torch.empty((bsz, nheads_q, seqlen_q), dtype=torch.float32, device=q.device)
+
+    torch2cute_dtype_map = {
+        torch.float16: cutlass.Float16,
+        torch.bfloat16: cutlass.BFloat16,
+        torch.float32: cutlass.Float32,
+    }
+    cute_dtype = torch2cute_dtype_map[q.dtype]
+
+    compile_key = (
+        cute_dtype,
+        head_dim,
+        qhead_per_kvhead,
+        causal,
+        cfg.block_size,
+        q_stage,
+        is_split_kv,
+        cfg.enable_clc_scheduler,
+        cfg.disable_2cta,
+        q.device.index,
+    )
 
     prev_toggles = _set_cute_runtime_toggles(
         enable_clc_scheduler=cfg.enable_clc_scheduler,
         disable_2cta=cfg.disable_2cta,
     )
     try:
-        out, lse = flash_attn_func(
-            q,
-            k,
-            v,
-            softmax_scale=scale,
-            causal=causal,
-            num_splits=cfg.num_splits,
-            block_size=cfg.block_size,
-            return_lse=True,
+        if compile_key not in _FWD_COMPILE_CACHE:
+            current_stream = cute.runtime.make_fake_stream(use_tvm_ffi_env_stream=True)
+            q_tensor, k_tensor, v_tensor, o_tensor = [to_cute_tensor(t) for t in (q, k, v, out)]
+            lse_tensor = to_cute_tensor(lse, assumed_align=4)
+
+            fa_fwd = FlashAttentionForwardSm100(
+                head_dim,
+                head_dim,
+                qhead_per_kvhead=qhead_per_kvhead,
+                is_causal=causal,
+                is_local=False,
+                is_split_kv=is_split_kv,
+                pack_gqa=False,
+                m_block_size=cfg.block_size[0],
+                n_block_size=cfg.block_size[1],
+                q_stage=q_stage,
+                is_persistent=(not causal) and (cfg.num_splits == 1),
+                score_mod=None,
+                mask_mod=None,
+                has_aux_tensors=False,
+                paged_kv_non_tma=False,
+                is_varlen_q=False,
+                use_2cta_instrs=(not cfg.disable_2cta),
+                use_clc_scheduler=cfg.enable_clc_scheduler,
+            )
+
+            compiled = cute.compile(
+                fa_fwd,
+                q_tensor,
+                k_tensor,
+                v_tensor,
+                o_tensor,
+                lse_tensor,
+                float(scale),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                current_stream,
+                options="--enable-tvm-ffi",
+            )
+            _FWD_COMPILE_CACHE[compile_key] = compiled
+
+        _FWD_COMPILE_CACHE[compile_key](
+            q.detach(),
+            k.detach(),
+            v.detach(),
+            out.detach(),
+            lse,
+            float(scale),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
     finally:
         if prev_toggles is not None:
