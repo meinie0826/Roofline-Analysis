@@ -156,6 +156,15 @@ def _ensure_flash_attn_repo_on_path() -> None:
         if repo_path not in sys.path:
             sys.path.insert(0, repo_path)
 
+        # If FA2 pip package was imported first, `flash_attn` in sys.modules can shadow
+        # local FA4 CuTe source. Clear it so subsequent import resolves to repo source.
+        existing = sys.modules.get("flash_attn")
+        existing_file = getattr(existing, "__file__", "") if existing is not None else ""
+        if existing is not None and "flash-attention/flash_attn" not in str(existing_file):
+            for mod_name in list(sys.modules.keys()):
+                if mod_name == "flash_attn" or mod_name.startswith("flash_attn."):
+                    del sys.modules[mod_name]
+
 
 def _set_cute_runtime_toggles(enable_clc_scheduler: bool, disable_2cta: bool) -> Optional[Tuple[bool, bool]]:
     _ensure_flash_attn_repo_on_path()
