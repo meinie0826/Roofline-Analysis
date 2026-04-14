@@ -1,12 +1,11 @@
 #!/bin/bash
 # Run on B200 GPU server
-# Requirements: pip install torch
 
 cd /workspace/Roofline-Analysis
 git pull
 
 echo "==============================================="
-echo " Testing Naive Attention Kernel"
+echo " FlashAttention - Stage 0 (Naive)"
 echo "==============================================="
 
-python3 cute_attention/python_dsl/naive_attention.py
+python3 cute_attention/python_dsl/benchmark.py --test --bench
