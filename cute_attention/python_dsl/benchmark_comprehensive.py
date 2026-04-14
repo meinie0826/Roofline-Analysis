@@ -20,7 +20,7 @@ import os
 import sys
 import time
 from dataclasses import dataclass, asdict
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
@@ -457,7 +457,7 @@ def run_benchmark(
     
     # Save results
     output_data = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "device": device_info,
         "install_status": INSTALL_STATUS,
         "stage_definitions": [
@@ -506,7 +506,7 @@ def main():
     configs = MODEL_CONFIGS
     
     if args.output is None:
-        timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         args.output = f"cute_attention/results/benchmark_comprehensive_{timestamp}.json"
     
     run_benchmark(configs, args.output, args.quick, max_stage=args.max_stage)

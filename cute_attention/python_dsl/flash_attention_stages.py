@@ -11,7 +11,9 @@ Implementation is backed by FlashAttention CuTe kernels (SM100 path), not a PyTo
 
 from __future__ import annotations
 
+import ctypes
 import math
+import os
 import time
 import sys
 from dataclasses import dataclass
@@ -19,6 +21,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import torch
+
+
+_CUDART_PRELOAD_DONE = False
 
 
 @dataclass(frozen=True)
@@ -167,6 +172,75 @@ def _set_cute_runtime_toggles(enable_clc_scheduler: bool, disable_2cta: bool) ->
     return prev
 
 
+def _candidate_cudart_paths() -> List[Path]:
+    candidates: List[Path] = []
+
+    for env_name in ("CUDA_HOME", "CUDA_PATH"):
+        base = os.environ.get(env_name)
+        if base:
+            candidates.append(Path(base) / "lib64" / "libcudart.so.12")
+
+    candidates.append(Path("/usr/local/cuda/lib64/libcudart.so.12"))
+
+    try:
+        torch_site = Path(torch.__file__).resolve().parent
+        candidates.append(torch_site / "lib" / "libcudart.so.12")
+        candidates.append(torch_site.parent / "nvidia" / "cuda_runtime" / "lib" / "libcudart.so.12")
+    except Exception:
+        pass
+
+    for p in list(sys.path):
+        if "site-packages" in p:
+            candidates.append(Path(p) / "nvidia" / "cuda_runtime" / "lib" / "libcudart.so.12")
+
+    # Keep order and remove duplicates.
+    unique: List[Path] = []
+    seen = set()
+    for c in candidates:
+        s = str(c)
+        if s not in seen:
+            seen.add(s)
+            unique.append(c)
+    return unique
+
+
+def _preload_cudart() -> None:
+    global _CUDART_PRELOAD_DONE
+    if _CUDART_PRELOAD_DONE:
+        return
+
+    errors: List[str] = []
+    for cand in _candidate_cudart_paths():
+        if not cand.exists():
+            continue
+        try:
+            ctypes.CDLL(str(cand), mode=ctypes.RTLD_GLOBAL)
+            _CUDART_PRELOAD_DONE = True
+            return
+        except OSError as e:
+            errors.append(f"{cand}: {e}")
+
+    # Fallback: rely on system linker path.
+    try:
+        ctypes.CDLL("libcudart.so.12", mode=ctypes.RTLD_GLOBAL)
+        _CUDART_PRELOAD_DONE = True
+        return
+    except OSError as e:
+        errors.append(f"libcudart.so.12: {e}")
+
+    checked = "\n  - ".join(str(p) for p in _candidate_cudart_paths())
+    details = "\n  - " + "\n  - ".join(errors) if errors else ""
+    raise RuntimeError(
+        "Cannot load libcudart.so.12 for FlashAttention CuTe path.\n"
+        "Checked candidate paths:\n"
+        f"  - {checked}\n"
+        f"Load errors:{details}\n"
+        "Fix options:\n"
+        "1) export LD_LIBRARY_PATH=<cuda_or_site_packages_nvidia_cuda_runtime_lib>:$LD_LIBRARY_PATH\n"
+        "2) ensure CUDA 12 runtime is installed and visible to dynamic loader."
+    )
+
+
 def _flash_attention_cute(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -176,6 +250,7 @@ def _flash_attention_cute(
     cfg: StageConfig,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     _ensure_flash_attn_repo_on_path()
+    _preload_cudart()
     from flash_attn.cute.interface import flash_attn_func
 
     prev_toggles = _set_cute_runtime_toggles(
