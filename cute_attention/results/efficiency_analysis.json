@@ -1,58 +1,58 @@
 {
   "SDPA": {
-    "tflops": 1264.8037784712083,
-    "tc_util_pct": 56.21350126538703,
+    "tflops": 1260.1607305341552,
+    "tc_util_pct": 56.00714357929578,
     "arithmetic_intensity": 8192.25,
     "bound_type": "compute",
-    "efficiency": 0.5621350126538703,
-    "distance_to_peak": 985.1962215287917
+    "efficiency": 0.5600714357929578,
+    "distance_to_peak": 989.8392694658448
   },
   "FA4": {
-    "tflops": 1317.0569747058612,
-    "tc_util_pct": 58.535865542482725,
+    "tflops": 1324.1805834881243,
+    "tc_util_pct": 58.852470377249965,
     "arithmetic_intensity": 8192.25,
     "bound_type": "compute",
-    "efficiency": 0.5853586554248272,
-    "distance_to_peak": 932.9430252941388
+    "efficiency": 0.5885247037724997,
+    "distance_to_peak": 925.8194165118757
   },
   "Stage0": {
-    "tflops": 1082.8435715230078,
-    "tc_util_pct": 48.126380956578124,
+    "tflops": 4.120506890033524,
+    "tc_util_pct": 0.1831336395570455,
     "arithmetic_intensity": 1024.25,
     "bound_type": "compute",
-    "efficiency": 0.48126380956578124,
-    "distance_to_peak": 1167.1564284769922
+    "efficiency": 0.0018313363955704551,
+    "distance_to_peak": 2245.8794931099665
   },
   "Stage1": {
-    "tflops": 963.2485559144957,
-    "tc_util_pct": 42.81104692953314,
+    "tflops": 4.517124894920817,
+    "tc_util_pct": 0.2007611064409252,
     "arithmetic_intensity": 1024.25,
     "bound_type": "compute",
-    "efficiency": 0.4281104692953314,
-    "distance_to_peak": 1286.7514440855043
+    "efficiency": 0.002007611064409252,
+    "distance_to_peak": 2245.482875105079
   },
   "Stage2": {
-    "tflops": 876.5742135800406,
-    "tc_util_pct": 38.95885393689069,
+    "tflops": 2.094816845649813,
+    "tc_util_pct": 0.09310297091776948,
     "arithmetic_intensity": 1024.25,
     "bound_type": "compute",
-    "efficiency": 0.3895885393689069,
-    "distance_to_peak": 1373.4257864199594
+    "efficiency": 0.0009310297091776948,
+    "distance_to_peak": 2247.90518315435
   },
   "Stage3": {
-    "tflops": 935.8908753967204,
-    "tc_util_pct": 41.595150017632015,
+    "tflops": 2.0981706107763425,
+    "tc_util_pct": 0.09325202714561522,
     "arithmetic_intensity": 1024.25,
     "bound_type": "compute",
-    "efficiency": 0.41595150017632015,
-    "distance_to_peak": 1314.1091246032797
+    "efficiency": 0.0009325202714561522,
+    "distance_to_peak": 2247.9018293892236
   },
   "Stage4": {
-    "tflops": 940.464363451775,
-    "tc_util_pct": 41.79841615341222,
+    "tflops": 3.222359177759587,
+    "tc_util_pct": 0.14321596345598164,
     "arithmetic_intensity": 1024.25,
     "bound_type": "compute",
-    "efficiency": 0.4179841615341222,
-    "distance_to_peak": 1309.535636548225
+    "efficiency": 0.0014321596345598165,
+    "distance_to_peak": 2246.7776408222403
   }
 }
