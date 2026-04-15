@@ -53,6 +53,8 @@ class Stage17FlashAttentionWarpSpecMultistage:
             return False
         if num_stages_kv not in {2, 3}:
             return False
+        if n_block_size % 64 != 0:
+            return False
         smem_usage = (m_block_size * head_dim + n_block_size * head_dim * 2 * num_stages_kv) * 2
         if smem_usage > utils.get_smem_capacity_in_bytes("sm_80"):
             return False
