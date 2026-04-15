@@ -200,7 +200,9 @@ class Stage22FlashAttentionTmaExperimental:
         atom_async_copy,
     ):
         async_copy_elems = 128 // self._dtype.width
-        tQKV_shape_dim_1 = sQ_layout_atom.outer.shape[1] // async_copy_elems
+        _ = sQ_layout_atom
+        smem_k_block_size = 64 if self._head_dim_padded % 64 == 0 else 32
+        tQKV_shape_dim_1 = smem_k_block_size // async_copy_elems
         consumer_layout = cute.make_layout(
             (self._consumer_threads // tQKV_shape_dim_1, tQKV_shape_dim_1),
             stride=(tQKV_shape_dim_1, 1),
