@@ -40,6 +40,7 @@ class AttentionConfig:
     block_m: int = 1
     block_n: int = 128
     num_threads: int = 128
+    producer_warps: int = 0
     num_stages_kv: int = 0
     autotune: bool = False
 

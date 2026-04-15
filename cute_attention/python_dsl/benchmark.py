@@ -7,6 +7,7 @@ from kernels import (
     AttentionConfig,
     autotune_stage12_config,
     autotune_stage13_config,
+    autotune_stage15_config,
     available_backends,
     run_stage,
 )
@@ -38,6 +39,8 @@ def _config_status_suffix(config: AttentionConfig) -> str | None:
         parts.append(f"block_m={config.block_m}")
     if config.block_n:
         parts.append(f"block_n={config.block_n}")
+    if getattr(config, "producer_warps", 0):
+        parts.append(f"producer_warps={config.producer_warps}")
     if config.num_stages_kv:
         parts.append(f"stages={config.num_stages_kv}")
     return ",".join(parts) if parts else None
@@ -49,6 +52,9 @@ def benchmark_stage_with_fallback(stage_name, q, k, v, config, warmup=5, repeat=
         return benchmark(stage_name, q, k, v, tuned, warmup=warmup, repeat=repeat), _config_status_suffix(tuned)
     if stage_name == "stage13":
         tuned = autotune_stage13_config(q, k, v, config)
+        return benchmark(stage_name, q, k, v, tuned, warmup=warmup, repeat=repeat), _config_status_suffix(tuned)
+    if stage_name == "stage15":
+        tuned = autotune_stage15_config(q, k, v, config)
         return benchmark(stage_name, q, k, v, tuned, warmup=warmup, repeat=repeat), _config_status_suffix(tuned)
 
     if stage_name not in {"stage1", "stage4", "stage5", "stage6", "stage7", "stage8", "stage9", "stage10", "stage11", "stage12", "stage13", "stage14", "stage15"}:
@@ -62,6 +68,7 @@ def benchmark_stage_with_fallback(stage_name, q, k, v, config, warmup=5, repeat=
             block_m=block_m,
             block_n=config.block_n,
             num_threads=config.num_threads,
+            producer_warps=config.producer_warps,
         )
         try:
             t = benchmark(stage_name, q, k, v, cfg, warmup=warmup, repeat=repeat)

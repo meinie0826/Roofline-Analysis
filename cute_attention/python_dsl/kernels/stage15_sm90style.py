@@ -19,33 +19,39 @@ from .common import (
 
 MAX_SEQ_LEN_FOR_STAGE15_CUTE = 4096
 _STAGE15_COMPILED_CACHE = {}
+_STAGE15_AUTOTUNE_CACHE = {}
 
 
 if HAS_CUTE:
     class Stage15FlashAttentionSm90Style:
-        def __init__(self, head_dim: int, m_block_size: int, n_block_size: int, num_threads: int, is_causal: bool):
+        def __init__(self, head_dim: int, m_block_size: int, n_block_size: int, num_threads: int, producer_warps: int, is_causal: bool):
             self._head_dim = head_dim
             self._m_block_size = m_block_size
             self._n_block_size = n_block_size
             self._head_dim_padded = (head_dim + 31) // 32 * 32
             self._num_threads = num_threads
             self._is_causal = is_causal
-            self._producer_threads = 128
-            self._consumer_threads = 128
+            self._producer_threads = producer_warps * 32
+            self._consumer_threads = num_threads - self._producer_threads
             self.cta_sync_barrier = pipeline.NamedBarrier(barrier_id=1, num_threads=num_threads)
 
         @staticmethod
-        def can_implement(dtype, head_dim, m_block_size, n_block_size, num_threads, is_causal) -> bool:
+        def can_implement(dtype, head_dim, m_block_size, n_block_size, num_threads, producer_warps, is_causal) -> bool:
             if dtype != cutlass.Float16:
                 return False
             if head_dim % 8 != 0:
                 return False
             if num_threads != 256:
                 return False
+            if producer_warps not in (1, 2, 4):
+                return False
+            consumer_threads = num_threads - producer_warps * 32
+            if consumer_threads <= 0 or consumer_threads % 32 != 0:
+                return False
             smem_usage = (m_block_size * head_dim + n_block_size * head_dim * 2) * 2
             if smem_usage > utils.get_smem_capacity_in_bytes("sm_80"):
                 return False
-            if (m_block_size * 2) % 128 != 0:
+            if (m_block_size * 2) % consumer_threads != 0:
                 return False
             return True
 
@@ -499,8 +505,8 @@ def _stage15_forward_impl(q, k, v, config: AttentionConfig):
     if seq_len > MAX_SEQ_LEN_FOR_STAGE15_CUTE:
         raise ValueError(f"stage15 currently supports seq_len <= {MAX_SEQ_LEN_FOR_STAGE15_CUTE}, got {seq_len}.")
 
-    tuned = replace(config, num_threads=256)
-    if not Stage15FlashAttentionSm90Style.can_implement(cutlass.Float16, head_dim, tuned.block_m, tuned.block_n, tuned.num_threads, True):
+    tuned = replace(config, num_threads=256, producer_warps=config.producer_warps or 4)
+    if not Stage15FlashAttentionSm90Style.can_implement(cutlass.Float16, head_dim, tuned.block_m, tuned.block_n, tuned.num_threads, tuned.producer_warps, True):
         raise ValueError("stage15 config is not supported by the SM90-style kernel constraints.")
 
     q_perm = q.permute(0, 2, 1, 3).contiguous()
@@ -516,7 +522,7 @@ def _stage15_forward_impl(q, k, v, config: AttentionConfig):
     torch_stream = torch.cuda.current_stream()
     current_stream = cuda.CUstream(torch_stream.cuda_stream)
 
-    cache_key = (tuple(q_perm.shape), str(q_perm.dtype), tuned.block_m, tuned.block_n, tuned.num_threads)
+    cache_key = (tuple(q_perm.shape), str(q_perm.dtype), tuned.block_m, tuned.block_n, tuned.num_threads, tuned.producer_warps)
     compiled = _stage15_compile(
         cache_key,
         q_cute,
@@ -536,10 +542,13 @@ def _stage15_forward_impl(q, k, v, config: AttentionConfig):
 
 def stage15_forward(q, k, v, config: AttentionConfig | None = None):
     config = config or AttentionConfig(block_m=64, block_n=128, num_threads=256)
-    return _stage15_forward_impl(q, k, v, replace(config, autotune=False, num_threads=256))
+    tuned = replace(config, autotune=False, num_threads=256)
+    if config.autotune:
+        tuned = autotune_stage15_config(q, k, v, tuned)
+    return _stage15_forward_impl(q, k, v, tuned)
 
 
-def _stage15_compile(cache_key, q_cute, k_cute, v_cute, o_cute, scale, current_stream, head_dim, block_m, block_n, num_threads):
+def _stage15_compile(cache_key, q_cute, k_cute, v_cute, o_cute, scale, current_stream, head_dim, block_m, block_n, num_threads, producer_warps):
     compiled = _STAGE15_COMPILED_CACHE.get(cache_key)
     if compiled is None:
         kernel = Stage15FlashAttentionSm90Style(
@@ -547,8 +556,99 @@ def _stage15_compile(cache_key, q_cute, k_cute, v_cute, o_cute, scale, current_s
             m_block_size=block_m,
             n_block_size=block_n,
             num_threads=num_threads,
+            producer_warps=producer_warps,
             is_causal=True,
         )
         compiled = cute.compile(kernel, q_cute, k_cute, v_cute, o_cute, scale, current_stream)
         _STAGE15_COMPILED_CACHE[cache_key] = compiled
     return compiled
+
+
+def _make_stage15_config(config: AttentionConfig, *, block_m: int, block_n: int, producer_warps: int) -> AttentionConfig:
+    return AttentionConfig(
+        softmax_scale=config.softmax_scale,
+        causal=config.causal,
+        block_m=block_m,
+        block_n=block_n,
+        num_threads=256,
+        producer_warps=producer_warps,
+        autotune=False,
+    )
+
+
+def _stage15_candidate_values(preferred: int, values: list[int], *, limit: int | None = None) -> list[int]:
+    ordered = []
+    for value in [preferred, *values]:
+        if value <= 0 or value in ordered:
+            continue
+        if limit is not None and value > limit:
+            continue
+        ordered.append(value)
+    return ordered
+
+
+def autotune_stage15_config(
+    q,
+    k,
+    v,
+    config: AttentionConfig | None = None,
+    *,
+    warmup: int = 2,
+    repeat: int = 5,
+) -> AttentionConfig:
+    require_torch()
+    config = config or AttentionConfig()
+    validate_qkv(q, k, v)
+    if not config.causal:
+        raise ValueError("stage15 autotune only supports causal attention.")
+    if not HAS_CUTE:
+        raise RuntimeError("stage15 autotune requires cutlass.cute.")
+    if q.dtype != torch.float16:
+        raise ValueError(f"stage15 autotune currently only supports fp16 inputs, got {q.dtype}.")
+
+    _, _, seq_len, head_dim = q.shape
+    cache_key = (tuple(q.shape), str(q.dtype), config.block_m, config.block_n, config.num_threads, config.producer_warps)
+    cached = _STAGE15_AUTOTUNE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    block_m_values = _stage15_candidate_values(config.block_m or 64, [128, 64], limit=seq_len)
+    block_n_values = _stage15_candidate_values(config.block_n, [192, 128, 96, 64], limit=seq_len)
+    producer_warp_values = _stage15_candidate_values(config.producer_warps or 4, [4, 2, 1])
+
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
+    best_config = None
+    best_ms = None
+
+    for block_m in block_m_values:
+        for block_n in block_n_values:
+            for producer_warps in producer_warp_values:
+                tuned = _make_stage15_config(config, block_m=block_m, block_n=block_n, producer_warps=producer_warps)
+                try:
+                    if not Stage15FlashAttentionSm90Style.can_implement(cutlass.Float16, head_dim, tuned.block_m, tuned.block_n, tuned.num_threads, tuned.producer_warps, True):
+                        continue
+                    for _ in range(warmup):
+                        _stage15_forward_impl(q, k, v, tuned)
+
+                    torch.cuda.synchronize()
+                    elapsed = 0.0
+                    for _ in range(repeat):
+                        start_event.record()
+                        _stage15_forward_impl(q, k, v, tuned)
+                        end_event.record()
+                        torch.cuda.synchronize()
+                        elapsed += start_event.elapsed_time(end_event)
+                    elapsed /= repeat
+                except ValueError:
+                    continue
+
+                if best_ms is None or elapsed < best_ms:
+                    best_ms = elapsed
+                    best_config = tuned
+
+    if best_config is None:
+        raise ValueError("stage15 autotune failed to find a valid config.")
+
+    _STAGE15_AUTOTUNE_CACHE[cache_key] = best_config
+    return best_config
