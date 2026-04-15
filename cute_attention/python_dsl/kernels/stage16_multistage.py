@@ -36,6 +36,7 @@ from .common import (
     torch,
     validate_qkv,
 )
+from .reference import causal_attention_reference
 MAX_SEQ_LEN_FOR_STAGE16_CUTE = 4096
 _STAGE16_COMPILED_CACHE: dict = {}
 _STAGE16_AUTOTUNE_CACHE: dict = {}
@@ -741,6 +742,7 @@ def autotune_stage16_config(
         raise ValueError(f"stage16 autotune currently only supports fp16 inputs, got {q.dtype}.")
 
     _, _, seq_len, head_dim = q.shape
+    reference_out = causal_attention_reference(q, k, v, replace(config, autotune=False))
     cache_key = (tuple(q.shape), str(q.dtype), config.block_m, config.block_n)
     cached = _STAGE16_AUTOTUNE_CACHE.get(cache_key)
     if cached is not None:
@@ -770,6 +772,8 @@ def autotune_stage16_config(
             ):
                 continue
             try:
+                candidate_out = _stage16_forward_impl(q, k, v, tuned)
+                torch.testing.assert_close(candidate_out, reference_out, rtol=4e-2, atol=4e-2)
                 for _ in range(warmup):
                     _stage16_forward_impl(q, k, v, tuned)
                 torch.cuda.synchronize()
@@ -781,7 +785,7 @@ def autotune_stage16_config(
                     torch.cuda.synchronize()
                     elapsed += start_event.elapsed_time(end_event)
                 elapsed /= repeat
-            except (ValueError, RuntimeError):
+            except (AssertionError, ValueError, RuntimeError):
                 continue
             if best_ms is None or elapsed < best_ms:
                 best_ms     = elapsed
