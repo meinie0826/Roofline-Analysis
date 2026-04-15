@@ -16,6 +16,7 @@ from .stage9_threadgroup import stage9_forward
 from .stage10_hybrid import stage10_forward
 from .stage11_mma import stage11_forward
 from .stage12_pipeline2 import stage12_forward
+from .stage13_multistage import stage13_forward
 from .stage0_naive import stage0_forward
 from .stage3_blocked import stage3_forward
 
@@ -114,6 +115,12 @@ STAGES: dict[str, StageDefinition] = {
         name="stage12",
         description="Our own CuTe stage: stage11 + double-buffered K/V cp.async pipeline.",
         implementation=stage12_forward,
+        backend="own-cute-dsl",
+    ),
+    "stage13": StageDefinition(
+        name="stage13",
+        description="Our own CuTe stage: multistage/autotune entrypoint for stage11-stage12 MMA pipeline family.",
+        implementation=stage13_forward,
         backend="own-cute-dsl",
     ),
 }

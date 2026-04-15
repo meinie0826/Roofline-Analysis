@@ -3,7 +3,13 @@
 import argparse
 import time
 
-from kernels import AttentionConfig, autotune_stage12_config, available_backends, run_stage
+from kernels import (
+    AttentionConfig,
+    autotune_stage12_config,
+    autotune_stage13_config,
+    available_backends,
+    run_stage,
+)
 
 
 torch = None
@@ -41,8 +47,11 @@ def benchmark_stage_with_fallback(stage_name, q, k, v, config, warmup=5, repeat=
     if stage_name == "stage12":
         tuned = autotune_stage12_config(q, k, v, config)
         return benchmark(stage_name, q, k, v, tuned, warmup=warmup, repeat=repeat), _config_status_suffix(tuned)
+    if stage_name == "stage13":
+        tuned = autotune_stage13_config(q, k, v, config)
+        return benchmark(stage_name, q, k, v, tuned, warmup=warmup, repeat=repeat), _config_status_suffix(tuned)
 
-    if stage_name not in {"stage1", "stage4", "stage5", "stage6", "stage7", "stage8", "stage9", "stage10", "stage11", "stage12"}:
+    if stage_name not in {"stage1", "stage4", "stage5", "stage6", "stage7", "stage8", "stage9", "stage10", "stage11", "stage12", "stage13"}:
         return benchmark(stage_name, q, k, v, config, warmup=warmup, repeat=repeat), None
 
     block_m = config.block_m
@@ -79,6 +88,7 @@ def parse_stage_list(stages_arg: str) -> list[str]:
             "stage10",
             "stage11",
             "stage12",
+            "stage13",
             "baseline_fa4",
             "baseline_sdpa",
         ]

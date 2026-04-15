@@ -95,3 +95,13 @@ def test_stage12_autotune_matches_reference_small():
     ref = causal_attention_reference(q, k, v, config)
     out = run_stage("stage12", q, k, v, config)
     torch.testing.assert_close(out, ref, rtol=3e-2, atol=3e-2)
+
+
+@pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
+@pytest.mark.skipif(not backends["cute"], reason="CuTe DSL is not installed")
+def test_stage13_autotune_matches_reference_small():
+    q, k, v = make_inputs((1, 1, 64, 64), torch.float16)
+    config = AttentionConfig(block_m=64, block_n=64, num_threads=128, autotune=True)
+    ref = causal_attention_reference(q, k, v, config)
+    out = run_stage("stage13", q, k, v, config)
+    torch.testing.assert_close(out, ref, rtol=3e-2, atol=3e-2)
