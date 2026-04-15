@@ -535,6 +535,7 @@ def _stage15_forward_impl(q, k, v, config: AttentionConfig):
         tuned.block_m,
         tuned.block_n,
         tuned.num_threads,
+        tuned.producer_warps,
     )
     compiled(q_cute, k_cute, v_cute, o_cute, scale, current_stream)
     return o_perm.permute(0, 2, 1, 3).contiguous()
