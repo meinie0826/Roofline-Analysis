@@ -568,7 +568,7 @@ class Stage22FlashAttentionTmaExperimental:
         )
         cute.copy(
             tma_atom_v,
-            tVgV[(None, mainloop_producer_state.count, 0, 0)],
+            tVgV[(None, mainloop_producer_state.count, 0)],
             tVsV[(None, mainloop_producer_state.index)],
             tma_bar_ptr=mainloop_pipeline.producer_get_barrier(mainloop_producer_state),
         )
