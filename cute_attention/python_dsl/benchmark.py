@@ -8,8 +8,8 @@ the seq-len limits of all CuTe stages (max 4096).
 
 Each stage is benchmarked with its most appropriate default tuning config:
   - stage12/stage13 → autotune enabled
-  - stage16         → autotune enabled (block_m/block_n)
-  - stage15/stage16 → num_threads always forced to 256 by the kernel
+  - stage16/stage17 → autotune enabled (block_m/block_n)
+  - stage15/stage16/stage17 → num_threads always forced to 256 by the kernel
   - stage14         → num_threads=256 (128 consumer + 128 producer)
   - stage0-stage11  → num_threads=128 (can be changed with --num-threads)
 """
@@ -22,6 +22,7 @@ from kernels import (
     autotune_stage12_config,
     autotune_stage13_config,
     autotune_stage16_config,
+    autotune_stage17_config,
     available_backends,
     run_stage,
 )
@@ -35,10 +36,10 @@ if available_backends()["torch"]:
 # ---------------------------------------------------------------------------
 # Stages that benefit from a higher default num_threads (producer/consumer)
 # ---------------------------------------------------------------------------
-_WARPSPEC_STAGES = {"stage14", "stage15", "stage16"}
+_WARPSPEC_STAGES = {"stage14", "stage15", "stage16", "stage17"}
 
 # Stages with built-in autotune
-_AUTOTUNE_STAGES = {"stage12", "stage13", "stage16"}
+_AUTOTUNE_STAGES = {"stage12", "stage13", "stage16", "stage17"}
 
 
 def benchmark(stage_name, q, k, v, config, warmup=5, repeat=20):
@@ -86,6 +87,9 @@ def benchmark_stage_with_fallback(stage_name, q, k, v, config, warmup=5, repeat=
     if stage_name == "stage16":
         tuned = autotune_stage16_config(q, k, v, config)
         return benchmark(stage_name, q, k, v, tuned, warmup=warmup, repeat=repeat), _config_status_suffix(tuned)
+    if stage_name == "stage17":
+        tuned = autotune_stage17_config(q, k, v, config)
+        return benchmark(stage_name, q, k, v, tuned, warmup=warmup, repeat=repeat), _config_status_suffix(tuned)
 
     if stage_name not in {
         "stage1", "stage4", "stage5", "stage6", "stage7", "stage8",
@@ -126,6 +130,7 @@ def parse_stage_list(stages_arg: str) -> list[str]:
             "stage14",
             "stage15",
             "stage16",
+            "stage17",
             "baseline_fa4",
             "baseline_sdpa",
         ]
@@ -154,11 +159,11 @@ def main():
                         choices=["float16", "float32", "bfloat16"],
                         help="Data type (default: float16; CuTe stages require float16).")
     parser.add_argument("--block-m",     type=int,   default=64,
-                        help="Q block size (default: 64). Overridden by autotune for stage12/13/16.")
+                        help="Q block size (default: 64). Overridden by autotune for stage12/13/16/17.")
     parser.add_argument("--block-n",     type=int,   default=128,
-                        help="KV block size (default: 128). Overridden by autotune for stage12/13/16.")
+                        help="KV block size (default: 128). Overridden by autotune for stage12/13/16/17.")
     parser.add_argument("--num-threads", type=int,   default=128,
-                        help="Thread count (default: 128). Forced to 256 for stage14/15/16.")
+                        help="Thread count (default: 128). Forced to 256 for stage14/15/16/17.")
     parser.add_argument("--causal",      action="store_true", default=True,
                         help="Use causal masking (default: True).")
     parser.add_argument("--warmup",      type=int,   default=5,

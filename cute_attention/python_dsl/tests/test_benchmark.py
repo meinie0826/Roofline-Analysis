@@ -25,6 +25,8 @@ def test_parse_stage_list_all_includes_new_ablation_stages():
         "stage13",
         "stage14",
         "stage15",
+        "stage16",
+        "stage17",
         "baseline_fa4",
         "baseline_sdpa",
     ]

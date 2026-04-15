@@ -165,3 +165,43 @@ def test_stage16_autotune_matches_reference_multiblock():
     ref = causal_attention_reference(q, k, v, config)
     out = run_stage("stage16", q, k, v, config)
     torch.testing.assert_close(out, ref, rtol=4e-2, atol=4e-2)
+
+
+@pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
+@pytest.mark.skipif(not backends["cute"], reason="CuTe DSL is not installed")
+def test_stage17_matches_reference_small():
+    q, k, v = make_inputs((1, 1, 128, 128), torch.float16)
+    config = AttentionConfig(block_m=64, block_n=128, num_threads=256, num_stages_kv=3)
+    ref = causal_attention_reference(q, k, v, config)
+    out = run_stage("stage17", q, k, v, config)
+    torch.testing.assert_close(out, ref, rtol=4e-2, atol=4e-2)
+
+
+@pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
+@pytest.mark.skipif(not backends["cute"], reason="CuTe DSL is not installed")
+def test_stage17_autotune_matches_reference_small():
+    q, k, v = make_inputs((1, 1, 128, 128), torch.float16)
+    config = AttentionConfig(block_m=64, block_n=128, num_threads=256, num_stages_kv=3, autotune=True)
+    ref = causal_attention_reference(q, k, v, config)
+    out = run_stage("stage17", q, k, v, config)
+    torch.testing.assert_close(out, ref, rtol=4e-2, atol=4e-2)
+
+
+@pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
+@pytest.mark.skipif(not backends["cute"], reason="CuTe DSL is not installed")
+def test_stage17_matches_reference_multiblock():
+    q, k, v = make_inputs((1, 1, 256, 128), torch.float16)
+    config = AttentionConfig(block_m=64, block_n=128, num_threads=256, num_stages_kv=3)
+    ref = causal_attention_reference(q, k, v, config)
+    out = run_stage("stage17", q, k, v, config)
+    torch.testing.assert_close(out, ref, rtol=4e-2, atol=4e-2)
+
+
+@pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
+@pytest.mark.skipif(not backends["cute"], reason="CuTe DSL is not installed")
+def test_stage17_autotune_matches_reference_multiblock():
+    q, k, v = make_inputs((1, 1, 256, 128), torch.float16)
+    config = AttentionConfig(block_m=64, block_n=128, num_threads=256, num_stages_kv=3, autotune=True)
+    ref = causal_attention_reference(q, k, v, config)
+    out = run_stage("stage17", q, k, v, config)
+    torch.testing.assert_close(out, ref, rtol=4e-2, atol=4e-2)
