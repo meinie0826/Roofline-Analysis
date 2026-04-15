@@ -1034,12 +1034,10 @@ def _make_stage17_config(config: AttentionConfig, *, block_m: int, block_n: int,
 
 
 def _stage17_thread_values(preferred: int) -> list[int]:
-    ordered = []
-    for value in [preferred, 256, 192, 128, 64]:
-        if value <= 0 or value in ordered or value % 32 != 0:
-            continue
-        ordered.append(value)
-    return ordered
+    # The independent stage17 kernel currently reuses the Ampere multistage
+    # schedule and is only validated on the 128-thread path. Keep autotune on
+    # that stable lane until we land a true independent 256-thread variant.
+    return [128]
 
 
 def _stage17_autotune_cache_key(config: AttentionConfig, q) -> str:
@@ -1252,7 +1250,7 @@ def _stage17_forward_impl(q, k, v, config: AttentionConfig):
 
 
 def stage17_forward(q, k, v, config: AttentionConfig | None = None):
-    config = config or AttentionConfig(block_m=64, block_n=128, num_threads=256, num_stages_kv=3)
+    config = config or AttentionConfig(block_m=64, block_n=64, num_threads=128, num_stages_kv=3)
     tuned = config
     if config.autotune:
         tuned = autotune_stage17_config(q, k, v, config)

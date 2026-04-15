@@ -41,7 +41,7 @@
 
 - `stage17`: 更完整的独立 multistage kernel
   - 目标: 在独立 kernel 内继续把 `tile size / num_stages_kv / num_threads` 调优做完整，并探索更接近 FA4 的 warp-specialized multistage 形态
-  - 现状: 已经独立，不再依赖其它 stage 的执行实现；但还没有做到 Hopper/FA4 风格的更深流水和更细调度
+  - 现状: 已经独立，不再依赖其它 stage 的执行实现；当前验证重点仍是 128-thread multistage 路线，独立 256-thread 深流水版本还没有落好
 
 - `stage18`: Split-KV / combine
   - 参考 FA4: `flash_fwd_combine_*`, `benchmark_split_kv.py`
