@@ -89,12 +89,14 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
         )
 
     def _partition_tma_slot(self, tma_atom, g_tensor, s_tensor):
+        group_rank_smem = cute.rank(s_tensor) - 1
+        group_rank_gmem = cute.rank(g_tensor) - 1
         return cpasync.tma_partition(
             tma_atom,
             cutlass.Int32(0),
             cute.make_layout((1,)),
-            cute.group_modes(s_tensor, 0, cute.rank(s_tensor)),
-            cute.group_modes(g_tensor, 0, cute.rank(g_tensor) - 1),
+            cute.group_modes(s_tensor, 0, group_rank_smem),
+            cute.group_modes(g_tensor, 0, group_rank_gmem),
         )
 
     @cute.jit
