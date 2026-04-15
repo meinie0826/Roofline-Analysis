@@ -541,9 +541,9 @@ class Stage22FlashAttentionTmaExperimental:
 
     @cute.jit
     def _prefetch_tma_descriptors_once(self, warp_idx, tma_atom_k, tma_atom_v):
-        if warp_idx == 0:
-            cute.nvgpu.cpasync.prefetch_descriptor(tma_atom_k)
-            cute.nvgpu.cpasync.prefetch_descriptor(tma_atom_v)
+        _ = warp_idx
+        _ = tma_atom_k
+        _ = tma_atom_v
 
     @cute.jit
     def _issue_tma_kv_load(
