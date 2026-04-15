@@ -253,6 +253,8 @@ class Stage18FlashAttentionSm90Experimental:
         tOrVt0 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt0))
         tOrVt1 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt1))
         tOrVt2 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt2)) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+        tSrK_slots = (tSrK0, tSrK1, tSrK2)
+        tOrVt_slots = (tOrVt0, tOrVt1, tOrVt2)
         acc_shape_O = thr_mma.partition_shape_C((self._m_block_size, self._head_dim_padded))
         acc_O = cute.make_rmem_tensor(acc_shape_O, cutlass.Float32)
         acc_O.fill(0.0)
@@ -281,6 +283,10 @@ class Stage18FlashAttentionSm90Experimental:
         tOrVt0_view = smem_thr_copy_V.retile(tOrVt0)
         tOrVt1_view = smem_thr_copy_V.retile(tOrVt1)
         tOrVt2_view = smem_thr_copy_V.retile(tOrVt2) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+        tSsK_slots = (tSsK0, tSsK1, tSsK2)
+        tSrK_view_slots = (tSrK0_view, tSrK1_view, tSrK2_view)
+        tOsVt_slots = (tOsVt0, tOsVt1, tOsVt2)
+        tOrVt_view_slots = (tOrVt0_view, tOrVt1_view, tOrVt2_view)
 
         row_max = cute.make_rmem_tensor((acc_O.shape[0][0] * acc_O.shape[1]), cutlass.Float32)
         row_sum = cute.make_rmem_tensor((acc_O.shape[0][0] * acc_O.shape[1]), cutlass.Float32)
@@ -296,6 +302,8 @@ class Stage18FlashAttentionSm90Experimental:
         tVsV1 = gmem_thr_copy_KV.partition_D(sV1)
         tKsK2 = gmem_thr_copy_KV.partition_D(sK2) if cutlass.const_expr(self._num_stages_kv >= 3) else None
         tVsV2 = gmem_thr_copy_KV.partition_D(sV2) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+        tKsK_slots = (tKsK0, tKsK1, tKsK2)
+        tVsV_slots = (tVsV0, tVsV1, tVsV2)
         mcKV = cute.make_identity_tensor(mK.layout.shape)
         cKV = cute.local_tile(mcKV[batch_size, None, num_head, None], (self._n_block_size, self._head_dim_padded), (start_n_block, 0))
         tKVcKV = gmem_thr_copy_KV.partition_S(cKV)
@@ -369,77 +377,45 @@ class Stage18FlashAttentionSm90Experimental:
             )
 
         first_pipeline_block = n_block_max - mask_steps - 1
-        second_pipeline_block = first_pipeline_block - 1
-        if is_producer and second_pipeline_block >= 0:
-            self._copy_kv_tile(second_pipeline_block, first_pipeline_block, tKVcKV, tKVpKV, tKgK, tVgV, tKsK1, tVsV1, gmem_tiled_copy_KV, mK)
-        if cutlass.const_expr(self._num_stages_kv >= 3):
-            third_pipeline_block = first_pipeline_block - 2
-            if is_producer and third_pipeline_block >= 0:
-                self._copy_kv_tile(third_pipeline_block, first_pipeline_block, tKVcKV, tKVpKV, tKgK, tVgV, tKsK2, tVsV2, gmem_tiled_copy_KV, mK)
-
-        if cutlass.const_expr(self._num_stages_kv == 2):
-            for n_tile in range(mask_steps, n_block_max, 2):
-                n_block0 = n_block_max - n_tile - 1
-                self._compute_one_block(
-                    is_consumer,
-                    is_producer,
-                    n_block0,
-                    thr_mma,
-                    tiled_mma,
-                    tSrQ,
-                    tSrK0,
-                    tOrVt0,
-                    acc_O,
-                    smem_tiled_copy_Q,
-                    smem_tiled_copy_K,
-                    smem_tiled_copy_V,
-                    tSsQ,
-                    tSrQ_view,
-                    tSsK0,
-                    tSrK0_view,
-                    tOsVt0,
-                    tOrVt0_view,
-                    row_max,
-                    row_sum,
-                    softmax_scale_log2,
-                    mQ,
+        for prefetch_slot in cutlass.range_constexpr(1, self._num_stages_kv):
+            prefetch_block = first_pipeline_block - prefetch_slot
+            if is_producer and prefetch_block >= 0:
+                self._copy_kv_tile(
+                    prefetch_block,
+                    first_pipeline_block,
+                    tKVcKV,
+                    tKVpKV,
+                    tKgK,
+                    tVgV,
+                    tKsK_slots[prefetch_slot],
+                    tVsV_slots[prefetch_slot],
+                    gmem_tiled_copy_KV,
                     mK,
-                    batch_size,
-                    num_head,
-                    m_block,
-                    is_first_n_block=False,
-                    in_mask_steps=False,
-                    gmem_tiled_copy_KV=gmem_tiled_copy_KV,
-                    tKVcKV=tKVcKV,
-                    tKgK=tKgK,
-                    tVgV=tVgV,
-                    tKsK=tKsK0,
-                    tVsV=tVsV0,
-                    tKVpKV=tKVpKV,
-                    next_k_block=n_block0 - 2,
                 )
 
-                n_block1 = n_block0 - 1
-                if n_block1 >= 0:
+        for n_tile in range(mask_steps, n_block_max, self._num_stages_kv):
+            for stage_slot in cutlass.range_constexpr(self._num_stages_kv):
+                n_block = n_block_max - n_tile - 1 - stage_slot
+                if n_block >= 0:
                     self._compute_one_block(
                         is_consumer,
                         is_producer,
-                        n_block1,
+                        n_block,
                         thr_mma,
                         tiled_mma,
                         tSrQ,
-                        tSrK1,
-                        tOrVt1,
+                        tSrK_slots[stage_slot],
+                        tOrVt_slots[stage_slot],
                         acc_O,
                         smem_tiled_copy_Q,
                         smem_tiled_copy_K,
                         smem_tiled_copy_V,
                         tSsQ,
                         tSrQ_view,
-                        tSsK1,
-                        tSrK1_view,
-                        tOsVt1,
-                        tOrVt1_view,
+                        tSsK_slots[stage_slot],
+                        tSrK_view_slots[stage_slot],
+                        tOsVt_slots[stage_slot],
+                        tOrVt_view_slots[stage_slot],
                         row_max,
                         row_sum,
                         softmax_scale_log2,
@@ -454,133 +430,10 @@ class Stage18FlashAttentionSm90Experimental:
                         tKVcKV=tKVcKV,
                         tKgK=tKgK,
                         tVgV=tVgV,
-                        tKsK=tKsK1,
-                        tVsV=tVsV1,
+                        tKsK=tKsK_slots[stage_slot],
+                        tVsV=tVsV_slots[stage_slot],
                         tKVpKV=tKVpKV,
-                        next_k_block=n_block1 - 2,
-                    )
-        elif cutlass.const_expr(self._num_stages_kv == 3):
-            for n_tile in range(mask_steps, n_block_max, 3):
-                n_block0 = n_block_max - n_tile - 1
-                self._compute_one_block(
-                    is_consumer,
-                    is_producer,
-                    n_block0,
-                    thr_mma,
-                    tiled_mma,
-                    tSrQ,
-                    tSrK0,
-                    tOrVt0,
-                    acc_O,
-                    smem_tiled_copy_Q,
-                    smem_tiled_copy_K,
-                    smem_tiled_copy_V,
-                    tSsQ,
-                    tSrQ_view,
-                    tSsK0,
-                    tSrK0_view,
-                    tOsVt0,
-                    tOrVt0_view,
-                    row_max,
-                    row_sum,
-                    softmax_scale_log2,
-                    mQ,
-                    mK,
-                    batch_size,
-                    num_head,
-                    m_block,
-                    is_first_n_block=False,
-                    in_mask_steps=False,
-                    gmem_tiled_copy_KV=gmem_tiled_copy_KV,
-                    tKVcKV=tKVcKV,
-                    tKgK=tKgK,
-                    tVgV=tVgV,
-                    tKsK=tKsK0,
-                    tVsV=tVsV0,
-                    tKVpKV=tKVpKV,
-                    next_k_block=n_block0 - 3,
-                )
-
-                n_block1 = n_block0 - 1
-                if n_block1 >= 0:
-                    self._compute_one_block(
-                        is_consumer,
-                        is_producer,
-                        n_block1,
-                        thr_mma,
-                        tiled_mma,
-                        tSrQ,
-                        tSrK1,
-                        tOrVt1,
-                        acc_O,
-                        smem_tiled_copy_Q,
-                        smem_tiled_copy_K,
-                        smem_tiled_copy_V,
-                        tSsQ,
-                        tSrQ_view,
-                        tSsK1,
-                        tSrK1_view,
-                        tOsVt1,
-                        tOrVt1_view,
-                        row_max,
-                        row_sum,
-                        softmax_scale_log2,
-                        mQ,
-                        mK,
-                        batch_size,
-                        num_head,
-                        m_block,
-                        is_first_n_block=False,
-                        in_mask_steps=False,
-                        gmem_tiled_copy_KV=gmem_tiled_copy_KV,
-                        tKVcKV=tKVcKV,
-                        tKgK=tKgK,
-                        tVgV=tVgV,
-                        tKsK=tKsK1,
-                        tVsV=tVsV1,
-                        tKVpKV=tKVpKV,
-                        next_k_block=n_block1 - 3,
-                    )
-
-                n_block2 = n_block0 - 2
-                if n_block2 >= 0:
-                    self._compute_one_block(
-                        is_consumer,
-                        is_producer,
-                        n_block2,
-                        thr_mma,
-                        tiled_mma,
-                        tSrQ,
-                        tSrK2,
-                        tOrVt2,
-                        acc_O,
-                        smem_tiled_copy_Q,
-                        smem_tiled_copy_K,
-                        smem_tiled_copy_V,
-                        tSsQ,
-                        tSrQ_view,
-                        tSsK2,
-                        tSrK2_view,
-                        tOsVt2,
-                        tOrVt2_view,
-                        row_max,
-                        row_sum,
-                        softmax_scale_log2,
-                        mQ,
-                        mK,
-                        batch_size,
-                        num_head,
-                        m_block,
-                        is_first_n_block=False,
-                        in_mask_steps=False,
-                        gmem_tiled_copy_KV=gmem_tiled_copy_KV,
-                        tKVcKV=tKVcKV,
-                        tKgK=tKgK,
-                        tVgV=tVgV,
-                        tKsK=tKsK2,
-                        tVsV=tVsV2,
-                        tKVpKV=tKVpKV,
-                        next_k_block=n_block2 - 3,
+                        next_k_block=n_block - self._num_stages_kv,
                     )
 
         if is_consumer:
