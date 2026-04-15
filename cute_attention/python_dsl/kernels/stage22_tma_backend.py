@@ -438,14 +438,13 @@ class Stage22FlashAttentionTmaExperimental:
         acc_S = cute.make_rmem_tensor(acc_shape_S, cutlass.Float32)
         acc_S.fill(0.0)
 
-        for k_idx in cutlass.range_constexpr(cute.size(tSrQ.shape[3])):
-            cute.gemm(
-                qk_tiled_mma,
-                acc_S,
-                tSrQ[None, None, None, k_idx],
-                tSrK[None, None, None, k_idx],
-                acc_S,
-            )
+        cute.gemm(
+            qk_tiled_mma,
+            acc_S,
+            tSrQ[None, None, None, 0],
+            tSrK,
+            acc_S,
+        )
 
         self.softmax_rescale_O(
             acc_S,
@@ -480,14 +479,13 @@ class Stage22FlashAttentionTmaExperimental:
             ),
         )
         tOrS = cute.make_tensor(rP.iterator, rP_mma_view)
-        for k_idx in cutlass.range_constexpr(cute.size(tOrS.shape[3])):
-            cute.gemm(
-                pv_tiled_mma,
-                acc_O,
-                tOrS[None, None, None, k_idx],
-                tOrVt[None, None, None, k_idx],
-                acc_O,
-            )
+        cute.gemm(
+            pv_tiled_mma,
+            acc_O,
+            tOrS,
+            tOrVt,
+            acc_O,
+        )
 
     def _partition_tma_kv(self, tma_atom, tma_tensor, sTensor, gTensor):
         s_for_tma_partition = cute.group_modes(sTensor, 0, 2)
