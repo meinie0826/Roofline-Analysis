@@ -292,16 +292,28 @@ class Stage22FlashAttentionTma:
             cutlass.Float32,
         )
         tCcC = thr_mma.partition_C(cute.make_identity_tensor(tile_shape))
-        thr_tmem_load = tcgen05.make_tmem_copy(tmem_load_atom, acc_tmem).get_slice(
+        acc_tmem_flat_layout = cute.make_layout(
+            (
+                acc_tmem.layout.shape[0],
+                acc_tmem.layout.shape[1] * acc_tmem.layout.shape[2],
+            ),
+            stride=(
+                acc_tmem.layout.stride[0],
+                acc_tmem.layout.stride[1],
+            ),
+        )
+        acc_tmem_flat = cute.make_tensor(acc_tmem.iterator, acc_tmem_flat_layout)
+        tCcC_flat = cute.make_tensor(tCcC.iterator, acc_tmem_flat_layout)
+        thr_tmem_load = tcgen05.make_tmem_copy(tmem_load_atom, acc_tmem_flat).get_slice(
             consumer_slice_idx
         )
-        tCtC = thr_tmem_load.partition_S(acc_tmem)
-        acc_rmem = cute.make_fragment(
-            thr_tmem_load.partition_D(tCcC).shape,
+        tCtC = thr_tmem_load.partition_S(acc_tmem_flat)
+        acc_rmem_flat = cute.make_fragment(
+            thr_tmem_load.partition_D(tCcC_flat).shape,
             cutlass.Float32,
         )
-        cute.copy(thr_tmem_load, tCtC, acc_rmem)
-        return acc_rmem
+        cute.copy(thr_tmem_load, tCtC, acc_rmem_flat)
+        return cute.make_tensor(acc_rmem_flat.iterator, tCcC.layout)
 
     def _threadquad_reduce(self, val: cutlass.Float32, op):
         val = op(val, cute.arch.shuffle_sync_bfly(val, offset=2, mask=-1, mask_and_clamp=31))
