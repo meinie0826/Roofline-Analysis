@@ -24,6 +24,7 @@ from .stage17_multistage import stage17_forward
 from .stage18_sm90_features import stage18_forward
 from .stage19_warpgroup import stage19_forward
 from .stage20_warpspec import stage20_forward
+from .stage21_state_machine import stage21_forward
 from .stage0_naive import stage0_forward
 from .stage3_blocked import stage3_forward
 
@@ -170,6 +171,12 @@ STAGES: dict[str, StageDefinition] = {
         name="stage20",
         description="Our own CuTe stage: aggressive warpspec backend with a circular-buffer steady-state mainloop.",
         implementation=stage20_forward,
+        backend="own-cute-dsl",
+    ),
+    "stage21": StageDefinition(
+        name="stage21",
+        description="Our own CuTe stage: explicit producer/consumer state-machine backend built from the stage18 mainline.",
+        implementation=stage21_forward,
         backend="own-cute-dsl",
     ),
 }
