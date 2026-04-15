@@ -196,80 +196,81 @@ if HAS_CUTE:
                 ),
             )
 
+            gmem_thr_copy_Q = gmem_tiled_copy_Q.get_slice(consumer_tidx)
+            tQgQ = gmem_thr_copy_Q.partition_S(gQ)
+            tQsQ = gmem_thr_copy_Q.partition_D(sQ)
+            mcQ = cute.make_identity_tensor(mQ.layout.shape)
+            cQ = cute.local_tile(mcQ[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
+            tQcQ = gmem_thr_copy_Q.partition_S(cQ)
+            tQpQ = cute.make_rmem_tensor(
+                cute.make_layout(
+                    (tQsQ.shape[0][1], cute.size(tQsQ, mode=[1]), cute.size(tQsQ, mode=[2])),
+                    stride=(cute.size(tQsQ, mode=[2]), 0, 1),
+                ),
+                cutlass.Boolean,
+            )
+            for rest_v in cutlass.range_constexpr(tQpQ.shape[0]):
+                for rest_k in cutlass.range_constexpr(tQpQ.shape[2]):
+                    tQpQ[rest_v, 0, rest_k] = cute.elem_less(tQcQ[(0, rest_v), 0, rest_k][3], mQ.layout.shape[3])
+
+            thr_mma = tiled_mma.get_slice(consumer_tidx)
+            tSrQ = thr_mma.make_fragment_A(thr_mma.partition_A(sQ))
+            tSrK = thr_mma.make_fragment_B(thr_mma.partition_B(sK))
+            tOrVt = thr_mma.make_fragment_B(thr_mma.partition_B(sVt))
+            acc_shape_O = thr_mma.partition_shape_C((self._m_block_size, self._head_dim_padded))
+            acc_O = cute.make_rmem_tensor(acc_shape_O, cutlass.Float32)
+            acc_O.fill(0.0)
+
+            smem_copy_atom_Q = cute.make_copy_atom(warp.LdMatrix8x8x16bOp(transpose=False, num_matrices=4), self._dtype)
+            smem_copy_atom_K = cute.make_copy_atom(warp.LdMatrix8x8x16bOp(transpose=False, num_matrices=4), self._dtype)
+            smem_copy_atom_V = cute.make_copy_atom(warp.LdMatrix8x8x16bOp(transpose=True, num_matrices=4), self._dtype)
+            smem_tiled_copy_Q = cute.make_tiled_copy_A(smem_copy_atom_Q, tiled_mma)
+            smem_tiled_copy_K = cute.make_tiled_copy_B(smem_copy_atom_K, tiled_mma)
+            smem_tiled_copy_V = cute.make_tiled_copy_B(smem_copy_atom_V, tiled_mma)
+
+            smem_thr_copy_Q = smem_tiled_copy_Q.get_slice(consumer_tidx)
+            smem_thr_copy_K = smem_tiled_copy_K.get_slice(consumer_tidx)
+            smem_thr_copy_V = smem_tiled_copy_V.get_slice(consumer_tidx)
+
+            tSsQ = smem_thr_copy_Q.partition_S(sQ)
+            tSrQ_copy_view = smem_thr_copy_Q.retile(tSrQ)
+            tSsK = smem_thr_copy_K.partition_S(sK)
+            tSrK_copy_view = smem_thr_copy_K.retile(tSrK)
+            tOsVt = smem_thr_copy_V.partition_S(sVt)
+            tOrVt_copy_view = smem_thr_copy_V.retile(tOrVt)
+
+            row_max = cute.make_rmem_tensor((acc_O.shape[0][0] * acc_O.shape[1]), cutlass.Float32)
+            row_sum = cute.make_rmem_tensor((acc_O.shape[0][0] * acc_O.shape[1]), cutlass.Float32)
+            row_max.fill(-cutlass.Float32.inf)
+            row_sum.fill(0.0)
+
+            gmem_thr_copy_KV = gmem_tiled_copy_KV.get_slice(producer_tidx)
+            tKgK = gmem_thr_copy_KV.partition_S(gK)
+            tKsK = gmem_thr_copy_KV.partition_D(sK)
+            tVgV = gmem_thr_copy_KV.partition_S(gV)
+            tVsV = gmem_thr_copy_KV.partition_D(sV)
+            mcKV = cute.make_identity_tensor(mK.layout.shape)
+            cKV = cute.local_tile(mcKV[batch_size, None, num_head, None], (self._n_block_size, self._head_dim_padded), (start_n_block, 0))
+            tKVcKV = gmem_thr_copy_KV.partition_S(cKV)
+            tKVpKV = cute.make_rmem_tensor(
+                cute.make_layout(
+                    (tKsK.shape[0][1], cute.size(tKsK, mode=[1]), cute.size(tKsK, mode=[2])),
+                    stride=(cute.size(tKsK, mode=[2]), 0, 1),
+                ),
+                cutlass.Boolean,
+            )
+            for rest_v in cutlass.range_constexpr(tKVpKV.shape[0]):
+                for rest_k in cutlass.range_constexpr(tKVpKV.shape[2]):
+                    tKVpKV[rest_v, 0, rest_k] = cute.elem_less(tKVcKV[(0, rest_v), 0, rest_k][3], mK.layout.shape[3])
+
             if is_consumer:
-                gmem_thr_copy_Q = gmem_tiled_copy_Q.get_slice(consumer_tidx)
-                tQgQ = gmem_thr_copy_Q.partition_S(gQ)
-                tQsQ = gmem_thr_copy_Q.partition_D(sQ)
-                mcQ = cute.make_identity_tensor(mQ.layout.shape)
-                cQ = cute.local_tile(mcQ[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
-                tQcQ = gmem_thr_copy_Q.partition_S(cQ)
-                tQpQ = cute.make_rmem_tensor(
-                    cute.make_layout(
-                        (tQsQ.shape[0][1], cute.size(tQsQ, mode=[1]), cute.size(tQsQ, mode=[2])),
-                        stride=(cute.size(tQsQ, mode=[2]), 0, 1),
-                    ),
-                    cutlass.Boolean,
-                )
-                for rest_v in cutlass.range_constexpr(tQpQ.shape[0]):
-                    for rest_k in cutlass.range_constexpr(tQpQ.shape[2]):
-                        tQpQ[rest_v, 0, rest_k] = cute.elem_less(tQcQ[(0, rest_v), 0, rest_k][3], mQ.layout.shape[3])
                 for m in cutlass.range_constexpr(cute.size(tQsQ.shape[1])):
                     if cute.elem_less(tQcQ[0, m, 0][1], mQ.layout.shape[1]):
                         cute.copy(gmem_tiled_copy_Q, tQgQ[None, m, None], tQsQ[None, m, None], pred=tQpQ[None, m, None])
                     else:
                         tQsQ[None, m, None].fill(0)
                 cute.arch.cp_async_commit_group()
-
-                thr_mma = tiled_mma.get_slice(consumer_tidx)
-                tSrQ = thr_mma.make_fragment_A(thr_mma.partition_A(sQ))
-                tSrK = thr_mma.make_fragment_B(thr_mma.partition_B(sK))
-                tOrVt = thr_mma.make_fragment_B(thr_mma.partition_B(sVt))
-                acc_shape_O = thr_mma.partition_shape_C((self._m_block_size, self._head_dim_padded))
-                acc_O = cute.make_rmem_tensor(acc_shape_O, cutlass.Float32)
-                acc_O.fill(0.0)
-
-                smem_copy_atom_Q = cute.make_copy_atom(warp.LdMatrix8x8x16bOp(transpose=False, num_matrices=4), self._dtype)
-                smem_copy_atom_K = cute.make_copy_atom(warp.LdMatrix8x8x16bOp(transpose=False, num_matrices=4), self._dtype)
-                smem_copy_atom_V = cute.make_copy_atom(warp.LdMatrix8x8x16bOp(transpose=True, num_matrices=4), self._dtype)
-                smem_tiled_copy_Q = cute.make_tiled_copy_A(smem_copy_atom_Q, tiled_mma)
-                smem_tiled_copy_K = cute.make_tiled_copy_B(smem_copy_atom_K, tiled_mma)
-                smem_tiled_copy_V = cute.make_tiled_copy_B(smem_copy_atom_V, tiled_mma)
-
-                smem_thr_copy_Q = smem_tiled_copy_Q.get_slice(consumer_tidx)
-                smem_thr_copy_K = smem_tiled_copy_K.get_slice(consumer_tidx)
-                smem_thr_copy_V = smem_tiled_copy_V.get_slice(consumer_tidx)
-
-                tSsQ = smem_thr_copy_Q.partition_S(sQ)
-                tSrQ_copy_view = smem_thr_copy_Q.retile(tSrQ)
-                tSsK = smem_thr_copy_K.partition_S(sK)
-                tSrK_copy_view = smem_thr_copy_K.retile(tSrK)
-                tOsVt = smem_thr_copy_V.partition_S(sVt)
-                tOrVt_copy_view = smem_thr_copy_V.retile(tOrVt)
-
-                row_max = cute.make_rmem_tensor((acc_O.shape[0][0] * acc_O.shape[1]), cutlass.Float32)
-                row_sum = cute.make_rmem_tensor((acc_O.shape[0][0] * acc_O.shape[1]), cutlass.Float32)
-                row_max.fill(-cutlass.Float32.inf)
-                row_sum.fill(0.0)
-
             else:
-                gmem_thr_copy_KV = gmem_tiled_copy_KV.get_slice(producer_tidx)
-                tKgK = gmem_thr_copy_KV.partition_S(gK)
-                tKsK = gmem_thr_copy_KV.partition_D(sK)
-                tVgV = gmem_thr_copy_KV.partition_S(gV)
-                tVsV = gmem_thr_copy_KV.partition_D(sV)
-                mcKV = cute.make_identity_tensor(mK.layout.shape)
-                cKV = cute.local_tile(mcKV[batch_size, None, num_head, None], (self._n_block_size, self._head_dim_padded), (start_n_block, 0))
-                tKVcKV = gmem_thr_copy_KV.partition_S(cKV)
-                tKVpKV = cute.make_rmem_tensor(
-                    cute.make_layout(
-                        (tKsK.shape[0][1], cute.size(tKsK, mode=[1]), cute.size(tKsK, mode=[2])),
-                        stride=(cute.size(tKsK, mode=[2]), 0, 1),
-                    ),
-                    cutlass.Boolean,
-                )
-                for rest_v in cutlass.range_constexpr(tKVpKV.shape[0]):
-                    for rest_k in cutlass.range_constexpr(tKVpKV.shape[2]):
-                        tKVpKV[rest_v, 0, rest_k] = cute.elem_less(tKVcKV[(0, rest_v), 0, rest_k][3], mK.layout.shape[3])
                 for n in cutlass.range_constexpr(cute.size(tKsK.shape[1])):
                     if cute.elem_less(tKVcKV[0, n, 0][1], mK.layout.shape[1]):
                         cute.copy(gmem_tiled_copy_KV, tKgK[None, n, None, start_n_block], tKsK[None, n, None], pred=tKVpKV[None, n, None])
