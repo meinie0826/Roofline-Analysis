@@ -109,7 +109,8 @@ if HAS_CUTE:
                 stride=(tQKV_shape_dim_1, 1),
             )
             vQKV_layout = cute.make_layout((1, async_copy_elems))
-            producer_threads = 32
+            producer_warps = 2
+            producer_threads = producer_warps * 32
             tKV_layout = cute.make_layout(
                 (producer_threads // tQKV_shape_dim_1, tQKV_shape_dim_1),
                 stride=(tQKV_shape_dim_1, 1),
@@ -170,7 +171,7 @@ if HAS_CUTE:
         ):
             tidx, _, _ = cute.arch.thread_idx()
             warp_idx = tidx // 32
-            producer_lane = tidx % 32
+            is_producer = warp_idx < 2
             m_block, batch_size, num_head = cute.arch.block_idx()
 
             n_block_max = cute.ceil_div(mK.shape[1], self._n_block_size)
@@ -205,7 +206,7 @@ if HAS_CUTE:
             )
 
             gmem_thr_copy_Q = gmem_tiled_copy_Q.get_slice(tidx)
-            gmem_thr_copy_KV = gmem_tiled_copy_KV.get_slice(producer_lane)
+            gmem_thr_copy_KV = gmem_tiled_copy_KV.get_slice(tidx % 64)
             tQgQ = gmem_thr_copy_Q.partition_S(gQ)
             tQsQ = gmem_thr_copy_Q.partition_D(sQ)
             tKgK = gmem_thr_copy_KV.partition_S(gK)
@@ -274,7 +275,7 @@ if HAS_CUTE:
                     cute.copy(gmem_tiled_copy_Q, tQgQ[None, m, None], tQsQ[None, m, None], pred=tQpQ[None, m, None])
                 else:
                     tQsQ[None, m, None].fill(0)
-            if warp_idx == 0:
+            if is_producer:
                 for n in cutlass.range_constexpr(cute.size(tKsK0.shape[1])):
                     if cute.elem_less(tKVcKV[0, n, 0][1], mK.layout.shape[1]):
                         cute.copy(gmem_tiled_copy_KV, tKgK[None, n, None, n_block], tKsK0[None, n, None], pred=tKVpKV[None, n, None])
@@ -367,7 +368,7 @@ if HAS_CUTE:
             first_pipeline_block = n_block_max - mask_steps - 1
             second_pipeline_block = first_pipeline_block - 1
             if second_pipeline_block >= 0:
-                if warp_idx == 0:
+                if is_producer:
                     cute.copy(
                         gmem_copy_params1.gmem_tiled_copy_KV,
                         gmem_copy_params1.tKgK[None, None, None, second_pipeline_block],
@@ -448,6 +449,7 @@ if HAS_CUTE:
             in_mask_steps: cutlass.Constexpr,
             warp_idx: cutlass.Int32,
         ):
+            is_producer = warp_idx < 2
             acc_shape_S = mma_params.thr_mma.partition_shape_C((self._m_block_size, self._n_block_size))
             acc_S = cute.make_rmem_tensor(acc_shape_S, cutlass.Float32)
             acc_S.fill(0.0)
@@ -456,7 +458,7 @@ if HAS_CUTE:
             self.cta_sync_barrier.arrive_and_wait()
 
             if is_first_n_block:
-                if warp_idx == 0:
+                if is_producer:
                     for n in cutlass.range_constexpr(cute.size(gmem_copy_params.tVsV.shape[1])):
                         if cute.elem_less(gmem_copy_params.tKVcKV[0, n, 0][1], basic_params.mK.layout.shape[1]):
                             cute.copy(
@@ -468,14 +470,14 @@ if HAS_CUTE:
                         else:
                             gmem_copy_params.tVsV[None, n, None].fill(0.0)
             else:
-                if warp_idx == 0:
+                if is_producer:
                     cute.copy(
                         gmem_copy_params.gmem_tiled_copy_KV,
                         gmem_copy_params.tVgV[None, None, None, basic_params.n_block],
                         gmem_copy_params.tVsV,
                         pred=gmem_copy_params.tKVpKV,
                     )
-            if warp_idx == 0:
+            if is_producer:
                 cute.arch.cp_async_commit_group()
 
             cute.copy(smem_copy_params.smem_tiled_copy_Q, smem_copy_params.tSsQ[None, None, 0], smem_copy_params.tSrQ_copy_view[None, None, 0])
@@ -489,7 +491,7 @@ if HAS_CUTE:
             cute.arch.cp_async_wait_group(0)
             self.cta_sync_barrier.arrive_and_wait()
             if basic_params.n_block > 0:
-                if warp_idx == 0:
+                if is_producer:
                     cute.copy(
                         gmem_copy_params.gmem_tiled_copy_KV,
                         gmem_copy_params.tKgK[None, None, None, basic_params.n_block - 1],
@@ -533,6 +535,7 @@ if HAS_CUTE:
             next_k_block: cutlass.Int32,
             warp_idx: cutlass.Int32,
         ):
+            is_producer = warp_idx < 2
             acc_shape_S = mma_params.thr_mma.partition_shape_C((self._m_block_size, self._n_block_size))
             acc_S = cute.make_rmem_tensor(acc_shape_S, cutlass.Float32)
             acc_S.fill(0.0)
@@ -540,7 +543,7 @@ if HAS_CUTE:
             cute.arch.cp_async_wait_group(0)
             self.cta_sync_barrier.arrive_and_wait()
 
-            if warp_idx == 0:
+            if is_producer:
                 cute.copy(
                     gmem_copy_params.gmem_tiled_copy_KV,
                     gmem_copy_params.tVgV[None, None, None, basic_params.n_block],
@@ -558,7 +561,7 @@ if HAS_CUTE:
                 cute.gemm(mma_params.tiled_mma, acc_S, mma_params.tSrQ[None, None, k], mma_params.tSrK[None, None, k], acc_S)
 
             if next_k_block >= 0:
-                if warp_idx == 0:
+                if is_producer:
                     cute.copy(
                         gmem_copy_params.gmem_tiled_copy_KV,
                         gmem_copy_params.tKgK[None, None, None, next_k_block],
