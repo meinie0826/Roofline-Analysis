@@ -98,13 +98,13 @@ if HAS_CUTE:
                 "sK1": cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024],
                 "sV1": cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024],
             }
-            if self._num_stages_kv >= 3:
+            if cutlass.const_expr(self._num_stages_kv >= 3):
                 shared_annotations["sK2"] = cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
                 shared_annotations["sV2"] = cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
-            if self._num_stages_kv >= 4:
+            if cutlass.const_expr(self._num_stages_kv >= 4):
                 shared_annotations["sK3"] = cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
                 shared_annotations["sV3"] = cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
-            if self._num_stages_kv >= 5:
+            if cutlass.const_expr(self._num_stages_kv >= 5):
                 shared_annotations["sK4"] = cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
                 shared_annotations["sV4"] = cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
 
@@ -200,12 +200,12 @@ if HAS_CUTE:
             sK1 = storage.sK1.get_tensor(sKV_layout)
             sV0 = storage.sV0.get_tensor(sKV_layout)
             sV1 = storage.sV1.get_tensor(sKV_layout)
-            sK2 = storage.sK2.get_tensor(sKV_layout) if self._num_stages_kv >= 3 else None
-            sK3 = storage.sK3.get_tensor(sKV_layout) if self._num_stages_kv >= 4 else None
-            sK4 = storage.sK4.get_tensor(sKV_layout) if self._num_stages_kv >= 5 else None
-            sV2 = storage.sV2.get_tensor(sKV_layout) if self._num_stages_kv >= 3 else None
-            sV3 = storage.sV3.get_tensor(sKV_layout) if self._num_stages_kv >= 4 else None
-            sV4 = storage.sV4.get_tensor(sKV_layout) if self._num_stages_kv >= 5 else None
+            sK2 = storage.sK2.get_tensor(sKV_layout) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+            sK3 = storage.sK3.get_tensor(sKV_layout) if cutlass.const_expr(self._num_stages_kv >= 4) else None
+            sK4 = storage.sK4.get_tensor(sKV_layout) if cutlass.const_expr(self._num_stages_kv >= 5) else None
+            sV2 = storage.sV2.get_tensor(sKV_layout) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+            sV3 = storage.sV3.get_tensor(sKV_layout) if cutlass.const_expr(self._num_stages_kv >= 4) else None
+            sV4 = storage.sV4.get_tensor(sKV_layout) if cutlass.const_expr(self._num_stages_kv >= 5) else None
             sVt0 = cute.composition(
                 sV0,
                 cute.make_layout(
@@ -228,7 +228,7 @@ if HAS_CUTE:
                         stride=(self._n_block_size, 1),
                     ),
                 )
-                if self._num_stages_kv >= 3
+                if cutlass.const_expr(self._num_stages_kv >= 3)
                 else None
             )
             sVt3 = (
@@ -239,7 +239,7 @@ if HAS_CUTE:
                         stride=(self._n_block_size, 1),
                     ),
                 )
-                if self._num_stages_kv >= 4
+                if cutlass.const_expr(self._num_stages_kv >= 4)
                 else None
             )
             sVt4 = (
@@ -250,7 +250,7 @@ if HAS_CUTE:
                         stride=(self._n_block_size, 1),
                     ),
                 )
-                if self._num_stages_kv >= 5
+                if cutlass.const_expr(self._num_stages_kv >= 5)
                 else None
             )
 
@@ -263,12 +263,12 @@ if HAS_CUTE:
             tKsK1 = gmem_thr_copy_QKV.partition_D(sK1)
             tVsV0 = gmem_thr_copy_QKV.partition_D(sV0)
             tVsV1 = gmem_thr_copy_QKV.partition_D(sV1)
-            tKsK2 = gmem_thr_copy_QKV.partition_D(sK2) if self._num_stages_kv >= 3 else None
-            tKsK3 = gmem_thr_copy_QKV.partition_D(sK3) if self._num_stages_kv >= 4 else None
-            tKsK4 = gmem_thr_copy_QKV.partition_D(sK4) if self._num_stages_kv >= 5 else None
-            tVsV2 = gmem_thr_copy_QKV.partition_D(sV2) if self._num_stages_kv >= 3 else None
-            tVsV3 = gmem_thr_copy_QKV.partition_D(sV3) if self._num_stages_kv >= 4 else None
-            tVsV4 = gmem_thr_copy_QKV.partition_D(sV4) if self._num_stages_kv >= 5 else None
+            tKsK2 = gmem_thr_copy_QKV.partition_D(sK2) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+            tKsK3 = gmem_thr_copy_QKV.partition_D(sK3) if cutlass.const_expr(self._num_stages_kv >= 4) else None
+            tKsK4 = gmem_thr_copy_QKV.partition_D(sK4) if cutlass.const_expr(self._num_stages_kv >= 5) else None
+            tVsV2 = gmem_thr_copy_QKV.partition_D(sV2) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+            tVsV3 = gmem_thr_copy_QKV.partition_D(sV3) if cutlass.const_expr(self._num_stages_kv >= 4) else None
+            tVsV4 = gmem_thr_copy_QKV.partition_D(sV4) if cutlass.const_expr(self._num_stages_kv >= 5) else None
 
             thr_mma = tiled_mma.get_slice(tidx)
             tSrQ = thr_mma.make_fragment_A(thr_mma.partition_A(sQ))
@@ -276,12 +276,12 @@ if HAS_CUTE:
             tSrK1 = thr_mma.make_fragment_B(thr_mma.partition_B(sK1))
             tOrVt0 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt0))
             tOrVt1 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt1))
-            tSrK2 = thr_mma.make_fragment_B(thr_mma.partition_B(sK2)) if self._num_stages_kv >= 3 else None
-            tSrK3 = thr_mma.make_fragment_B(thr_mma.partition_B(sK3)) if self._num_stages_kv >= 4 else None
-            tSrK4 = thr_mma.make_fragment_B(thr_mma.partition_B(sK4)) if self._num_stages_kv >= 5 else None
-            tOrVt2 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt2)) if self._num_stages_kv >= 3 else None
-            tOrVt3 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt3)) if self._num_stages_kv >= 4 else None
-            tOrVt4 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt4)) if self._num_stages_kv >= 5 else None
+            tSrK2 = thr_mma.make_fragment_B(thr_mma.partition_B(sK2)) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+            tSrK3 = thr_mma.make_fragment_B(thr_mma.partition_B(sK3)) if cutlass.const_expr(self._num_stages_kv >= 4) else None
+            tSrK4 = thr_mma.make_fragment_B(thr_mma.partition_B(sK4)) if cutlass.const_expr(self._num_stages_kv >= 5) else None
+            tOrVt2 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt2)) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+            tOrVt3 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt3)) if cutlass.const_expr(self._num_stages_kv >= 4) else None
+            tOrVt4 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt4)) if cutlass.const_expr(self._num_stages_kv >= 5) else None
             acc_shape_O = thr_mma.partition_shape_C((self._m_block_size, self._head_dim_padded))
             acc_O = cute.make_rmem_tensor(acc_shape_O, cutlass.Float32)
             acc_O.fill(0.0)
@@ -307,18 +307,18 @@ if HAS_CUTE:
             tOsVt1 = smem_thr_copy_V.partition_S(sVt1)
             tOrVt0_copy_view = smem_thr_copy_V.retile(tOrVt0)
             tOrVt1_copy_view = smem_thr_copy_V.retile(tOrVt1)
-            tSsK2 = smem_thr_copy_K.partition_S(sK2) if self._num_stages_kv >= 3 else None
-            tSsK3 = smem_thr_copy_K.partition_S(sK3) if self._num_stages_kv >= 4 else None
-            tSsK4 = smem_thr_copy_K.partition_S(sK4) if self._num_stages_kv >= 5 else None
-            tSrK2_copy_view = smem_thr_copy_K.retile(tSrK2) if self._num_stages_kv >= 3 else None
-            tSrK3_copy_view = smem_thr_copy_K.retile(tSrK3) if self._num_stages_kv >= 4 else None
-            tSrK4_copy_view = smem_thr_copy_K.retile(tSrK4) if self._num_stages_kv >= 5 else None
-            tOsVt2 = smem_thr_copy_V.partition_S(sVt2) if self._num_stages_kv >= 3 else None
-            tOsVt3 = smem_thr_copy_V.partition_S(sVt3) if self._num_stages_kv >= 4 else None
-            tOsVt4 = smem_thr_copy_V.partition_S(sVt4) if self._num_stages_kv >= 5 else None
-            tOrVt2_copy_view = smem_thr_copy_V.retile(tOrVt2) if self._num_stages_kv >= 3 else None
-            tOrVt3_copy_view = smem_thr_copy_V.retile(tOrVt3) if self._num_stages_kv >= 4 else None
-            tOrVt4_copy_view = smem_thr_copy_V.retile(tOrVt4) if self._num_stages_kv >= 5 else None
+            tSsK2 = smem_thr_copy_K.partition_S(sK2) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+            tSsK3 = smem_thr_copy_K.partition_S(sK3) if cutlass.const_expr(self._num_stages_kv >= 4) else None
+            tSsK4 = smem_thr_copy_K.partition_S(sK4) if cutlass.const_expr(self._num_stages_kv >= 5) else None
+            tSrK2_copy_view = smem_thr_copy_K.retile(tSrK2) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+            tSrK3_copy_view = smem_thr_copy_K.retile(tSrK3) if cutlass.const_expr(self._num_stages_kv >= 4) else None
+            tSrK4_copy_view = smem_thr_copy_K.retile(tSrK4) if cutlass.const_expr(self._num_stages_kv >= 5) else None
+            tOsVt2 = smem_thr_copy_V.partition_S(sVt2) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+            tOsVt3 = smem_thr_copy_V.partition_S(sVt3) if cutlass.const_expr(self._num_stages_kv >= 4) else None
+            tOsVt4 = smem_thr_copy_V.partition_S(sVt4) if cutlass.const_expr(self._num_stages_kv >= 5) else None
+            tOrVt2_copy_view = smem_thr_copy_V.retile(tOrVt2) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+            tOrVt3_copy_view = smem_thr_copy_V.retile(tOrVt3) if cutlass.const_expr(self._num_stages_kv >= 4) else None
+            tOrVt4_copy_view = smem_thr_copy_V.retile(tOrVt4) if cutlass.const_expr(self._num_stages_kv >= 5) else None
 
             mcQ = cute.make_identity_tensor(mQ.layout.shape)
             mcKV = cute.make_identity_tensor(mK.layout.shape)
@@ -365,17 +365,17 @@ if HAS_CUTE:
             mma_params1 = SimpleNamespace(thr_mma=thr_mma, tiled_mma=tiled_mma, tSrQ=tSrQ, tSrK=tSrK1, tOrVt=tOrVt1, acc_O=acc_O)
             mma_params2 = (
                 SimpleNamespace(thr_mma=thr_mma, tiled_mma=tiled_mma, tSrQ=tSrQ, tSrK=tSrK2, tOrVt=tOrVt2, acc_O=acc_O)
-                if self._num_stages_kv >= 3
+                if cutlass.const_expr(self._num_stages_kv >= 3)
                 else None
             )
             mma_params3 = (
                 SimpleNamespace(thr_mma=thr_mma, tiled_mma=tiled_mma, tSrQ=tSrQ, tSrK=tSrK3, tOrVt=tOrVt3, acc_O=acc_O)
-                if self._num_stages_kv >= 4
+                if cutlass.const_expr(self._num_stages_kv >= 4)
                 else None
             )
             mma_params4 = (
                 SimpleNamespace(thr_mma=thr_mma, tiled_mma=tiled_mma, tSrQ=tSrQ, tSrK=tSrK4, tOrVt=tOrVt4, acc_O=acc_O)
-                if self._num_stages_kv >= 5
+                if cutlass.const_expr(self._num_stages_kv >= 5)
                 else None
             )
             gmem_copy_params0 = SimpleNamespace(
@@ -406,7 +406,7 @@ if HAS_CUTE:
                     tVsV=tVsV2,
                     tKVpKV=tKVpKV,
                 )
-                if self._num_stages_kv >= 3
+                if cutlass.const_expr(self._num_stages_kv >= 3)
                 else None
             )
             gmem_copy_params3 = (
@@ -419,7 +419,7 @@ if HAS_CUTE:
                     tVsV=tVsV3,
                     tKVpKV=tKVpKV,
                 )
-                if self._num_stages_kv >= 4
+                if cutlass.const_expr(self._num_stages_kv >= 4)
                 else None
             )
             gmem_copy_params4 = (
@@ -432,7 +432,7 @@ if HAS_CUTE:
                     tVsV=tVsV4,
                     tKVpKV=tKVpKV,
                 )
-                if self._num_stages_kv >= 5
+                if cutlass.const_expr(self._num_stages_kv >= 5)
                 else None
             )
             smem_copy_params0 = SimpleNamespace(
@@ -469,7 +469,7 @@ if HAS_CUTE:
                     tOsVt=tOsVt2,
                     tOrVt_copy_view=tOrVt2_copy_view,
                 )
-                if self._num_stages_kv >= 3
+                if cutlass.const_expr(self._num_stages_kv >= 3)
                 else None
             )
             smem_copy_params3 = (
@@ -484,7 +484,7 @@ if HAS_CUTE:
                     tOsVt=tOsVt3,
                     tOrVt_copy_view=tOrVt3_copy_view,
                 )
-                if self._num_stages_kv >= 4
+                if cutlass.const_expr(self._num_stages_kv >= 4)
                 else None
             )
             smem_copy_params4 = (
@@ -499,7 +499,7 @@ if HAS_CUTE:
                     tOsVt=tOsVt4,
                     tOrVt_copy_view=tOrVt4_copy_view,
                 )
-                if self._num_stages_kv >= 5
+                if cutlass.const_expr(self._num_stages_kv >= 5)
                 else None
             )
             softmax_params = SimpleNamespace(row_max=row_max, row_sum=row_sum, softmax_scale_log2=softmax_scale_log2)
@@ -534,7 +534,7 @@ if HAS_CUTE:
                     )
 
             first_pipeline_block = n_block_max - mask_steps - 1
-            if self._num_stages_kv >= 2:
+            if cutlass.const_expr(self._num_stages_kv >= 2):
                 second_pipeline_block = first_pipeline_block - 1
                 if second_pipeline_block >= 0:
                     cute.copy(
@@ -544,7 +544,7 @@ if HAS_CUTE:
                         pred=gmem_copy_params1.tKVpKV,
                     )
                     cute.arch.cp_async_commit_group()
-            if self._num_stages_kv >= 3:
+            if cutlass.const_expr(self._num_stages_kv >= 3):
                 third_pipeline_block = first_pipeline_block - 2
                 if third_pipeline_block >= 0:
                     cute.copy(
@@ -554,7 +554,7 @@ if HAS_CUTE:
                         pred=gmem_copy_params2.tKVpKV,
                     )
                     cute.arch.cp_async_commit_group()
-            if self._num_stages_kv >= 4:
+            if cutlass.const_expr(self._num_stages_kv >= 4):
                 fourth_pipeline_block = first_pipeline_block - 3
                 if fourth_pipeline_block >= 0:
                     cute.copy(
@@ -564,7 +564,7 @@ if HAS_CUTE:
                         pred=gmem_copy_params3.tKVpKV,
                     )
                     cute.arch.cp_async_commit_group()
-            if self._num_stages_kv >= 5:
+            if cutlass.const_expr(self._num_stages_kv >= 5):
                 fifth_pipeline_block = first_pipeline_block - 4
                 if fifth_pipeline_block >= 0:
                     cute.copy(
@@ -575,7 +575,7 @@ if HAS_CUTE:
                     )
                     cute.arch.cp_async_commit_group()
 
-            if self._num_stages_kv == 2:
+            if cutlass.const_expr(self._num_stages_kv == 2):
                 for n_tile in range(mask_steps, n_block_max, 2):
                     n_block = n_block_max - n_tile - 1
                     basic_params.n_block = n_block
@@ -599,7 +599,7 @@ if HAS_CUTE:
                             softmax_params,
                             next_k_block=n_block_alt - 2,
                         )
-            elif self._num_stages_kv == 3:
+            elif cutlass.const_expr(self._num_stages_kv == 3):
                 for n_tile in range(mask_steps, n_block_max, 3):
                     n_block = n_block_max - n_tile - 1
                     basic_params.n_block = n_block
@@ -635,7 +635,7 @@ if HAS_CUTE:
                             softmax_params,
                             next_k_block=n_block_2 - 3,
                         )
-            elif self._num_stages_kv == 4:
+            elif cutlass.const_expr(self._num_stages_kv == 4):
                 for n_tile in range(mask_steps, n_block_max, 4):
                     n_block = n_block_max - n_tile - 1
                     basic_params.n_block = n_block
@@ -683,7 +683,7 @@ if HAS_CUTE:
                             softmax_params,
                             next_k_block=n_block_3 - 4,
                         )
-            elif self._num_stages_kv == 5:
+            elif cutlass.const_expr(self._num_stages_kv == 5):
                 for n_tile in range(mask_steps, n_block_max, 5):
                     n_block = n_block_max - n_tile - 1
                     basic_params.n_block = n_block
