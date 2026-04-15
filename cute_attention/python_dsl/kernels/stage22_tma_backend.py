@@ -266,6 +266,105 @@ class Stage22FlashAttentionTmaExperimental:
             tOrVt_view,
         )
 
+    def _make_acc_tensor_mn_view(self, acc: cute.Tensor) -> cute.Tensor:
+        acc_layout_col_major = cute.make_layout(acc.layout.shape)
+        acc_layout_mn = cute.make_layout(
+            (
+                (acc_layout_col_major.shape[0][1], acc_layout_col_major.shape[1]),
+                (acc_layout_col_major.shape[0][0], acc_layout_col_major.shape[2]),
+            ),
+            stride=(
+                (acc_layout_col_major.stride[0][1], acc_layout_col_major.stride[1]),
+                (acc_layout_col_major.stride[0][0], acc_layout_col_major.stride[2]),
+            ),
+        )
+        acc_layout_mn = cute.composition(acc.layout, acc_layout_mn)
+        return cute.make_tensor(acc.iterator, acc_layout_mn)
+
+    def _threadquad_reduce(self, val: cutlass.Float32, op):
+        val = op(val, cute.arch.shuffle_sync_bfly(val, offset=2, mask=-1, mask_and_clamp=31))
+        val = op(val, cute.arch.shuffle_sync_bfly(val, offset=1, mask=-1, mask_and_clamp=31))
+        return val
+
+    def _threadquad_reduce_max(self, val: cutlass.Float32) -> cutlass.Float32:
+        return self._threadquad_reduce(val, lambda x, y: cute.arch.fmax(x, y))
+
+    def _threadquad_reduce_sum(self, val: cutlass.Float32) -> cutlass.Float32:
+        return self._threadquad_reduce(val, lambda x, y: x + y)
+
+    @cute.jit
+    def softmax_rescale_O(
+        self,
+        acc_S: cute.Tensor,
+        acc_O: cute.Tensor,
+        row_max: cute.Tensor,
+        row_sum: cute.Tensor,
+        softmax_scale_log2: cutlass.Float32,
+        mQ: cute.Tensor,
+        mK: cute.Tensor,
+        batch_size: cutlass.Int32,
+        num_head: cutlass.Int32,
+        m_block: cutlass.Int32,
+        n_block: cutlass.Int32,
+        is_first_n_block: cutlass.Constexpr,
+        in_mask_steps: cutlass.Constexpr,
+        thr_mma: cute.TiledMma,
+    ):
+        acc_S_mn = self._make_acc_tensor_mn_view(acc_S)
+        acc_O_mn = self._make_acc_tensor_mn_view(acc_O)
+        row_max_prev = None
+        if cutlass.const_expr(not is_first_n_block):
+            row_max_prev = cute.make_fragment_like(row_max, cutlass.Float32)
+            cute.basic_copy(row_max, row_max_prev)
+        tScS_mn = None
+        if cutlass.const_expr(in_mask_steps):
+            mcS = cute.make_identity_tensor((mQ.shape[0], mQ.shape[1], mQ.shape[2], mK.shape[1]))
+            cS = cute.local_tile(mcS[batch_size, None, num_head, None], (self._m_block_size, self._n_block_size), (m_block, n_block))
+            tScS = thr_mma.partition_C(cS)
+            tScS_mn = self._make_acc_tensor_mn_view(tScS)
+
+        for r in cutlass.range_constexpr(cute.size(row_max)):
+            if cutlass.const_expr(in_mask_steps):
+                col_idx_limit = cutlass.min(tScS_mn[r, 0][1] + 1, mK.shape[1])
+                for c in cutlass.range_constexpr(cute.size(tScS_mn.shape[1])):
+                    if cute.elem_less(col_idx_limit, tScS_mn[0, c][3] + 1):
+                        acc_S_mn[r, c] = -cutlass.Float32.inf
+
+            acc_S_row = acc_S_mn[r, None].load()
+            row_max_cur_row = acc_S_row.reduce(cute.ReductionOp.MAX, -cutlass.Float32.inf, 0)
+            row_max_cur_row = self._threadquad_reduce_max(row_max_cur_row)
+            row_max_prev_row = None
+            if cutlass.const_expr(not is_first_n_block):
+                row_max_prev_row = row_max_prev[r]
+                row_max_cur_row = cute.arch.fmax(row_max_prev_row, row_max_cur_row)
+            if cutlass.const_expr(self._is_causal):
+                row_max_cur_row = 0.0 if row_max_cur_row == -cutlass.Float32.inf else row_max_cur_row
+
+            acc_S_row_exp = cute.math.exp2(
+                acc_S_row * softmax_scale_log2 - row_max_cur_row * softmax_scale_log2,
+                fastmath=True,
+            )
+            acc_S_row_sum = acc_S_row_exp.reduce(cute.ReductionOp.ADD, cutlass.Float32.zero, 0)
+            if cutlass.const_expr(not is_first_n_block):
+                prev_minus_cur_exp = cute.math.exp2(
+                    row_max_prev_row * softmax_scale_log2 - row_max_cur_row * softmax_scale_log2,
+                    fastmath=True,
+                )
+                acc_S_row_sum = acc_S_row_sum + row_sum[r] * prev_minus_cur_exp
+                acc_O_mn[r, None] = acc_O_mn[r, None].load() * prev_minus_cur_exp
+            row_max[r] = row_max_cur_row
+            row_sum[r] = acc_S_row_sum
+            acc_S_mn[r, None] = acc_S_row_exp
+
+    @cute.jit
+    def normalize_softmax(self, acc_O: cute.Tensor, row_sum: cute.Tensor):
+        acc_O_mn = self._make_acc_tensor_mn_view(acc_O)
+        for r in cutlass.range_constexpr(cute.size(row_sum)):
+            row_sum[r] = self._threadquad_reduce_sum(row_sum[r])
+            acc_O_mn_row_is_zero_or_nan = row_sum[r] == 0.0 or row_sum[r] != row_sum[r]
+            scale = 1.0 if acc_O_mn_row_is_zero_or_nan else cute.arch.rcp_approx(row_sum[r])
+            acc_O_mn[r, None] = acc_O_mn[r, None].load() * scale
+
     def _make_tma_kv_atoms_and_tensors(self, gK: cute.Tensor, gV: cute.Tensor, sKV_layout_staged):
         tma_tile = (self._n_block_size, self._head_dim_padded)
         tma_atom_k, tma_tensor_k = self._make_tma_atom_and_tensor(gK, sKV_layout_staged, tma_tile)
