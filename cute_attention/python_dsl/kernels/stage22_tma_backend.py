@@ -1,7 +1,9 @@
 import cuda.bindings.driver as cuda
 import cutlass.pipeline as pipeline
 import cutlass.utils as utils
+import cutlass.utils.hopper_helpers as sm90_utils_basic
 from cutlass.cute.nvgpu import cpasync, warp
+from cutlass.utils import LayoutEnum
 
 from .common import cutlass, cute
 
@@ -112,17 +114,29 @@ class Stage22FlashAttentionTmaExperimental:
             (self._m_block_size, self._head_dim_padded),
             (0, 1),
         )
-        sKV_layout = cute.tile_to_shape(
-            sQ_layout_atom,
-            (self._n_block_size, self._head_dim_padded),
-            (0, 1),
+        qk_mma_tiler = (
+            self._m_block_size,
+            self._n_block_size,
+            self._head_dim_padded,
         )
-        sKV_layout_staged = cute.tile_to_shape(
-            sQ_layout_atom,
-            (self._n_block_size, self._head_dim_padded, self._num_stages_kv),
-            (0, 1, 2),
+        pv_mma_tiler = (
+            self._m_block_size,
+            self._head_dim_padded,
+            self._n_block_size,
         )
-        return sQ_layout, sKV_layout, sKV_layout_staged
+        sK_layout_staged = sm90_utils_basic.make_smem_layout_b(
+            LayoutEnum.ROW_MAJOR,
+            qk_mma_tiler,
+            self._dtype,
+            self._num_stages_kv,
+        )
+        sV_layout_staged = sm90_utils_basic.make_smem_layout_b(
+            LayoutEnum.ROW_MAJOR,
+            pv_mma_tiler,
+            self._dtype,
+            self._num_stages_kv,
+        )
+        return sQ_layout, sK_layout_staged, sV_layout_staged
 
     def _make_q_layout(self):
         smem_k_block_size = 64 if self._head_dim_padded % 64 == 0 else 32
@@ -138,14 +152,14 @@ class Stage22FlashAttentionTmaExperimental:
             (0, 1),
         )
 
-    def _make_shared_storage_type(self, dtype, sQ_layout, sKV_layout_staged):
+    def _make_shared_storage_type(self, dtype, sQ_layout, sK_layout_staged, sV_layout_staged):
         @cute.struct
         class SharedStorage:
             __annotations__ = {
                 "mainloop_pipeline_array_ptr": cute.struct.MemRange[cutlass.Int64, self._num_stages_kv],
                 "sQ": cute.struct.Align[cute.struct.MemRange[dtype, cute.cosize(sQ_layout)], 1024],
-                "sK": cute.struct.Align[cute.struct.MemRange[dtype, cute.cosize(sKV_layout_staged)], 1024],
-                "sV": cute.struct.Align[cute.struct.MemRange[dtype, cute.cosize(sKV_layout_staged)], 1024],
+                "sK": cute.struct.Align[cute.struct.MemRange[dtype, cute.cosize(sK_layout_staged)], 1024],
+                "sV": cute.struct.Align[cute.struct.MemRange[dtype, cute.cosize(sV_layout_staged)], 1024],
             }
 
         return SharedStorage
@@ -234,9 +248,8 @@ class Stage22FlashAttentionTmaExperimental:
         consumer_slice_idx = tidx % self._consumer_threads
         thr_mma = tiled_mma.get_slice(consumer_slice_idx)
         tSrQ = thr_mma.make_fragment_A(thr_mma.partition_A(sQ))
-        sVt = cute.composition(sV, cute.make_layout((self._head_dim_padded, self._n_block_size), stride=(self._n_block_size, 1)))
         tSrK = thr_mma.make_fragment_B(thr_mma.partition_B(sK))
-        tOrVt = thr_mma.make_fragment_B(thr_mma.partition_B(sVt))
+        tOrVt = thr_mma.make_fragment_B(thr_mma.partition_B(sV))
         smem_tiled_copy_Q = cute.make_tiled_copy_A(smem_copy_atom_Q, tiled_mma)
         smem_tiled_copy_K = cute.make_tiled_copy_B(smem_copy_atom_K, tiled_mma)
         smem_tiled_copy_V = cute.make_tiled_copy_B(smem_copy_atom_V, tiled_mma)
@@ -247,7 +260,7 @@ class Stage22FlashAttentionTmaExperimental:
         tSrQ_view = smem_thr_copy_Q.retile(tSrQ)
         tSsK = smem_thr_copy_K.partition_S(sK)
         tSrK_view = smem_thr_copy_K.retile(tSrK)
-        tOsVt = smem_thr_copy_V.partition_S(sVt)
+        tOsVt = smem_thr_copy_V.partition_S(sV)
         tOrVt_view = smem_thr_copy_V.retile(tOrVt)
         return (
             thr_mma,
@@ -364,10 +377,23 @@ class Stage22FlashAttentionTmaExperimental:
             scale = 1.0 if acc_O_mn_row_is_zero_or_nan else cute.arch.rcp_approx(row_sum[r])
             acc_O_mn[r, None] = acc_O_mn[r, None].load() * scale
 
-    def _make_tma_kv_atoms_and_tensors(self, gK: cute.Tensor, gV: cute.Tensor, sKV_layout_staged):
-        tma_tile = (self._n_block_size, self._head_dim_padded)
-        tma_atom_k, tma_tensor_k = self._make_tma_atom_and_tensor(gK, sKV_layout_staged, tma_tile)
-        tma_atom_v, tma_tensor_v = self._make_tma_atom_and_tensor(gV, sKV_layout_staged, tma_tile)
+    def _make_tma_kv_atoms_and_tensors(
+        self,
+        gK: cute.Tensor,
+        gVt: cute.Tensor,
+        sK_layout_staged,
+        sV_layout_staged,
+    ):
+        tma_atom_k, tma_tensor_k = self._make_tma_atom_and_tensor(
+            gK,
+            sK_layout_staged,
+            (self._n_block_size, self._head_dim_padded),
+        )
+        tma_atom_v, tma_tensor_v = self._make_tma_atom_and_tensor(
+            gVt,
+            sV_layout_staged,
+            (self._head_dim_padded, self._n_block_size),
+        )
         return tma_atom_k, tma_tensor_k, tma_atom_v, tma_tensor_v
 
     def _slice_stage_tensor(self, staged_tensor: cute.Tensor, stage_slot: int) -> cute.Tensor:
@@ -472,7 +498,7 @@ class Stage22FlashAttentionTmaExperimental:
         tidx,
         tiled_mma,
         gK: cute.Tensor,
-        gV: cute.Tensor,
+        gVt: cute.Tensor,
         sK: cute.Tensor,
         sV: cute.Tensor,
         tma_atom_k,
@@ -480,11 +506,11 @@ class Stage22FlashAttentionTmaExperimental:
         tma_atom_v,
         tma_tensor_v,
     ):
-        mma_slice_idx = tidx % self._consumer_threads
-        thr_mma = tiled_mma.get_slice(mma_slice_idx)
-        kv_mma_tiler = (self._n_block_size, self._head_dim_padded)
-        gK_tiled = cute.flat_divide(gK, kv_mma_tiler)
-        gV_tiled = cute.flat_divide(gV, kv_mma_tiler)
+        thr_mma = tiled_mma.get_slice(tidx)
+        qk_mma_tiler = (self._m_block_size, self._n_block_size, self._head_dim_padded)
+        pv_mma_tiler = (self._m_block_size, self._head_dim_padded, self._n_block_size)
+        gK_tiled = cute.flat_divide(gK, cute.select(qk_mma_tiler, mode=[1, 2]))
+        gV_tiled = cute.flat_divide(gVt, cute.select(pv_mma_tiler, mode=[1, 2]))
         tSgK = thr_mma.partition_B(gK_tiled)
         tSgV = thr_mma.partition_B(gV_tiled)
         tKsK, tKgK = cute.nvgpu.cpasync.tma_partition(
@@ -657,16 +683,16 @@ class Stage22FlashAttentionTmaExperimental:
         self._dtype = mQ.element_type
         LOG2_E = 1.4426950408889634074
         softmax_scale_log2 = softmax_scale * LOG2_E
-        sQ_layout, sKV_layout, sKV_layout_staged = self._make_kv_layouts()
-        _ = sKV_layout  # carried for parity with stage21 shape plumbing
+        sQ_layout, sK_layout_staged, sV_layout_staged = self._make_kv_layouts()
         q_layout = self._make_q_layout()
         sO_layout = sQ_layout
 
-        shared_storage = self._make_shared_storage_type(self._dtype, sQ_layout, sKV_layout_staged)
+        shared_storage = self._make_shared_storage_type(self._dtype, sQ_layout, sK_layout_staged, sV_layout_staged)
         storage = cutlass.utils.SmemAllocator().allocate(shared_storage)
         mainloop_pipeline_array_ptr = storage.mainloop_pipeline_array_ptr.data_ptr()
-        kv_stage_layout = cute.slice_(sKV_layout_staged, (None, None, 0))
-        tx_count = cute.size_in_bytes(self._dtype, kv_stage_layout) + cute.size_in_bytes(self._dtype, kv_stage_layout)
+        k_stage_layout = cute.slice_(sK_layout_staged, (None, None, 0))
+        v_stage_layout = cute.slice_(sV_layout_staged, (None, None, 0))
+        tx_count = cute.size_in_bytes(self._dtype, k_stage_layout) + cute.size_in_bytes(self._dtype, v_stage_layout)
         mainloop_pipeline = self._make_mainloop_pipeline(mainloop_pipeline_array_ptr, tx_count)
 
         (
@@ -694,11 +720,12 @@ class Stage22FlashAttentionTmaExperimental:
         gQ = cute.local_tile(mQ[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
         gK = cute.local_tile(mK[batch_size, None, num_head, None], (self._n_block_size, self._head_dim_padded), (None, 0))
         gV = cute.local_tile(mV[batch_size, None, num_head, None], (self._n_block_size, self._head_dim_padded), (None, 0))
+        gVt = cute.composition(gV, cute.make_layout((self._head_dim_padded, self._n_block_size), stride=(1, self._head_dim_padded)))
         gO = cute.local_tile(mO[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
 
         sQ = storage.sQ.get_tensor(sQ_layout.outer, swizzle=sQ_layout.inner)
-        sK = storage.sK.get_tensor(sKV_layout_staged.outer, swizzle=sKV_layout_staged.inner)
-        sV = storage.sV.get_tensor(sKV_layout_staged.outer, swizzle=sKV_layout_staged.inner)
+        sK = storage.sK.get_tensor(sK_layout_staged.outer, swizzle=sK_layout_staged.inner)
+        sV = storage.sV.get_tensor(sV_layout_staged.outer, swizzle=sV_layout_staged.inner)
         sK0 = self._slice_stage_tensor(sK, 0)
         sV0 = self._slice_stage_tensor(sV, 0)
         sK1 = self._slice_stage_tensor(sK, 1)
@@ -706,7 +733,7 @@ class Stage22FlashAttentionTmaExperimental:
         sK2 = self._slice_stage_tensor(sK, 2) if cutlass.const_expr(self._num_stages_kv >= 3) else None
         sV2 = self._slice_stage_tensor(sV, 2) if cutlass.const_expr(self._num_stages_kv >= 3) else None
         tma_atom_k, tma_tensor_k, tma_atom_v, tma_tensor_v = self._make_tma_kv_atoms_and_tensors(
-            gK, gV, sKV_layout_staged
+            gK, gVt, sK_layout_staged, sV_layout_staged
         )
         _ = tma_tensor_k
         _ = tma_tensor_v
@@ -714,7 +741,7 @@ class Stage22FlashAttentionTmaExperimental:
             tidx,
             tiled_mma,
             gK,
-            gV,
+            gVt,
             sK,
             sV,
             tma_atom_k,
