@@ -221,15 +221,7 @@ class Stage22FlashAttentionTmaExperimental:
             self._dtype,
             num_bits_per_copy=universal_copy_bits,
         )
-        smem_copy_atom_Q = cute.make_copy_atom(warp.LdMatrix8x8x16bOp(transpose=False, num_matrices=4), self._dtype)
-        smem_copy_atom_K = cute.make_copy_atom(warp.LdMatrix8x8x16bOp(transpose=False, num_matrices=4), self._dtype)
-        smem_copy_atom_V = cute.make_copy_atom(warp.LdMatrix8x8x16bOp(transpose=True, num_matrices=4), self._dtype)
-        tiled_mma = cute.make_tiled_mma(
-            warp.MmaF16BF16Op(self._dtype, cutlass.Float32, (16, 8, 16)),
-            (self._consumer_threads // 32, 1, 1),
-            permutation_mnk=(self._consumer_threads // 32 * 16, 16, 16),
-        )
-        return atom_async_copy, atom_universal_copy, smem_copy_atom_Q, smem_copy_atom_K, smem_copy_atom_V, tiled_mma, async_copy_elems
+        return atom_async_copy, atom_universal_copy, async_copy_elems
 
     @cute.jit
     def _load_q_to_smem(
@@ -281,45 +273,24 @@ class Stage22FlashAttentionTmaExperimental:
     def _build_consumer_mma_views(
         self,
         tidx,
-        tiled_mma,
+        qk_tiled_mma,
+        pv_tiled_mma,
         sQ,
         sK,
         sV,
-        smem_copy_atom_Q,
-        smem_copy_atom_K,
-        smem_copy_atom_V,
     ):
         consumer_slice_idx = tidx % self._consumer_threads
-        thr_mma = tiled_mma.get_slice(consumer_slice_idx)
-        tSrQ = thr_mma.make_fragment_A(thr_mma.partition_A(sQ))
-        tSrK = thr_mma.make_fragment_B(thr_mma.partition_B(sK))
-        tOrVt = thr_mma.make_fragment_B(thr_mma.partition_B(sV))
-        smem_tiled_copy_Q = cute.make_tiled_copy_A(smem_copy_atom_Q, tiled_mma)
-        smem_tiled_copy_K = cute.make_tiled_copy_B(smem_copy_atom_K, tiled_mma)
-        smem_tiled_copy_V = cute.make_tiled_copy_B(smem_copy_atom_V, tiled_mma)
-        smem_thr_copy_Q = smem_tiled_copy_Q.get_slice(consumer_slice_idx)
-        smem_thr_copy_K = smem_tiled_copy_K.get_slice(consumer_slice_idx)
-        smem_thr_copy_V = smem_tiled_copy_V.get_slice(consumer_slice_idx)
-        tSsQ = smem_thr_copy_Q.partition_S(sQ)
-        tSrQ_view = smem_thr_copy_Q.retile(tSrQ)
-        tSsK = smem_thr_copy_K.partition_S(sK)
-        tSrK_view = smem_thr_copy_K.retile(tSrK)
-        tOsVt = smem_thr_copy_V.partition_S(sV)
-        tOrVt_view = smem_thr_copy_V.retile(tOrVt)
+        thr_mma_qk = qk_tiled_mma.get_slice(consumer_slice_idx)
+        thr_mma_pv = pv_tiled_mma.get_slice(consumer_slice_idx)
+        tSrQ = thr_mma_qk.make_fragment_A(sQ)
+        tSrK = thr_mma_qk.make_fragment_B(sK)
+        tOrVt = thr_mma_pv.make_fragment_B(sV)
         return (
-            thr_mma,
+            thr_mma_qk,
+            thr_mma_pv,
             tSrQ,
             tSrK,
             tOrVt,
-            smem_tiled_copy_Q,
-            smem_tiled_copy_K,
-            smem_tiled_copy_V,
-            tSsQ,
-            tSrQ_view,
-            tSsK,
-            tSrK_view,
-            tOsVt,
-            tOrVt_view,
         )
 
     def _make_acc_tensor_mn_view(self, acc: cute.Tensor) -> cute.Tensor:
@@ -467,21 +438,13 @@ class Stage22FlashAttentionTmaExperimental:
     def _consumer_compute_loaded_block(
         self,
         n_block,
-        thr_mma,
-        tiled_mma,
+        thr_mma_qk,
+        qk_tiled_mma,
+        pv_tiled_mma,
         tSrQ,
         tSrK,
         tOrVt,
         acc_O,
-        smem_tiled_copy_Q,
-        smem_tiled_copy_K,
-        smem_tiled_copy_V,
-        tSsQ,
-        tSrQ_view,
-        tSsK,
-        tSrK_view,
-        tOsVt,
-        tOrVt_view,
         row_max,
         row_sum,
         softmax_scale_log2: cutlass.Float32,
@@ -493,17 +456,18 @@ class Stage22FlashAttentionTmaExperimental:
         is_first_n_block: cutlass.Boolean,
         in_mask_steps: cutlass.Boolean,
     ):
-        acc_shape_S = thr_mma.partition_shape_C((self._m_block_size, self._n_block_size))
+        acc_shape_S = thr_mma_qk.partition_shape_C((self._m_block_size, self._n_block_size))
         acc_S = cute.make_rmem_tensor(acc_shape_S, cutlass.Float32)
         acc_S.fill(0.0)
 
-        cute.copy(smem_tiled_copy_Q, tSsQ[None, None, 0], tSrQ_view[None, None, 0])
-        cute.copy(smem_tiled_copy_K, tSsK[None, None, 0], tSrK_view[None, None, 0])
-        for k_idx in cutlass.range_constexpr(cute.size(tSsQ.shape[2])):
-            k_next = (k_idx + 1) % cute.size(tSsQ.shape[2])
-            cute.copy(smem_tiled_copy_Q, tSsQ[None, None, k_next], tSrQ_view[None, None, k_next])
-            cute.copy(smem_tiled_copy_K, tSsK[None, None, k_next], tSrK_view[None, None, k_next])
-            cute.gemm(tiled_mma, acc_S, tSrQ[None, None, k_idx], tSrK[None, None, k_idx], acc_S)
+        for k_idx in cutlass.range_constexpr(cute.size(tSrQ.shape[3])):
+            cute.gemm(
+                qk_tiled_mma,
+                acc_S,
+                tSrQ[None, None, None, k_idx],
+                tSrK[None, None, None, k_idx],
+                acc_S,
+            )
 
         self.softmax_rescale_O(
             acc_S,
@@ -519,7 +483,7 @@ class Stage22FlashAttentionTmaExperimental:
             n_block,
             is_first_n_block=is_first_n_block,
             in_mask_steps=in_mask_steps,
-            thr_mma=thr_mma,
+            thr_mma=thr_mma_qk,
         )
 
         rP = cute.make_fragment_like(acc_S, self._dtype)
@@ -538,11 +502,14 @@ class Stage22FlashAttentionTmaExperimental:
             ),
         )
         tOrS = cute.make_tensor(rP.iterator, rP_mma_view)
-        cute.copy(smem_tiled_copy_V, tOsVt[None, None, 0], tOrVt_view[None, None, 0])
-        for k_idx in cutlass.range_constexpr(cute.size(tOrS.shape[2])):
-            k_next = (k_idx + 1) % cute.size(tOrS.shape[2])
-            cute.copy(smem_tiled_copy_V, tOsVt[None, None, k_next], tOrVt_view[None, None, k_next])
-            cute.gemm(tiled_mma, acc_O, tOrS[None, None, k_idx], tOrVt[None, None, k_idx], acc_O)
+        for k_idx in cutlass.range_constexpr(cute.size(tOrS.shape[3])):
+            cute.gemm(
+                pv_tiled_mma,
+                acc_O,
+                tOrS[None, None, None, k_idx],
+                tOrVt[None, None, None, k_idx],
+                acc_O,
+            )
 
     def _partition_tma_kv(self, tma_atom, tma_tensor, sTensor, gTensor):
         s_for_tma_partition = cute.group_modes(sTensor, 0, 2)
@@ -770,10 +737,6 @@ class Stage22FlashAttentionTmaExperimental:
         (
             atom_async_copy,
             atom_universal_copy,
-            smem_copy_atom_Q,
-            smem_copy_atom_K,
-            smem_copy_atom_V,
-            tiled_mma,
             _async_copy_elems,
         ) = self._make_consumer_copy_atoms_and_mma()
         _ = atom_universal_copy
@@ -867,34 +830,28 @@ class Stage22FlashAttentionTmaExperimental:
         cute.arch.barrier()
         stage0_views = self._build_consumer_mma_views(
             tidx,
-            tiled_mma,
+            qk_tiled_mma,
+            pv_tiled_mma,
             sQ,
             sK0,
             sV0,
-            smem_copy_atom_Q,
-            smem_copy_atom_K,
-            smem_copy_atom_V,
         )
         stage1_views = self._build_consumer_mma_views(
             tidx,
-            tiled_mma,
+            qk_tiled_mma,
+            pv_tiled_mma,
             sQ,
             sK1,
             sV1,
-            smem_copy_atom_Q,
-            smem_copy_atom_K,
-            smem_copy_atom_V,
         )
         stage2_views = (
             self._build_consumer_mma_views(
                 tidx,
-                tiled_mma,
+                qk_tiled_mma,
+                pv_tiled_mma,
                 sQ,
                 sK2,
                 sV2,
-                smem_copy_atom_Q,
-                smem_copy_atom_K,
-                smem_copy_atom_V,
             )
             if cutlass.const_expr(self._num_stages_kv >= 3)
             else None
@@ -938,20 +895,12 @@ class Stage22FlashAttentionTmaExperimental:
                     self._consumer_compute_loaded_block(
                         n_block,
                         stage0_views[0],
-                        tiled_mma,
-                        stage0_views[1],
+                        qk_tiled_mma,
+                        pv_tiled_mma,
                         stage0_views[2],
                         stage0_views[3],
-                        acc_O,
                         stage0_views[4],
-                        stage0_views[5],
-                        stage0_views[6],
-                        stage0_views[7],
-                        stage0_views[8],
-                        stage0_views[9],
-                        stage0_views[10],
-                        stage0_views[11],
-                        stage0_views[12],
+                        acc_O,
                         row_max,
                         row_sum,
                         softmax_scale_log2,
@@ -967,20 +916,12 @@ class Stage22FlashAttentionTmaExperimental:
                     self._consumer_compute_loaded_block(
                         n_block,
                         stage1_views[0],
-                        tiled_mma,
-                        stage1_views[1],
+                        qk_tiled_mma,
+                        pv_tiled_mma,
                         stage1_views[2],
                         stage1_views[3],
-                        acc_O,
                         stage1_views[4],
-                        stage1_views[5],
-                        stage1_views[6],
-                        stage1_views[7],
-                        stage1_views[8],
-                        stage1_views[9],
-                        stage1_views[10],
-                        stage1_views[11],
-                        stage1_views[12],
+                        acc_O,
                         row_max,
                         row_sum,
                         softmax_scale_log2,
@@ -997,20 +938,12 @@ class Stage22FlashAttentionTmaExperimental:
                         self._consumer_compute_loaded_block(
                             n_block,
                             stage2_views[0],
-                            tiled_mma,
-                            stage2_views[1],
+                            qk_tiled_mma,
+                            pv_tiled_mma,
                             stage2_views[2],
                             stage2_views[3],
-                            acc_O,
                             stage2_views[4],
-                            stage2_views[5],
-                            stage2_views[6],
-                            stage2_views[7],
-                            stage2_views[8],
-                            stage2_views[9],
-                            stage2_views[10],
-                            stage2_views[11],
-                            stage2_views[12],
+                            acc_O,
                             row_max,
                             row_sum,
                             softmax_scale_log2,
@@ -1049,7 +982,7 @@ class Stage22FlashAttentionTmaExperimental:
             sO = cute.make_tensor(sQ.iterator, sO_layout)
 
             smem_copy_atom_O = cute.make_copy_atom(cute.nvgpu.CopyUniversalOp(), self._dtype)
-            smem_tiled_copy_O = cute.make_tiled_copy_C(smem_copy_atom_O, tiled_mma)
+            smem_tiled_copy_O = cute.make_tiled_copy_C(smem_copy_atom_O, qk_tiled_mma)
             smem_thr_copy_O = smem_tiled_copy_O.get_slice(consumer_slice_idx)
             taccOrO = smem_thr_copy_O.retile(rO)
             taccOsO = smem_thr_copy_O.partition_D(sO)
