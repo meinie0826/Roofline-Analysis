@@ -18,9 +18,12 @@ Each stage is benchmarked with its most appropriate default tuning config:
 
 import argparse
 import csv
+import os
 import sys
 import time
 from dataclasses import replace
+from datetime import datetime
+from pathlib import Path
 
 from kernels import (
     AttentionConfig,
@@ -298,6 +301,70 @@ def parse_stage_list(stages_arg: str) -> list[str]:
     return [name.strip() for name in stages_arg.split(",") if name.strip()]
 
 
+def plot_results(
+    results: list[dict],
+    shape: tuple,
+    dtype: str,
+    causal: bool,
+    device_name: str,
+    report_tensorcore: bool,
+    output_dir: str = "result",
+) -> str:
+    """Save a bar chart of benchmark results to output_dir. Returns the saved file path."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except ImportError:
+        print("# matplotlib not available, skipping plot", file=sys.stderr)
+        return ""
+
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    ok_results = [r for r in results if r["time_ms"] is not None and r["time_ms"] > 0]
+    if not ok_results:
+        return ""
+
+    labels = [r["stage"] for r in ok_results]
+    metric = "tflops" if report_tensorcore else "time_ms"
+    values = [r.get("tflops_est", 0.0) if report_tensorcore else r["time_ms"] for r in ok_results]
+    ylabel = "Estimated TFLOP/s" if report_tensorcore else "Latency (ms)"
+    title_metric = "TFLOP/s" if report_tensorcore else "Latency"
+
+    x = np.arange(len(labels))
+    fig, ax = plt.subplots(figsize=(max(8, len(labels) * 0.9), 5))
+
+    bars = ax.bar(x, values, color="steelblue", edgecolor="white", linewidth=0.5)
+    for bar, val in zip(bars, values):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + max(values) * 0.01,
+            f"{val:.2f}",
+            ha="center", va="bottom", fontsize=7, rotation=45,
+        )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
+    ax.set_ylabel(ylabel)
+    ax.set_title(
+        f"Attention Benchmark — {title_metric}\n"
+        f"shape={shape}  dtype={dtype}  causal={causal}\n"
+        f"device: {device_name}",
+        fontsize=9,
+    )
+    ax.grid(axis="y", linestyle="--", alpha=0.5)
+    plt.tight_layout()
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    shape_str = "x".join(str(s) for s in shape)
+    fname = f"bench_{shape_str}_{dtype}_{ts}.png"
+    fpath = os.path.join(output_dir, fname)
+    fig.savefig(fpath, dpi=150)
+    plt.close(fig)
+    return fpath
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -339,6 +406,8 @@ def main():
                         help="Peak Tensor Core TFLOP/s for utilization estimates. Used only with --report-tensorcore.")
     parser.add_argument("--print-stage-metadata", action="store_true",
                         help="Print autotune/multistage coverage for each stage before running benchmarks.")
+    parser.add_argument("--result-dir", default="result",
+                        help="Directory to save benchmark plots (default: result).")
     args = parser.parse_args()
 
     if torch is None:
@@ -393,6 +462,7 @@ def main():
         print("stage,time_ms,tflops_est,tc_util_pct,status")
     else:
         print("stage,time_ms,status")
+    _plot_results: list[dict] = []
     for stage_name in stages:
         config = _make_config_for_stage(stage_name, base_config)
         try:
@@ -413,15 +483,31 @@ def main():
                     tc_util_pct = f"{100.0 * tflops_est / args.tensorcore_peak_tflops:.2f}"
                 status = f"ok:{status_suffix}" if status_suffix else "ok"
                 print(f"{stage_name},{time_ms:.3f},{tflops_est:.3f},{tc_util_pct},{status}")
+                _plot_results.append({"stage": stage_name, "time_ms": time_ms, "tflops_est": tflops_est})
             elif status_suffix:
                 print(f"{stage_name},{time_ms:.3f},ok:{status_suffix}")
+                _plot_results.append({"stage": stage_name, "time_ms": time_ms})
             else:
                 print(f"{stage_name},{time_ms:.3f},ok")
+                _plot_results.append({"stage": stage_name, "time_ms": time_ms})
         except Exception as exc:
             if args.report_tensorcore:
                 print(f"{stage_name},nan,nan,na,failed:{type(exc).__name__}:{exc}")
             else:
                 print(f"{stage_name},nan,failed:{type(exc).__name__}:{exc}")
+            _plot_results.append({"stage": stage_name, "time_ms": None})
+
+    saved = plot_results(
+        _plot_results,
+        shape=tuple(q.shape),
+        dtype=args.dtype,
+        causal=args.causal,
+        device_name=device_name,
+        report_tensorcore=args.report_tensorcore,
+        output_dir=args.result_dir,
+    )
+    if saved:
+        print(f"# plot saved to {saved}", file=sys.stderr)
 
 
 if __name__ == "__main__":
