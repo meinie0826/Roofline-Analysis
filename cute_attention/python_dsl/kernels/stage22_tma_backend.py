@@ -450,7 +450,7 @@ class Stage22FlashAttentionTmaExperimental:
         return tma_atom_k, tma_tensor_k, tma_atom_v, tma_tensor_v
 
     def _slice_stage_tensor(self, staged_tensor: cute.Tensor, stage_slot: int) -> cute.Tensor:
-        return cute.slice_(staged_tensor, (None, None, stage_slot))
+        return cute.slice_(staged_tensor, (None, None, None, stage_slot))
 
     @cute.jit
     def _consumer_compute_loaded_block(
@@ -738,8 +738,8 @@ class Stage22FlashAttentionTmaExperimental:
         shared_storage = self._make_shared_storage_type(self._dtype, sQ_layout, sK_layout_staged, sV_layout_staged)
         storage = cutlass.utils.SmemAllocator().allocate(shared_storage)
         mainloop_pipeline_array_ptr = storage.mainloop_pipeline_array_ptr.data_ptr()
-        k_stage_layout = cute.slice_(sK_layout_staged, (None, None, 0))
-        v_stage_layout = cute.slice_(sV_layout_staged, (None, None, 0))
+        k_stage_layout = cute.select(sK_layout_staged, mode=[0, 1, 2])
+        v_stage_layout = cute.select(sV_layout_staged, mode=[0, 1, 2])
         tx_count = cute.size_in_bytes(self._dtype, k_stage_layout) + cute.size_in_bytes(self._dtype, v_stage_layout)
         mainloop_pipeline = self._make_mainloop_pipeline(mainloop_pipeline_array_ptr, tx_count)
 
