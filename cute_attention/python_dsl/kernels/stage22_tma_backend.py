@@ -455,20 +455,20 @@ class Stage22FlashAttentionTma:
     ):
         acc_shape_S = thr_mma_qk.partition_shape_C((self._m_block_size, self._n_block_size))
         acc_S_tmem = thr_mma_qk.make_fragment_C(cute.append(acc_shape_S, 1))
-        acc_S_tmem = acc_S_tmem[(None, None), 0, 0, 0]
+        acc_S_stage = acc_S_tmem[None, None, None, 0]
 
         qk_tiled_mma.set(tcgen05.Field.ACCUMULATE, False)
         cute.gemm(
             qk_tiled_mma,
-            acc_S_tmem,
+            acc_S_stage,
             tSrQ[None, None, None, 0],
             tSrK,
-            acc_S_tmem,
+            acc_S_stage,
         )
         acc_S = self._load_tmem_fragment_to_rmem(
             consumer_slice_idx,
             thr_mma_qk,
-            acc_S_tmem,
+            acc_S_stage,
             (self._m_block_size, self._n_block_size),
         )
 
@@ -507,19 +507,19 @@ class Stage22FlashAttentionTma:
         tOrS = cute.make_tensor(rP.iterator, rP_mma_view)
         acc_shape_O = thr_mma_pv.partition_shape_C((self._m_block_size, self._head_dim_padded))
         acc_O_tmem = thr_mma_pv.make_fragment_C(cute.append(acc_shape_O, 1))
-        acc_O_tmem = acc_O_tmem[(None, None), 0, 0, 0]
+        acc_O_stage = acc_O_tmem[None, None, None, 0]
         pv_tiled_mma.set(tcgen05.Field.ACCUMULATE, False)
         cute.gemm(
             pv_tiled_mma,
-            acc_O_tmem,
+            acc_O_stage,
             tOrS,
             tOrVt,
-            acc_O_tmem,
+            acc_O_stage,
         )
         acc_O_partial = self._load_tmem_fragment_to_rmem(
             consumer_slice_idx,
             thr_mma_pv,
-            acc_O_tmem,
+            acc_O_stage,
             (self._m_block_size, self._head_dim_padded),
         )
         acc_O.store(acc_O.load() + acc_O_partial.load())
