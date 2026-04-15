@@ -174,6 +174,79 @@ class Stage22FlashAttentionTmaExperimental:
         )
 
     @cute.jit
+    def _prefetch_tma_descriptors_once(self, warp_idx, tma_atom_k, tma_atom_v):
+        if warp_idx == 0:
+            cute.nvgpu.cpasync.prefetch_descriptor(tma_atom_k)
+            cute.nvgpu.cpasync.prefetch_descriptor(tma_atom_v)
+
+    @cute.jit
+    def _issue_tma_kv_load(
+        self,
+        mainloop_pipeline,
+        mainloop_producer_state,
+        tma_atom_k,
+        tma_atom_v,
+        tKgK,
+        tKsK,
+        tVgV,
+        tVsV,
+    ):
+        cute.copy(
+            tma_atom_k,
+            tKgK[(None, mainloop_producer_state.count)],
+            tKsK[(None, mainloop_producer_state.index)],
+            tma_bar_ptr=mainloop_pipeline.producer_get_barrier(mainloop_producer_state),
+        )
+        cute.copy(
+            tma_atom_v,
+            tVgV[(None, mainloop_producer_state.count)],
+            tVsV[(None, mainloop_producer_state.index)],
+            tma_bar_ptr=mainloop_pipeline.producer_get_barrier(mainloop_producer_state),
+        )
+
+    @cute.jit
+    def _producer_tma_step(
+        self,
+        warp_idx,
+        mainloop_pipeline,
+        mainloop_producer_state,
+        tma_atom_k,
+        tma_atom_v,
+        tKgK,
+        tKsK,
+        tVgV,
+        tVsV,
+        k_tile_cnt: cutlass.Int32,
+    ):
+        if warp_idx == 0 and mainloop_producer_state.count < k_tile_cnt:
+            mainloop_pipeline.producer_acquire(mainloop_producer_state)
+            self._issue_tma_kv_load(
+                mainloop_pipeline,
+                mainloop_producer_state,
+                tma_atom_k,
+                tma_atom_v,
+                tKgK,
+                tKsK,
+                tVgV,
+                tVsV,
+            )
+            mainloop_pipeline.producer_commit(mainloop_producer_state)
+            mainloop_producer_state.advance()
+        return mainloop_producer_state
+
+    @cute.jit
+    def _consumer_tma_try_wait(
+        self,
+        mainloop_pipeline,
+        mainloop_consumer_state,
+        k_tile_cnt: cutlass.Int32,
+    ):
+        peek_kv_full_status = cutlass.Boolean(1)
+        if mainloop_consumer_state.count < k_tile_cnt:
+            peek_kv_full_status = mainloop_pipeline.consumer_try_wait(mainloop_consumer_state)
+        return peek_kv_full_status
+
+    @cute.jit
     def __call__(
         self,
         mQ: cute.Tensor,
@@ -196,7 +269,7 @@ class Stage22FlashAttentionTmaExperimental:
         storage = cutlass.utils.SmemAllocator().allocate(shared_storage)
         mainloop_pipeline_array_ptr = storage.mainloop_pipeline_array_ptr.data_ptr()
         tx_count = cute.size_in_bytes(cute.slice_(sKV_layout_staged, (None, None, 0)))
-        _ = self._make_mainloop_pipeline(mainloop_pipeline_array_ptr, tx_count)
+        mainloop_pipeline = self._make_mainloop_pipeline(mainloop_pipeline_array_ptr, tx_count)
 
         gK = cute.local_tile(mK[0, None, 0, None], (self._n_block_size, self._head_dim_padded), (None, 0))
         gV = cute.local_tile(mV[0, None, 0, None], (self._n_block_size, self._head_dim_padded), (None, 0))
@@ -205,10 +278,28 @@ class Stage22FlashAttentionTmaExperimental:
         tma_atom_k, tma_tensor_k, tma_atom_v, tma_tensor_v = self._make_tma_kv_atoms_and_tensors(
             gK, gV, sKV_layout_staged
         )
-        _ = tma_tensor_k
-        _ = tma_tensor_v
-        _ = self._partition_tma_kv(tma_atom_k, tma_tensor_k, sK, gK)
-        _ = self._partition_tma_kv(tma_atom_v, tma_tensor_v, sV, gV)
+        tKsK, tKgK = self._partition_tma_kv(tma_atom_k, tma_tensor_k, sK, gK)
+        tVsV, tVgV = self._partition_tma_kv(tma_atom_v, tma_tensor_v, sV, gV)
+
+        tidx, _, _ = cute.arch.thread_idx()
+        warp_idx = tidx // 32
+        self._prefetch_tma_descriptors_once(warp_idx, tma_atom_k, tma_atom_v)
+        mainloop_producer_state = self._make_producer_state()
+        mainloop_consumer_state = self._make_consumer_state()
+        k_tile_cnt = cute.size(tKgK, mode=[1])
+        _ = self._consumer_tma_try_wait(mainloop_pipeline, mainloop_consumer_state, k_tile_cnt)
+        _ = self._producer_tma_step(
+            warp_idx,
+            mainloop_pipeline,
+            mainloop_producer_state,
+            tma_atom_k,
+            tma_atom_v,
+            tKgK,
+            tKsK,
+            tVgV,
+            tVsV,
+            k_tile_cnt,
+        )
 
         raise NotImplementedError(
             "stage22_tma now has real TMA atom/pipeline scaffolding, but the K/V mainloop load path is not wired into a runnable kernel yet."
