@@ -15,6 +15,7 @@ from .stage7_score16 import stage7_forward
 from .stage8_noscore import stage8_forward
 from .stage9_threadgroup import stage9_forward
 from .stage10_hybrid import stage10_forward
+from .stage11_mma import stage11_forward
 from .stage0_naive import stage0_forward
 from .stage3_blocked import stage3_forward
 
@@ -40,4 +41,5 @@ __all__ = [
     "stage8_forward",
     "stage9_forward",
     "stage10_forward",
+    "stage11_forward",
 ]
