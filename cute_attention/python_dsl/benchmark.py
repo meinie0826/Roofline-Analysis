@@ -12,7 +12,7 @@ Each stage is benchmarked with its most appropriate default tuning config:
   - non-autotuned stages use generic tile search by default to reduce
     tile-size bias in comparisons; pass --no-generic-tile-autotune to disable
   - stage15/stage16         → num_threads always forced to 256 by the kernel
-  - stage17                 → currently stays on the validated 128-thread multistage lane
+  - stage17                 → defaults to the validated 128-thread path, but dedicated autotune also probes structurally valid 256-thread multistage tiles
   - stage14                 → num_threads defaults to 256 in benchmark mode
   - stage0-stage11          → num_threads=128 by default
 """
@@ -77,7 +77,7 @@ _STAGE_TUNING_AXES = {
     "stage14": "benchmark fallback only",
     "stage15": "benchmark fallback only",
     "stage16": "block_m,block_n",
-    "stage17": "block_m,block_n,num_stages_kv",
+    "stage17": "block_m,block_n,num_stages_kv,num_threads",
     "baseline_fa4": "none",
     "baseline_sdpa": "none",
 }
@@ -87,7 +87,7 @@ _STAGE_NOTES = {
     "stage14": "warp-specialized producer/consumer kernel; no dedicated autotune yet",
     "stage15": "SM90-style warp specialization; no dedicated autotune yet",
     "stage16": "fixed double-buffer warp-specialized kernel; current autotune is conservative block search only",
-    "stage17": "independent MMA multistage kernel; currently validated on 128-thread configs and autotunes block sizes plus num_stages_kv",
+    "stage17": "independent MMA multistage kernel; default path is 128-thread, autotune also probes structurally valid 256-thread candidates",
 }
 
 

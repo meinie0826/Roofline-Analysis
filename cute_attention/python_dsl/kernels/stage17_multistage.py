@@ -1034,10 +1034,12 @@ def _make_stage17_config(config: AttentionConfig, *, block_m: int, block_n: int,
 
 
 def _stage17_thread_values(preferred: int) -> list[int]:
-    # The independent stage17 kernel currently reuses the Ampere multistage
-    # schedule and is only validated on the 128-thread path. Keep autotune on
-    # that stable lane until we land a true independent 256-thread variant.
-    return [128]
+    ordered = []
+    for value in [preferred, 256, 128]:
+        if value <= 0 or value in ordered or value % 32 != 0:
+            continue
+        ordered.append(value)
+    return ordered
 
 
 def _stage17_autotune_cache_key(config: AttentionConfig, q) -> str:
@@ -1145,6 +1147,16 @@ def autotune_stage17_config(
                         ),
                         num_threads=num_threads,
                     )
+                    if not Stage17FlashAttentionAmpere.can_implement(
+                        cutlass.Float16,
+                        head_dim,
+                        tuned.block_m,
+                        tuned.block_n,
+                        tuned.num_threads,
+                        tuned.num_stages_kv,
+                        True,
+                    ):
+                        continue
                     try:
                         for _ in range(warmup):
                             _stage17_forward_impl(q, k, v, tuned)
