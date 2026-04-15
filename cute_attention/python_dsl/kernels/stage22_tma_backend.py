@@ -318,25 +318,25 @@ class Stage22FlashAttentionTmaExperimental:
         num_head: cutlass.Int32,
         m_block: cutlass.Int32,
         n_block: cutlass.Int32,
-        is_first_n_block: cutlass.Constexpr,
-        in_mask_steps: cutlass.Constexpr,
+        is_first_n_block: cutlass.Boolean,
+        in_mask_steps: cutlass.Boolean,
         thr_mma: cute.TiledMma,
     ):
         acc_S_mn = self._make_acc_tensor_mn_view(acc_S)
         acc_O_mn = self._make_acc_tensor_mn_view(acc_O)
         row_max_prev = None
-        if cutlass.const_expr(not is_first_n_block):
+        if not is_first_n_block:
             row_max_prev = cute.make_fragment_like(row_max, cutlass.Float32)
             cute.basic_copy(row_max, row_max_prev)
         tScS_mn = None
-        if cutlass.const_expr(in_mask_steps):
+        if in_mask_steps:
             mcS = cute.make_identity_tensor((mQ.shape[0], mQ.shape[1], mQ.shape[2], mK.shape[1]))
             cS = cute.local_tile(mcS[batch_size, None, num_head, None], (self._m_block_size, self._n_block_size), (m_block, n_block))
             tScS = thr_mma.partition_C(cS)
             tScS_mn = self._make_acc_tensor_mn_view(tScS)
 
         for r in cutlass.range_constexpr(cute.size(row_max)):
-            if cutlass.const_expr(in_mask_steps):
+            if in_mask_steps:
                 col_idx_limit = cutlass.min(tScS_mn[r, 0][1] + 1, mK.shape[1])
                 for c in cutlass.range_constexpr(cute.size(tScS_mn.shape[1])):
                     if cute.elem_less(col_idx_limit, tScS_mn[0, c][3] + 1):
@@ -346,7 +346,7 @@ class Stage22FlashAttentionTmaExperimental:
             row_max_cur_row = acc_S_row.reduce(cute.ReductionOp.MAX, -cutlass.Float32.inf, 0)
             row_max_cur_row = self._threadquad_reduce_max(row_max_cur_row)
             row_max_prev_row = None
-            if cutlass.const_expr(not is_first_n_block):
+            if not is_first_n_block:
                 row_max_prev_row = row_max_prev[r]
                 row_max_cur_row = cute.arch.fmax(row_max_prev_row, row_max_cur_row)
             if cutlass.const_expr(self._is_causal):
@@ -357,7 +357,7 @@ class Stage22FlashAttentionTmaExperimental:
                 fastmath=True,
             )
             acc_S_row_sum = acc_S_row_exp.reduce(cute.ReductionOp.ADD, cutlass.Float32.zero, 0)
-            if cutlass.const_expr(not is_first_n_block):
+            if not is_first_n_block:
                 prev_minus_cur_exp = cute.math.exp2(
                     row_max_prev_row * softmax_scale_log2 - row_max_cur_row * softmax_scale_log2,
                     fastmath=True,
@@ -426,8 +426,8 @@ class Stage22FlashAttentionTmaExperimental:
         batch_size: cutlass.Int32,
         num_head: cutlass.Int32,
         m_block: cutlass.Int32,
-        is_first_n_block: cutlass.Constexpr,
-        in_mask_steps: cutlass.Constexpr,
+        is_first_n_block: cutlass.Boolean,
+        in_mask_steps: cutlass.Boolean,
     ):
         acc_shape_S = thr_mma.partition_shape_C((self._m_block_size, self._n_block_size))
         acc_S = cute.make_rmem_tensor(acc_shape_S, cutlass.Float32)
