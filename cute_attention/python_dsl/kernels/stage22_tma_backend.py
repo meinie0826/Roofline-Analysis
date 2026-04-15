@@ -327,13 +327,11 @@ class Stage22FlashAttentionTmaExperimental:
         row_max_prev = cute.make_fragment_like(row_max, cutlass.Float32)
         if not is_first_n_block:
             cute.basic_copy(row_max, row_max_prev)
-        tScS_mn = None
         if in_mask_steps:
             mcS = cute.make_identity_tensor((mQ.shape[0], mQ.shape[1], mQ.shape[2], mK.shape[1]))
             cS = cute.local_tile(mcS[batch_size, None, num_head, None], (self._m_block_size, self._n_block_size), (m_block, n_block))
             tScS = thr_mma.partition_C(cS)
             tScS_mn = self._make_acc_tensor_mn_view(tScS)
-
             for r in cutlass.range_constexpr(cute.size(row_max)):
                 col_idx_limit = cutlass.min(tScS_mn[r, 0][1] + 1, mK.shape[1])
                 for c in cutlass.range_constexpr(cute.size(tScS_mn.shape[1])):
