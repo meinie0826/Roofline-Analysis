@@ -4,6 +4,7 @@ import cuda.bindings.driver as cuda
 import cutlass.pipeline as pipeline
 import cutlass.utils as utils
 from cutlass.cute.nvgpu import cpasync, warp
+from dataclasses import replace
 
 from .common import (
     AttentionConfig,
@@ -15,10 +16,12 @@ from .common import (
     torch,
     validate_qkv,
 )
+from .stage11_mma import Stage11FlashAttentionAmpere, stage11_forward
 
 
 MAX_SEQ_LEN_FOR_STAGE12_CUTE = 4096
 _STAGE12_COMPILED_CACHE = {}
+_STAGE12_AUTOTUNE_CACHE = {}
 
 
 if HAS_CUTE:
@@ -664,9 +667,114 @@ if HAS_CUTE:
             return self._threadquad_reduce(val, lambda x, y: x + y)
 
 
-def stage12_forward(q, k, v, config: AttentionConfig | None = None):
+def _make_stage12_config(config: AttentionConfig, *, block_m: int, block_n: int, num_stages_kv: int) -> AttentionConfig:
+    return AttentionConfig(
+        softmax_scale=config.softmax_scale,
+        causal=config.causal,
+        block_m=block_m,
+        block_n=block_n,
+        num_threads=config.num_threads,
+        num_stages_kv=num_stages_kv,
+        autotune=False,
+    )
+
+
+def _stage12_candidate_values(preferred: int, values: list[int], *, limit: int) -> list[int]:
+    ordered = []
+    for value in [preferred, *values]:
+        if value <= 0 or value > limit or value in ordered:
+            continue
+        ordered.append(value)
+    return ordered
+
+
+def autotune_stage12_config(
+    q,
+    k,
+    v,
+    config: AttentionConfig | None = None,
+    *,
+    warmup: int = 2,
+    repeat: int = 5,
+) -> AttentionConfig:
     require_torch()
     config = config or AttentionConfig()
+    validate_qkv(q, k, v)
+    if not config.causal:
+        raise ValueError("stage12 autotune only supports causal attention.")
+    if not HAS_CUTE:
+        raise RuntimeError("stage12 autotune requires cutlass.cute.")
+    if q.dtype != torch.float16:
+        raise ValueError(f"stage12 autotune currently only supports fp16 inputs, got {q.dtype}.")
+
+    batch, heads, seq_len, head_dim = q.shape
+    cache_key = (
+        tuple(q.shape),
+        str(q.dtype),
+        config.num_threads,
+        config.block_m,
+        config.block_n,
+    )
+    cached = _STAGE12_AUTOTUNE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    block_m_values = _stage12_candidate_values(config.block_m, [128, 96, 64, 48, 32, 16], limit=seq_len)
+    block_n_values = _stage12_candidate_values(config.block_n, [256, 192, 128, 96, 64], limit=seq_len)
+    stage_values = _stage12_candidate_values(config.num_stages_kv or 2, [2, 1], limit=2)
+
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
+    best_config = None
+    best_ms = None
+
+    for num_stages_kv in stage_values:
+        for block_m in block_m_values:
+            for block_n in block_n_values:
+                tuned = _make_stage12_config(
+                    config,
+                    block_m=block_m,
+                    block_n=block_n,
+                    num_stages_kv=num_stages_kv,
+                )
+                try:
+                    for _ in range(warmup):
+                        if num_stages_kv == 1:
+                            stage11_forward(q, k, v, tuned)
+                        else:
+                            _stage12_forward_impl(q, k, v, tuned)
+
+                    torch.cuda.synchronize()
+                    elapsed = 0.0
+                    for _ in range(repeat):
+                        start_event.record()
+                        if num_stages_kv == 1:
+                            stage11_forward(q, k, v, tuned)
+                        else:
+                            _stage12_forward_impl(q, k, v, tuned)
+                        end_event.record()
+                        torch.cuda.synchronize()
+                        elapsed += start_event.elapsed_time(end_event)
+                    elapsed /= repeat
+                except ValueError:
+                    continue
+
+                if best_ms is None or elapsed < best_ms:
+                    best_ms = elapsed
+                    best_config = tuned
+
+    if best_config is None:
+        raise ValueError(
+            f"stage12 autotune failed to find a valid config for shape={(batch, heads, seq_len, head_dim)} "
+            f"with num_threads={config.num_threads}."
+        )
+
+    _STAGE12_AUTOTUNE_CACHE[cache_key] = best_config
+    return best_config
+
+
+def _stage12_forward_impl(q, k, v, config: AttentionConfig):
+    require_torch()
     validate_qkv(q, k, v)
     if not config.causal:
         raise ValueError("stage12 only supports causal attention.")
@@ -712,6 +820,21 @@ def stage12_forward(q, k, v, config: AttentionConfig | None = None):
     )
     compiled(q_cute, k_cute, v_cute, o_cute, scale, current_stream)
     return o_perm.permute(0, 2, 1, 3).contiguous()
+
+
+def stage12_forward(q, k, v, config: AttentionConfig | None = None):
+    config = config or AttentionConfig()
+    tuned = config
+    if config.autotune:
+        tuned = autotune_stage12_config(q, k, v, config)
+    elif tuned.num_stages_kv == 0:
+        tuned = replace(tuned, num_stages_kv=2)
+
+    if tuned.num_stages_kv == 1:
+        return stage11_forward(q, k, v, replace(tuned, autotune=False))
+    if tuned.num_stages_kv != 2:
+        raise ValueError(f"stage12 currently supports num_stages_kv in {{1, 2}}, got {tuned.num_stages_kv}.")
+    return _stage12_forward_impl(q, k, v, replace(tuned, autotune=False))
 
 
 def _stage12_compile(cache_key, q_cute, k_cute, v_cute, o_cute, scale, current_stream, head_dim, block_m, block_n, num_threads):

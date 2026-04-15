@@ -40,6 +40,8 @@ class AttentionConfig:
     block_m: int = 1
     block_n: int = 128
     num_threads: int = 128
+    num_stages_kv: int = 0
+    autotune: bool = False
 
     def resolve_scale(self, head_dim: int) -> float:
         return self.softmax_scale if self.softmax_scale is not None else 1.0 / math.sqrt(head_dim)

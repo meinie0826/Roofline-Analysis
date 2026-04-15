@@ -3,7 +3,7 @@
 import argparse
 import time
 
-from kernels import AttentionConfig, available_backends, run_stage
+from kernels import AttentionConfig, autotune_stage12_config, available_backends, run_stage
 
 
 torch = None
@@ -26,7 +26,22 @@ def benchmark(stage_name, q, k, v, config, warmup=5, repeat=20):
     return sum(times) / len(times)
 
 
+def _config_status_suffix(config: AttentionConfig) -> str | None:
+    parts = []
+    if config.block_m:
+        parts.append(f"block_m={config.block_m}")
+    if config.block_n:
+        parts.append(f"block_n={config.block_n}")
+    if config.num_stages_kv:
+        parts.append(f"stages={config.num_stages_kv}")
+    return ",".join(parts) if parts else None
+
+
 def benchmark_stage_with_fallback(stage_name, q, k, v, config, warmup=5, repeat=20):
+    if stage_name == "stage12":
+        tuned = autotune_stage12_config(q, k, v, config)
+        return benchmark(stage_name, q, k, v, tuned, warmup=warmup, repeat=repeat), _config_status_suffix(tuned)
+
     if stage_name not in {"stage1", "stage4", "stage5", "stage6", "stage7", "stage8", "stage9", "stage10", "stage11", "stage12"}:
         return benchmark(stage_name, q, k, v, config, warmup=warmup, repeat=repeat), None
 
@@ -41,7 +56,7 @@ def benchmark_stage_with_fallback(stage_name, q, k, v, config, warmup=5, repeat=
         )
         try:
             t = benchmark(stage_name, q, k, v, cfg, warmup=warmup, repeat=repeat)
-            return t, block_m
+            return t, _config_status_suffix(cfg) if block_m != config.block_m else None
         except ValueError as exc:
             if "shared memory footprint too large" not in str(exc):
                 raise
@@ -121,11 +136,11 @@ def main():
     print("stage,time_ms,status")
     for stage_name in stages:
         try:
-            time_ms, adjusted_block_m = benchmark_stage_with_fallback(
+            time_ms, status_suffix = benchmark_stage_with_fallback(
                 stage_name, q, k, v, config, warmup=args.warmup, repeat=args.repeat
             )
-            if adjusted_block_m is not None and adjusted_block_m != config.block_m:
-                print(f"{stage_name},{time_ms:.3f},ok:block_m={adjusted_block_m}")
+            if status_suffix:
+                print(f"{stage_name},{time_ms:.3f},ok:{status_suffix}")
             else:
                 print(f"{stage_name},{time_ms:.3f},ok")
         except Exception as exc:
