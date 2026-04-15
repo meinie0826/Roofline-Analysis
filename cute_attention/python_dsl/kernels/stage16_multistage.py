@@ -15,7 +15,6 @@ Warp assignment:
   * warps 0-3  → producer  (128 threads): issue cp.async for K/V
   * warps 4-7  → consumer  (128 threads): compute QK^T softmax PV
 """
-from __future__ import annotations
 
 import json
 from dataclasses import replace
