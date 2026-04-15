@@ -35,6 +35,7 @@ from kernels import (
     autotune_stage19_config,
     autotune_stage20_config,
     autotune_stage21_config,
+    autotune_stage22_config,
     available_backends,
     run_stage,
 )
@@ -50,11 +51,12 @@ if available_backends()["torch"]:
 # ---------------------------------------------------------------------------
 _WARPSPEC_STAGES = {"stage14", "stage15", "stage16", "stage17", "stage18", "stage19", "stage20", "stage21", "stage22"}
 
-_DEDICATED_AUTOTUNE_STAGES = {"stage12", "stage13", "stage16", "stage17", "stage18", "stage19", "stage20", "stage21"}
+_DEDICATED_AUTOTUNE_STAGES = {"stage12", "stage13", "stage16", "stage17", "stage18", "stage19", "stage20", "stage21", "stage22"}
 _MULTISTAGE_STAGES = {"stage12", "stage13", "stage16", "stage17", "stage18", "stage19", "stage20", "stage21", "stage22"}
 _GENERIC_TILE_TUNABLE_STAGES = {
     "stage0",
     "stage1",
+    "stage2",
     "stage3",
     "stage4",
     "stage5",
@@ -71,6 +73,7 @@ _THREAD_SEARCH_STAGES = {"stage14"}
 _STAGE_TUNING_AXES = {
     "stage0": "none",
     "stage1": "benchmark fallback only",
+    "stage2": "benchmark fallback only",
     "stage3": "benchmark fallback only",
     "stage4": "benchmark fallback only",
     "stage5": "benchmark fallback only",
@@ -90,13 +93,14 @@ _STAGE_TUNING_AXES = {
     "stage19": "block_m,block_n,num_stages_kv",
     "stage20": "block_m,block_n,num_stages_kv",
     "stage21": "block_m,block_n,num_stages_kv",
-    "stage22": "manual block_m,block_n,num_stages_kv",
+    "stage22": "block_m,block_n,num_stages_kv",
     "baseline_fa4": "none",
     "baseline_sdpa": "none",
 }
 _STAGE_NOTES = {
     "stage12": "independent two-stage cp.async pipeline kernel; autotunes block sizes within its own stage-2 design",
     "stage13": "independent MMA multistage kernel; autotunes tile sizes and num_stages_kv",
+    "stage2": "column-blocked reference CuTe kernel; benchmark uses generic tile fallback only",
     "stage14": "warp-specialized producer/consumer kernel; no dedicated autotune yet",
     "stage15": "SM90-style warp specialization; no dedicated autotune yet",
     "stage16": "fixed double-buffer warp-specialized kernel; current autotune is conservative block search only",
@@ -105,7 +109,7 @@ _STAGE_NOTES = {
     "stage19": "warpgroup-layout experimental backend; independent multistage path that swaps to Hopper-style warpgroup shared-memory layout atoms",
     "stage20": "aggressive warpspec experimental backend; circular-buffer steady-state mainloop with full-slot prefetch and dedicated multistage autotune",
     "stage21": "explicit producer/consumer state-machine backend; stage18-derived mainline with dedicated prefetch, advance, and wait helpers",
-    "stage22": "first TMA experimental backend; staged K/V TMA producer path with stage21-derived consumer math, currently without dedicated autotune",
+    "stage22": "independent rewritten backend path; autotunes block sizes and num_stages_kv while the experimental TMA scaffold remains out of the benchmark hot path",
 }
 
 
@@ -251,6 +255,9 @@ def benchmark_stage_with_fallback(stage_name, q, k, v, config, warmup=5, repeat=
     if stage_name == "stage21":
         tuned = autotune_stage21_config(q, k, v, config)
         return benchmark(stage_name, q, k, v, tuned, warmup=warmup, repeat=repeat), _config_status_suffix(tuned)
+    if stage_name == "stage22":
+        tuned = autotune_stage22_config(q, k, v, config)
+        return benchmark(stage_name, q, k, v, tuned, warmup=warmup, repeat=repeat), _config_status_suffix(tuned)
 
     if generic_tile_autotune and stage_name in _GENERIC_TILE_TUNABLE_STAGES:
         return _benchmark_with_generic_tile_search(stage_name, q, k, v, config, warmup=warmup, repeat=repeat)
@@ -276,6 +283,7 @@ def parse_stage_list(stages_arg: str) -> list[str]:
         return [
             "stage0",
             "stage1",
+            "stage2",
             "stage3",
             "stage4",
             "stage5",
@@ -295,6 +303,7 @@ def parse_stage_list(stages_arg: str) -> list[str]:
             "stage19",
             "stage20",
             "stage21",
+            "stage22",
             "baseline_fa4",
             "baseline_sdpa",
         ]

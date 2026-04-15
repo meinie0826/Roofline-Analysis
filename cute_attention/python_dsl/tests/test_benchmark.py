@@ -13,6 +13,7 @@ def test_parse_stage_list_all_includes_new_ablation_stages():
     assert stages == [
         "stage0",
         "stage1",
+        "stage2",
         "stage3",
         "stage4",
         "stage5",
@@ -32,6 +33,7 @@ def test_parse_stage_list_all_includes_new_ablation_stages():
         "stage19",
         "stage20",
         "stage21",
+        "stage22",
         "baseline_fa4",
         "baseline_sdpa",
     ]
@@ -40,6 +42,8 @@ def test_parse_stage_list_all_includes_new_ablation_stages():
 def test_stage_metadata_marks_autotune_and_multistage_coverage():
     rows = {row["stage"]: row for row in get_stage_metadata()}
     assert rows["stage12"]["autotune"] == "True"
+    assert rows["stage2"]["autotune"] == "False"
+    assert rows["stage2"]["tuning_axes"] == "benchmark fallback only"
     assert rows["stage13"]["multistage"] == "True"
     assert rows["stage17"]["autotune"] == "True"
     assert rows["stage17"]["tuning_axes"] == "block_m,block_n,num_stages_kv"
@@ -56,6 +60,10 @@ def test_stage_metadata_marks_autotune_and_multistage_coverage():
     assert rows["stage21"]["autotune"] == "True"
     assert rows["stage21"]["tuning_axes"] == "block_m,block_n,num_stages_kv"
     assert "state-machine" in rows["stage21"]["notes"]
+    assert rows["stage22"]["autotune"] == "True"
+    assert rows["stage22"]["multistage"] == "True"
+    assert rows["stage22"]["tuning_axes"] == "block_m,block_n,num_stages_kv"
+    assert "independent rewritten backend" in rows["stage22"]["notes"]
 
 
 def test_stage17_benchmark_uses_safe_warpspec_seed_config():

@@ -26,7 +26,7 @@ from .stage18_sm90_features import autotune_stage18_config, stage18_forward
 from .stage19_warpgroup import autotune_stage19_config, stage19_forward
 from .stage20_warpspec import autotune_stage20_config, stage20_forward
 from .stage21_state_machine import autotune_stage21_config, stage21_forward
-from .stage22_tma import stage22_forward
+from .stage22_tma import autotune_stage22_config, stage22_forward
 from .stage0_naive import stage0_forward
 from .stage2_colblocked import stage2_forward
 from .stage3_blocked import stage3_forward
@@ -74,4 +74,5 @@ __all__ = [
     "stage21_forward",
     "autotune_stage21_config",
     "stage22_forward",
+    "autotune_stage22_config",
 ]
