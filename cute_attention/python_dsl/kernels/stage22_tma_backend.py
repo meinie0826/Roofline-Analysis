@@ -243,22 +243,7 @@ class Stage22FlashAttentionTmaExperimental:
         gmem_thr_copy_Q = gmem_tiled_copy_Q.get_slice(consumer_slice_idx)
         tQgQ = gmem_thr_copy_Q.partition_S(gQ)
         tQsQ = gmem_thr_copy_Q.partition_D(sQ)
-        mcQ = cute.make_identity_tensor(mQ.layout.shape)
-        cQ = cute.local_tile(mcQ[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
-        tQcQ = gmem_thr_copy_Q.partition_S(cQ)
-        tQpQ = cute.make_rmem_tensor(
-            cute.make_layout(
-                (tQsQ.shape[0][1], cute.size(tQsQ, mode=[1]), cute.size(tQsQ, mode=[2])),
-                stride=(cute.size(tQsQ, mode=[2]), 0, 1),
-            ),
-            cutlass.Boolean,
-        )
-        for rest_v in cutlass.range_constexpr(tQpQ.shape[0]):
-            for rest_k in cutlass.range_constexpr(tQpQ.shape[2]):
-                tQpQ[rest_v, 0, rest_k] = cute.elem_less(tQcQ[(0, rest_v), 0, rest_k][3], mQ.layout.shape[3])
-        for m in cutlass.range_constexpr(cute.size(tQsQ.shape[1])):
-            if cute.elem_less(tQcQ[0, m, 0][1], mQ.layout.shape[1]):
-                cute.copy(gmem_tiled_copy_Q, tQgQ[None, m, None], tQsQ[None, m, None], pred=tQpQ[None, m, None])
+        cute.copy(gmem_tiled_copy_Q, tQgQ, tQsQ)
         cute.arch.cp_async_commit_group()
         return gmem_tiled_copy_Q
 
