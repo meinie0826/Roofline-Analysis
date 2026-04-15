@@ -247,6 +247,51 @@ class Stage22FlashAttentionTmaExperimental:
         return peek_kv_full_status
 
     @cute.jit
+    def _producer_tma_prefetch_prologue(
+        self,
+        warp_idx,
+        mainloop_pipeline,
+        mainloop_producer_state,
+        tma_atom_k,
+        tma_atom_v,
+        tKgK,
+        tKsK,
+        tVgV,
+        tVsV,
+        k_tile_cnt: cutlass.Int32,
+    ):
+        prefetch_k_tile_cnt = cutlass.max(cutlass.min(self._num_stages_kv, k_tile_cnt), 0)
+        if warp_idx == 0:
+            for _ in cutlass.range(prefetch_k_tile_cnt, unroll=1):
+                mainloop_pipeline.producer_acquire(mainloop_producer_state)
+                self._issue_tma_kv_load(
+                    mainloop_pipeline,
+                    mainloop_producer_state,
+                    tma_atom_k,
+                    tma_atom_v,
+                    tKgK,
+                    tKsK,
+                    tVgV,
+                    tVsV,
+                )
+                mainloop_pipeline.producer_commit(mainloop_producer_state)
+                mainloop_producer_state.advance()
+        return mainloop_producer_state
+
+    @cute.jit
+    def _make_consumer_state_pair(self):
+        return (
+            pipeline.make_pipeline_state(pipeline.PipelineUserType.Consumer, self._num_stages_kv),
+            pipeline.make_pipeline_state(pipeline.PipelineUserType.Consumer, self._num_stages_kv),
+        )
+
+    @cute.jit
+    def _consumer_tma_advance_states(self, read_state, release_state):
+        read_state.advance()
+        release_state.advance()
+        return read_state, release_state
+
+    @cute.jit
     def __call__(
         self,
         mQ: cute.Tensor,
@@ -286,9 +331,10 @@ class Stage22FlashAttentionTmaExperimental:
         self._prefetch_tma_descriptors_once(warp_idx, tma_atom_k, tma_atom_v)
         mainloop_producer_state = self._make_producer_state()
         mainloop_consumer_state = self._make_consumer_state()
+        mainloop_consumer_read_state, mainloop_consumer_release_state = self._make_consumer_state_pair()
         k_tile_cnt = cute.size(tKgK, mode=[1])
         _ = self._consumer_tma_try_wait(mainloop_pipeline, mainloop_consumer_state, k_tile_cnt)
-        _ = self._producer_tma_step(
+        _ = self._producer_tma_prefetch_prologue(
             warp_idx,
             mainloop_pipeline,
             mainloop_producer_state,
@@ -300,6 +346,8 @@ class Stage22FlashAttentionTmaExperimental:
             tVsV,
             k_tile_cnt,
         )
+        _ = self._consumer_tma_try_wait(mainloop_pipeline, mainloop_consumer_read_state, k_tile_cnt)
+        _ = self._consumer_tma_advance_states(mainloop_consumer_read_state, mainloop_consumer_release_state)
 
         raise NotImplementedError(
             "stage22_tma now has real TMA atom/pipeline scaffolding, but the K/V mainloop load path is not wired into a runnable kernel yet."
