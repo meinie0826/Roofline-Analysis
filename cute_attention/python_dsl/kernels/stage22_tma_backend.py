@@ -230,8 +230,6 @@ class Stage22FlashAttentionTmaExperimental:
         for m in cutlass.range_constexpr(cute.size(tQsQ.shape[1])):
             if cute.elem_less(tQcQ[0, m, 0][1], mQ.layout.shape[1]):
                 cute.copy(gmem_tiled_copy_Q, tQgQ[None, m, None], tQsQ[None, m, None], pred=tQpQ[None, m, None])
-            else:
-                tQsQ[None, m, None].fill(0)
         cute.arch.cp_async_commit_group()
         return gmem_tiled_copy_Q
 
