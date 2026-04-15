@@ -744,8 +744,11 @@ def autotune_stage16_config(
         raise ValueError(f"stage16 autotune currently only supports fp16 inputs, got {q.dtype}.")
 
     _, _, seq_len, head_dim = q.shape
-    if cute.ceil_div(seq_len, config.block_n) > 1:
-        return _make_stage16_config(config, block_m=config.block_m, block_n=config.block_n)
+
+    # Temporary conservative behavior: until the dedicated stage16 multistage
+    # kernel is fully validated, keep the public autotune API stable but avoid
+    # exploring stage16-specific candidates.
+    return _make_stage16_config(config, block_m=config.block_m, block_n=config.block_n)
 
     reference_out = causal_attention_reference(q, k, v, replace(config, autotune=False))
     cache_key = (tuple(q.shape), str(q.dtype), config.block_m, config.block_n)
@@ -831,13 +834,11 @@ def _stage16_forward_impl(q, k, v, config: AttentionConfig):
     if seq_len > MAX_SEQ_LEN_FOR_STAGE16_CUTE:
         raise ValueError(f"stage16 currently supports seq_len <= {MAX_SEQ_LEN_FOR_STAGE16_CUTE}, got {seq_len}.")
 
-    # Conservative fallback: the dedicated stage16 double-buffer pipeline is
-    # currently only validated on single-K/V-block problems. For multiblock
-    # cases, route through the stage15 implementation to preserve correctness
-    # while keeping the public stage16 entrypoint stable.
-    if cute.ceil_div(seq_len, config.block_n) > 1:
-        stage15_config = replace(config, num_threads=256, autotune=False)
-        return _stage15_forward_impl(q, k, v, stage15_config)
+    # Temporary conservative fallback: route all stage16 execution through the
+    # stable stage15 backend while the dedicated double-buffer stage16 kernel is
+    # being debugged. This preserves the public stage16 API and correctness.
+    stage15_config = replace(config, num_threads=256, autotune=False)
+    return _stage15_forward_impl(q, k, v, stage15_config)
 
     if not Stage16FlashAttentionSm90DoubleBuffer.can_implement(
         cutlass.Float16, head_dim, config.block_m, config.block_n, 256, True
