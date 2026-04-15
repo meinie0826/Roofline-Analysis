@@ -292,28 +292,16 @@ class Stage22FlashAttentionTma:
             cutlass.Float32,
         )
         tCcC = thr_mma.partition_C(cute.make_identity_tensor(tile_shape))
-        acc_tmem_flat_layout = cute.make_layout(
-            (
-                acc_tmem.layout.shape[0],
-                acc_tmem.layout.shape[1] * acc_tmem.layout.shape[2],
-            ),
-            stride=(
-                acc_tmem.layout.stride[0],
-                acc_tmem.layout.stride[1],
-            ),
-        )
-        acc_tmem_flat = cute.make_tensor(acc_tmem.iterator, acc_tmem_flat_layout)
-        tCcC_flat = cute.make_tensor(tCcC.iterator, acc_tmem_flat_layout)
-        thr_tmem_load = tcgen05.make_tmem_copy(tmem_load_atom, acc_tmem_flat).get_slice(
+        thr_tmem_load = tcgen05.make_tmem_copy(tmem_load_atom, acc_tmem).get_slice(
             consumer_slice_idx
         )
-        tCtC = thr_tmem_load.partition_S(acc_tmem_flat)
-        acc_rmem_flat = cute.make_fragment(
-            thr_tmem_load.partition_D(tCcC_flat).shape,
+        tCtC = thr_tmem_load.partition_S(acc_tmem)
+        acc_rmem = cute.make_fragment(
+            thr_tmem_load.partition_D(tCcC).shape,
             cutlass.Float32,
         )
-        cute.copy(thr_tmem_load, tCtC, acc_rmem_flat)
-        return cute.make_tensor(acc_rmem_flat.iterator, tCcC.layout)
+        cute.copy(thr_tmem_load, tCtC, acc_rmem)
+        return acc_rmem
 
     def _threadquad_reduce(self, val: cutlass.Float32, op):
         val = op(val, cute.arch.shuffle_sync_bfly(val, offset=2, mask=-1, mask_and_clamp=31))
@@ -466,8 +454,9 @@ class Stage22FlashAttentionTma:
         in_mask_steps: cutlass.Boolean,
     ):
         acc_shape_S = thr_mma_qk.partition_shape_C((self._m_block_size, self._n_block_size))
-        acc_S_tmem = thr_mma_qk.make_fragment_C(cute.append(acc_shape_S, 1))
+        acc_S_tmem = thr_mma_qk.make_fragment_C(cute.append(acc_shape_S, 2))
         acc_S_stage = acc_S_tmem[None, None, None, 0]
+        acc_S_load = acc_S_tmem[(None, None), 0, 0, 0]
 
         qk_tiled_mma.set(tcgen05.Field.ACCUMULATE, False)
         cute.gemm(
@@ -480,7 +469,7 @@ class Stage22FlashAttentionTma:
         acc_S = self._load_tmem_fragment_to_rmem(
             consumer_slice_idx,
             thr_mma_qk,
-            acc_S_stage,
+            acc_S_load,
             (self._m_block_size, self._n_block_size),
         )
 
@@ -518,8 +507,9 @@ class Stage22FlashAttentionTma:
         )
         tOrS = cute.make_tensor(rP.iterator, rP_mma_view)
         acc_shape_O = thr_mma_pv.partition_shape_C((self._m_block_size, self._head_dim_padded))
-        acc_O_tmem = thr_mma_pv.make_fragment_C(cute.append(acc_shape_O, 1))
+        acc_O_tmem = thr_mma_pv.make_fragment_C(cute.append(acc_shape_O, 2))
         acc_O_stage = acc_O_tmem[None, None, None, 0]
+        acc_O_load = acc_O_tmem[(None, None), 0, 0, 0]
         pv_tiled_mma.set(tcgen05.Field.ACCUMULATE, False)
         cute.gemm(
             pv_tiled_mma,
@@ -531,7 +521,7 @@ class Stage22FlashAttentionTma:
         acc_O_partial = self._load_tmem_fragment_to_rmem(
             consumer_slice_idx,
             thr_mma_pv,
-            acc_O_stage,
+            acc_O_load,
             (self._m_block_size, self._head_dim_padded),
         )
         acc_O.store(acc_O.load() + acc_O_partial.load())
