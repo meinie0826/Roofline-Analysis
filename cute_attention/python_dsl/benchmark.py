@@ -7,15 +7,18 @@ These match a typical LLM decode-phase / prefill configuration and stay within
 the seq-len limits of all CuTe stages (max 4096).
 
 Each stage is benchmarked with its most appropriate default tuning config:
-  - stage12/stage13 → autotune enabled
-  - stage16/stage17 → autotune enabled (block_m/block_n)
+  - stage12/stage13 → dedicated autotune enabled
+  - stage16/stage17 → dedicated autotune enabled
+  - non-autotuned stages can optionally use generic tile search via
+    --generic-tile-autotune to reduce tile-size bias in comparisons
   - stage15/stage16/stage17 → num_threads always forced to 256 by the kernel
-  - stage14         → num_threads=256 (128 consumer + 128 producer)
-  - stage0-stage11  → num_threads=128 (can be changed with --num-threads)
+  - stage14                 → num_threads defaults to 256 in benchmark mode
+  - stage0-stage11          → num_threads=128 by default
 """
 
 import argparse
 import time
+from dataclasses import replace
 
 from kernels import (
     AttentionConfig,
@@ -38,8 +41,104 @@ if available_backends()["torch"]:
 # ---------------------------------------------------------------------------
 _WARPSPEC_STAGES = {"stage14", "stage15", "stage16", "stage17"}
 
-# Stages with built-in autotune
-_AUTOTUNE_STAGES = {"stage12", "stage13", "stage16", "stage17"}
+_DEDICATED_AUTOTUNE_STAGES = {"stage12", "stage13", "stage16", "stage17"}
+_MULTISTAGE_STAGES = {"stage12", "stage13", "stage16", "stage17"}
+_GENERIC_TILE_TUNABLE_STAGES = {
+    "stage0",
+    "stage1",
+    "stage3",
+    "stage4",
+    "stage5",
+    "stage6",
+    "stage7",
+    "stage8",
+    "stage9",
+    "stage10",
+    "stage11",
+    "stage14",
+    "stage15",
+}
+_THREAD_SEARCH_STAGES = {"stage14"}
+_STAGE_TUNING_AXES = {
+    "stage0": "none",
+    "stage1": "benchmark fallback only",
+    "stage3": "benchmark fallback only",
+    "stage4": "benchmark fallback only",
+    "stage5": "benchmark fallback only",
+    "stage6": "benchmark fallback only",
+    "stage7": "benchmark fallback only",
+    "stage8": "benchmark fallback only",
+    "stage9": "benchmark fallback only",
+    "stage10": "benchmark fallback only",
+    "stage11": "benchmark fallback only",
+    "stage12": "block_m,block_n,num_stages_kv",
+    "stage13": "block_m,block_n,num_stages_kv",
+    "stage14": "benchmark fallback only",
+    "stage15": "benchmark fallback only",
+    "stage16": "block_m,block_n",
+    "stage17": "block_m,block_n,num_stages_kv (num_threads not yet tuned)",
+    "baseline_fa4": "none",
+    "baseline_sdpa": "none",
+}
+_STAGE_NOTES = {
+    "stage12": "two-stage cp.async pipeline; autotune may select stages=1 and fall back to stage11 path",
+    "stage13": "true MMA multistage family; autotunes tile sizes and num_stages_kv",
+    "stage14": "warp-specialized producer/consumer kernel; no dedicated autotune yet",
+    "stage15": "SM90-style warp specialization; no dedicated autotune yet",
+    "stage16": "fixed double-buffer warp-specialized kernel; current autotune is conservative block search only",
+    "stage17": "public stage17 API exists, but execution still delegates to stage16 while dedicated kernel is under development",
+}
+
+
+def _candidate_values(preferred: int, values: list[int], *, limit: int) -> list[int]:
+    ordered = []
+    for value in [preferred, *values]:
+        if value <= 0 or value > limit or value in ordered:
+            continue
+        ordered.append(value)
+    return ordered
+
+
+def get_stage_metadata() -> list[dict[str, str]]:
+    rows = []
+    for stage_name in parse_stage_list("all"):
+        rows.append(
+            {
+                "stage": stage_name,
+                "autotune": str(stage_name in _DEDICATED_AUTOTUNE_STAGES),
+                "multistage": str(stage_name in _MULTISTAGE_STAGES),
+                "tuning_axes": _STAGE_TUNING_AXES.get(stage_name, "unknown"),
+                "notes": _STAGE_NOTES.get(stage_name, ""),
+            }
+        )
+    return rows
+
+
+def _estimate_attention_flops(shape: tuple[int, int, int, int], causal: bool) -> float:
+    batch, heads, seqlen, head_dim = shape
+    if causal:
+        pair_count = seqlen * (seqlen + 1) / 2.0
+    else:
+        pair_count = float(seqlen * seqlen)
+    # QK and PV GEMMs only, counted as multiply-add FLOPs.
+    return 4.0 * batch * heads * head_dim * pair_count
+
+
+def _estimate_tflops(time_ms: float, shape: tuple[int, int, int, int], causal: bool) -> float:
+    if time_ms <= 0:
+        return 0.0
+    return _estimate_attention_flops(shape, causal) / (time_ms / 1000.0) / 1e12
+
+
+def _thread_candidates(stage_name: str, preferred: int) -> list[int]:
+    if stage_name not in _THREAD_SEARCH_STAGES:
+        return [preferred]
+    ordered = []
+    for value in [preferred, 256, 128]:
+        if value <= 0 or value in ordered:
+            continue
+        ordered.append(value)
+    return ordered
 
 
 def benchmark(stage_name, q, k, v, config, warmup=5, repeat=20):
@@ -70,13 +169,40 @@ def _config_status_suffix(config: AttentionConfig) -> str | None:
 
 def _make_config_for_stage(stage_name: str, base: AttentionConfig) -> AttentionConfig:
     """Return a config tailored to the given stage from the base config."""
-    from dataclasses import replace
     if stage_name in _WARPSPEC_STAGES:
         return replace(base, num_threads=256)
     return base
 
 
-def benchmark_stage_with_fallback(stage_name, q, k, v, config, warmup=5, repeat=20):
+def _benchmark_with_generic_tile_search(stage_name, q, k, v, config, warmup=5, repeat=20):
+    seq_len = q.shape[2]
+    block_m_values = _candidate_values(config.block_m, [128, 96, 64, 48, 32, 16], limit=seq_len)
+    block_n_values = _candidate_values(config.block_n, [256, 192, 128, 96, 64, 32], limit=seq_len)
+    best_time = None
+    best_config = None
+    last_exc = None
+
+    for num_threads in _thread_candidates(stage_name, config.num_threads):
+        for block_m in block_m_values:
+            for block_n in block_n_values:
+                trial = replace(config, block_m=block_m, block_n=block_n, num_threads=num_threads)
+                try:
+                    elapsed = benchmark(stage_name, q, k, v, trial, warmup=warmup, repeat=repeat)
+                except ValueError as exc:
+                    last_exc = exc
+                    continue
+                if best_time is None or elapsed < best_time:
+                    best_time = elapsed
+                    best_config = trial
+
+    if best_time is None or best_config is None:
+        if last_exc is not None:
+            raise last_exc
+        raise ValueError(f"{stage_name} failed all generic tile-search candidates.")
+    return best_time, _config_status_suffix(best_config)
+
+
+def benchmark_stage_with_fallback(stage_name, q, k, v, config, warmup=5, repeat=20, generic_tile_autotune=False):
     """Benchmark a stage, applying autotune or block_m fallback as appropriate."""
     if stage_name == "stage12":
         tuned = autotune_stage12_config(q, k, v, config)
@@ -91,15 +217,14 @@ def benchmark_stage_with_fallback(stage_name, q, k, v, config, warmup=5, repeat=
         tuned = autotune_stage17_config(q, k, v, config)
         return benchmark(stage_name, q, k, v, tuned, warmup=warmup, repeat=repeat), _config_status_suffix(tuned)
 
-    if stage_name not in {
-        "stage1", "stage4", "stage5", "stage6", "stage7", "stage8",
-        "stage9", "stage10", "stage11", "stage14", "stage15",
-    }:
+    if generic_tile_autotune and stage_name in _GENERIC_TILE_TUNABLE_STAGES:
+        return _benchmark_with_generic_tile_search(stage_name, q, k, v, config, warmup=warmup, repeat=repeat)
+
+    if stage_name not in _GENERIC_TILE_TUNABLE_STAGES:
         return benchmark(stage_name, q, k, v, config, warmup=warmup, repeat=repeat), None
 
     block_m = config.block_m
     while block_m >= 1:
-        from dataclasses import replace
         cfg = replace(config, block_m=block_m)
         try:
             t = benchmark(stage_name, q, k, v, cfg, warmup=warmup, repeat=repeat)
@@ -170,6 +295,14 @@ def main():
                         help="Warmup iterations (default: 5).")
     parser.add_argument("--repeat",      type=int,   default=20,
                         help="Benchmark iterations (default: 20).")
+    parser.add_argument("--generic-tile-autotune", action="store_true",
+                        help="For stages without dedicated autotune, search a small set of block_m/block_n candidates.")
+    parser.add_argument("--report-tensorcore", action="store_true",
+                        help="Add estimated attention TFLOP/s and optional Tensor Core utilization columns.")
+    parser.add_argument("--tensorcore-peak-tflops", type=float, default=None,
+                        help="Peak Tensor Core TFLOP/s for utilization estimates. Used only with --report-tensorcore.")
+    parser.add_argument("--print-stage-metadata", action="store_true",
+                        help="Print autotune/multistage coverage for each stage before running benchmarks.")
     args = parser.parse_args()
 
     if torch is None:
@@ -206,21 +339,53 @@ def main():
         "num_threads": args.num_threads,
         "warmup":      args.warmup,
         "repeat":      args.repeat,
+        "generic_tile_autotune": args.generic_tile_autotune,
+        "report_tensorcore": args.report_tensorcore,
+        "tensorcore_peak_tflops": args.tensorcore_peak_tflops,
         "stages":      stages,
     })
-    print("stage,time_ms,status")
+    if args.print_stage_metadata:
+        print("stage_metadata")
+        print("stage,autotune,multistage,tuning_axes,notes")
+        for row in get_stage_metadata():
+            if row["stage"] in stages:
+                print(
+                    f'{row["stage"]},{row["autotune"]},{row["multistage"]},'
+                    f'{row["tuning_axes"]},{row["notes"]}'
+                )
+    if args.report_tensorcore:
+        print("stage,time_ms,tflops_est,tc_util_pct,status")
+    else:
+        print("stage,time_ms,status")
     for stage_name in stages:
         config = _make_config_for_stage(stage_name, base_config)
         try:
             time_ms, status_suffix = benchmark_stage_with_fallback(
-                stage_name, q, k, v, config, warmup=args.warmup, repeat=args.repeat
+                stage_name,
+                q,
+                k,
+                v,
+                config,
+                warmup=args.warmup,
+                repeat=args.repeat,
+                generic_tile_autotune=args.generic_tile_autotune,
             )
-            if status_suffix:
+            if args.report_tensorcore:
+                tflops_est = _estimate_tflops(time_ms, tuple(q.shape), args.causal)
+                tc_util_pct = "na"
+                if args.tensorcore_peak_tflops:
+                    tc_util_pct = f"{100.0 * tflops_est / args.tensorcore_peak_tflops:.2f}"
+                status = f"ok:{status_suffix}" if status_suffix else "ok"
+                print(f"{stage_name},{time_ms:.3f},{tflops_est:.3f},{tc_util_pct},{status}")
+            elif status_suffix:
                 print(f"{stage_name},{time_ms:.3f},ok:{status_suffix}")
             else:
                 print(f"{stage_name},{time_ms:.3f},ok")
         except Exception as exc:
-            print(f"{stage_name},nan,failed:{type(exc).__name__}:{exc}")
+            if args.report_tensorcore:
+                print(f"{stage_name},nan,nan,na,failed:{type(exc).__name__}:{exc}")
+            else:
+                print(f"{stage_name},nan,failed:{type(exc).__name__}:{exc}")
 
 
 if __name__ == "__main__":
