@@ -749,7 +749,26 @@ def autotune_stage16_config(
     # Temporary conservative behavior: until the dedicated stage16 multistage
     # kernel is fully validated, keep the public autotune API stable but avoid
     # exploring stage16-specific candidates.
-    return _make_stage16_config(config, block_m=config.block_m, block_n=config.block_n)
+    cache_key = (tuple(q.shape), str(q.dtype), config.block_m, config.block_n)
+    cached = _STAGE16_AUTOTUNE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    cache_key_disk = _stage16_autotune_cache_key(config, q)
+    disk_cache = _load_stage16_autotune_cache_from_disk()
+    cached_disk = disk_cache.get(cache_key_disk)
+    if cached_disk is not None:
+        tuned = _make_stage16_config(
+            config,
+            block_m=int(cached_disk["block_m"]),
+            block_n=int(cached_disk["block_n"]),
+        )
+        _STAGE16_AUTOTUNE_CACHE[cache_key] = tuned
+        return tuned
+    tuned = _make_stage16_config(config, block_m=config.block_m, block_n=config.block_n)
+    _STAGE16_AUTOTUNE_CACHE[cache_key] = tuned
+    disk_cache[cache_key_disk] = {"block_m": tuned.block_m, "block_n": tuned.block_n}
+    _save_stage16_autotune_cache_to_disk(disk_cache)
+    return tuned
 
     reference_out = causal_attention_reference(q, k, v, replace(config, autotune=False))
     cache_key = (tuple(q.shape), str(q.dtype), config.block_m, config.block_n)

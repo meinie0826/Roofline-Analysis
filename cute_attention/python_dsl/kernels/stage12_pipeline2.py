@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import cuda.bindings.driver as cuda
@@ -22,6 +24,7 @@ from .stage11_mma import Stage11FlashAttentionAmpere, stage11_forward
 MAX_SEQ_LEN_FOR_STAGE12_CUTE = 4096
 _STAGE12_COMPILED_CACHE = {}
 _STAGE12_AUTOTUNE_CACHE = {}
+_STAGE12_AUTOTUNE_CACHE_PATH = Path(__file__).resolve().parents[1] / ".cache" / "stage12_autotune.json"
 
 
 if HAS_CUTE:
@@ -688,6 +691,34 @@ def _stage12_candidate_values(preferred: int, values: list[int], *, limit: int) 
     return ordered
 
 
+def _stage12_autotune_cache_key(config: AttentionConfig, q) -> str:
+    device_name = torch.cuda.get_device_name(q.device)
+    return "|".join(
+        [
+            device_name,
+            str(tuple(q.shape)),
+            str(q.dtype),
+            str(config.num_threads),
+            str(config.block_m),
+            str(config.block_n),
+        ]
+    )
+
+
+def _load_stage12_autotune_cache_from_disk() -> dict[str, dict[str, int]]:
+    if not _STAGE12_AUTOTUNE_CACHE_PATH.exists():
+        return {}
+    try:
+        return json.loads(_STAGE12_AUTOTUNE_CACHE_PATH.read_text())
+    except Exception:
+        return {}
+
+
+def _save_stage12_autotune_cache_to_disk(entries: dict[str, dict[str, int]]) -> None:
+    _STAGE12_AUTOTUNE_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _STAGE12_AUTOTUNE_CACHE_PATH.write_text(json.dumps(entries, indent=2, sort_keys=True))
+
+
 def autotune_stage12_config(
     q,
     k,
@@ -718,6 +749,18 @@ def autotune_stage12_config(
     cached = _STAGE12_AUTOTUNE_CACHE.get(cache_key)
     if cached is not None:
         return cached
+    cache_key_disk = _stage12_autotune_cache_key(config, q)
+    disk_cache = _load_stage12_autotune_cache_from_disk()
+    cached_disk = disk_cache.get(cache_key_disk)
+    if cached_disk is not None:
+        tuned = _make_stage12_config(
+            config,
+            block_m=int(cached_disk["block_m"]),
+            block_n=int(cached_disk["block_n"]),
+            num_stages_kv=int(cached_disk["num_stages_kv"]),
+        )
+        _STAGE12_AUTOTUNE_CACHE[cache_key] = tuned
+        return tuned
 
     block_m_values = _stage12_candidate_values(config.block_m, [128, 96, 64, 48, 32, 16], limit=seq_len)
     block_n_values = _stage12_candidate_values(config.block_n, [256, 192, 128, 96, 64], limit=seq_len)
@@ -770,6 +813,12 @@ def autotune_stage12_config(
         )
 
     _STAGE12_AUTOTUNE_CACHE[cache_key] = best_config
+    disk_cache[cache_key_disk] = {
+        "block_m": best_config.block_m,
+        "block_n": best_config.block_n,
+        "num_stages_kv": best_config.num_stages_kv,
+    }
+    _save_stage12_autotune_cache_to_disk(disk_cache)
     return best_config
 
 
