@@ -20,6 +20,7 @@ from .stage12_pipeline2 import autotune_stage12_config, stage12_forward
 from .stage13_multistage import autotune_stage13_config, stage13_forward
 from .stage14_warpspec import stage14_forward
 from .stage15_sm90style import stage15_forward
+from .stage16_multistage import autotune_stage16_config, stage16_forward
 from .stage0_naive import stage0_forward
 from .stage3_blocked import stage3_forward
 
@@ -52,4 +53,6 @@ __all__ = [
     "autotune_stage13_config",
     "stage14_forward",
     "stage15_forward",
+    "stage16_forward",
+    "autotune_stage16_config",
 ]
