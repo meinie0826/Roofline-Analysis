@@ -42,22 +42,13 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
             return False
         return is_causal
 
-    def _make_shared_storage_type(self, dtype, sQ_layout, sKV_layout):
+    def _make_shared_storage_type(self, dtype, sQ_layout, sKV_layout_staged):
         annotations = {
             "mainloop_pipeline_array_ptr": cute.struct.MemRange[cutlass.Int64, self._num_stages_kv],
             "sQ": cute.struct.Align[cute.struct.MemRange[dtype, cute.cosize(sQ_layout)], 1024],
-            "sK0": cute.struct.Align[cute.struct.MemRange[dtype, cute.cosize(sKV_layout)], 1024],
-            "sV0": cute.struct.Align[cute.struct.MemRange[dtype, cute.cosize(sKV_layout)], 1024],
-            "sK1": cute.struct.Align[cute.struct.MemRange[dtype, cute.cosize(sKV_layout)], 1024],
-            "sV1": cute.struct.Align[cute.struct.MemRange[dtype, cute.cosize(sKV_layout)], 1024],
+            "sK": cute.struct.Align[cute.struct.MemRange[dtype, cute.cosize(sKV_layout_staged)], 1024],
+            "sV": cute.struct.Align[cute.struct.MemRange[dtype, cute.cosize(sKV_layout_staged)], 1024],
         }
-        if self._num_stages_kv >= 3:
-            annotations["sK2"] = cute.struct.Align[
-                cute.struct.MemRange[dtype, cute.cosize(sKV_layout)], 1024
-            ]
-            annotations["sV2"] = cute.struct.Align[
-                cute.struct.MemRange[dtype, cute.cosize(sKV_layout)], 1024
-            ]
 
         @cute.struct
         class SharedStorage:
@@ -80,7 +71,7 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
             defer_sync=True,
         )
 
-    def _make_tma_atom(self, tensor: cute.Tensor, smem_layout: cute.Layout):
+    def _make_tma_atom(self, tensor: cute.Tensor, smem_layout):
         return cpasync.make_tiled_tma_atom(
             cpasync.CopyBulkTensorTileG2SOp(),
             tensor,
@@ -88,7 +79,7 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
             (self._n_block_size, self._head_dim_padded),
         )
 
-    def _partition_tma_slot(self, tma_atom, g_tensor, s_tensor):
+    def _partition_tma_tensor(self, tma_atom, g_tensor, s_tensor):
         group_rank_smem = cute.rank(s_tensor) - 1
         group_rank_gmem = cute.rank(g_tensor) - 1
         return cpasync.tma_partition(
@@ -134,32 +125,19 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
         tma_atom_v,
         tKgK,
         tVgV,
-        tKsK0,
-        tVsV0,
-        tKsK1,
-        tVsV1,
-        tKsK2,
-        tVsV2,
+        tKsK,
+        tVsV,
     ):
-        tKsK = tKsK0
-        tVsV = tVsV0
-        if mainloop_producer_state.index == 1:
-            tKsK = tKsK1
-            tVsV = tVsV1
-        if cutlass.const_expr(self._num_stages_kv >= 3):
-            if mainloop_producer_state.index == 2:
-                tKsK = tKsK2
-                tVsV = tVsV2
         cute.copy(
             tma_atom_k,
             tKgK[None, mainloop_producer_state.count],
-            tKsK,
+            tKsK[None, mainloop_producer_state.index],
             tma_bar_ptr=mainloop_pipeline.producer_get_barrier(mainloop_producer_state),
         )
         cute.copy(
             tma_atom_v,
             tVgV[None, mainloop_producer_state.count],
-            tVsV,
+            tVsV[None, mainloop_producer_state.index],
             tma_bar_ptr=mainloop_pipeline.producer_get_barrier(mainloop_producer_state),
         )
 
@@ -173,12 +151,8 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
         tma_atom_v,
         tKgK,
         tVgV,
-        tKsK0,
-        tVsV0,
-        tKsK1,
-        tVsV1,
-        tKsK2,
-        tVsV2,
+        tKsK,
+        tVsV,
         k_tile_cnt: cutlass.Int32,
     ):
         prefetch_k_tile_cnt = cutlass.max(cutlass.min(self._num_stages_kv, k_tile_cnt), 0)
@@ -192,12 +166,8 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
                     tma_atom_v,
                     tKgK,
                     tVgV,
-                    tKsK0,
-                    tVsV0,
-                    tKsK1,
-                    tVsV1,
-                    tKsK2,
-                    tVsV2,
+                    tKsK,
+                    tVsV,
                 )
                 mainloop_pipeline.producer_commit(mainloop_producer_state)
                 mainloop_producer_state.advance()
@@ -213,12 +183,8 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
         tma_atom_v,
         tKgK,
         tVgV,
-        tKsK0,
-        tVsV0,
-        tKsK1,
-        tVsV1,
-        tKsK2,
-        tVsV2,
+        tKsK,
+        tVsV,
         k_tile_cnt: cutlass.Int32,
     ):
         if warp_idx == 0 and mainloop_producer_state.count < k_tile_cnt:
@@ -230,12 +196,8 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
                 tma_atom_v,
                 tKgK,
                 tVgV,
-                tKsK0,
-                tVsV0,
-                tKsK1,
-                tVsV1,
-                tKsK2,
-                tVsV2,
+                tKsK,
+                tVsV,
             )
             mainloop_pipeline.producer_commit(mainloop_producer_state)
             mainloop_producer_state.advance()
@@ -356,8 +318,9 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
             (0, 1),
         )
         sO_layout = sQ_layout
+        sKV_layout_staged = cute.append(sKV_layout, self._num_stages_kv)
 
-        SharedStorage = self._make_shared_storage_type(self._dtype, sQ_layout, sKV_layout)
+        SharedStorage = self._make_shared_storage_type(self._dtype, sQ_layout, sKV_layout_staged)
 
         universal_copy_bits = 128
         async_copy_elems = universal_copy_bits // self._dtype.width
@@ -444,12 +407,14 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
         smem = cutlass.utils.SmemAllocator()
         storage = smem.allocate(SharedStorage)
         sQ = storage.sQ.get_tensor(sQ_layout)
-        sK0 = storage.sK0.get_tensor(sKV_layout)
-        sV0 = storage.sV0.get_tensor(sKV_layout)
-        sK1 = storage.sK1.get_tensor(sKV_layout)
-        sV1 = storage.sV1.get_tensor(sKV_layout)
-        sK2 = storage.sK2.get_tensor(sKV_layout) if cutlass.const_expr(self._num_stages_kv >= 3) else None
-        sV2 = storage.sV2.get_tensor(sKV_layout) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+        sK = storage.sK.get_tensor(sKV_layout_staged)
+        sV = storage.sV.get_tensor(sKV_layout_staged)
+        sK0 = cute.slice_(sK, (None, None, 0))
+        sV0 = cute.slice_(sV, (None, None, 0))
+        sK1 = cute.slice_(sK, (None, None, 1))
+        sV1 = cute.slice_(sV, (None, None, 1))
+        sK2 = cute.slice_(sK, (None, None, 2)) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+        sV2 = cute.slice_(sV, (None, None, 2)) if cutlass.const_expr(self._num_stages_kv >= 3) else None
         sVt0 = cute.composition(sV0, cute.make_layout((self._head_dim_padded, self._n_block_size), stride=(self._n_block_size, 1)))
         sVt1 = cute.composition(sV1, cute.make_layout((self._head_dim_padded, self._n_block_size), stride=(self._n_block_size, 1)))
         sVt2 = (
@@ -526,19 +491,12 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
 
         mK_tma = mK[batch_size, None, num_head, None]
         mV_tma = mV[batch_size, None, num_head, None]
-        tma_atom_k, tma_tensor_k = self._make_tma_atom(mK_tma, sKV_layout)
-        tma_atom_v, tma_tensor_v = self._make_tma_atom(mV_tma, sKV_layout)
+        tma_atom_k, tma_tensor_k = self._make_tma_atom(mK_tma, cute.select(sKV_layout_staged, mode=[0, 1]))
+        tma_atom_v, tma_tensor_v = self._make_tma_atom(mV_tma, cute.select(sKV_layout_staged, mode=[0, 1]))
         gK_tma = cute.local_tile(tma_tensor_k, (self._n_block_size, self._head_dim_padded), (None, 0))
         gV_tma = cute.local_tile(tma_tensor_v, (self._n_block_size, self._head_dim_padded), (None, 0))
-        tKsK0, tKgK0 = self._partition_tma_slot(tma_atom_k, gK_tma, sK0)
-        tKsK1, _ = self._partition_tma_slot(tma_atom_k, gK_tma, sK1)
-        tVsV0, tVgV0 = self._partition_tma_slot(tma_atom_v, gV_tma, sV0)
-        tVsV1, _ = self._partition_tma_slot(tma_atom_v, gV_tma, sV1)
-        tKsK2 = None
-        tVsV2 = None
-        if cutlass.const_expr(self._num_stages_kv >= 3):
-            tKsK2, _ = self._partition_tma_slot(tma_atom_k, gK_tma, sK2)
-            tVsV2, _ = self._partition_tma_slot(tma_atom_v, gV_tma, sV2)
+        tKsK, tKgK = self._partition_tma_tensor(tma_atom_k, gK_tma, sK)
+        tVsV, tVgV = self._partition_tma_tensor(tma_atom_v, gV_tma, sV)
 
         if is_consumer:
             for m in cutlass.range_constexpr(cute.size(tQsQ.shape[1])):
@@ -567,14 +525,10 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
             mainloop_producer_state,
             tma_atom_k,
             tma_atom_v,
-            tKgK0,
-            tVgV0,
-            tKsK0,
-            tVsV0,
-            tKsK1,
-            tVsV1,
-            tKsK2,
-            tVsV2,
+            tKgK,
+            tVgV,
+            tKsK,
+            tVsV,
             k_tile_cnt,
         )
 
@@ -656,14 +610,10 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
                 mainloop_producer_state,
                 tma_atom_k,
                 tma_atom_v,
-                tKgK0,
-                tVgV0,
-                tKsK0,
-                tVsV0,
-                tKsK1,
-                tVsV1,
-                tKsK2,
-                tVsV2,
+                tKgK,
+                tVgV,
+                tKsK,
+                tVsV,
                 k_tile_cnt,
             )
 
