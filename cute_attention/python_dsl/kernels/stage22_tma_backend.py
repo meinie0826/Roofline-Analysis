@@ -853,8 +853,6 @@ class Stage22FlashAttentionTmaExperimental:
             tma_atom_v,
             tma_tensor_v,
         )
-        tKgK = tKgK[(None, None, 0, 0)]
-        tVgV = tVgV[(None, 0, None, 0)]
         _ = self._load_q_to_smem(
             tidx,
             mQ,
