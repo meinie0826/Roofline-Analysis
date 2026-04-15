@@ -744,7 +744,7 @@ class Stage22FlashAttentionTmaExperimental:
         gO = cute.local_tile(mO[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
 
         sQ = storage.sQ.get_tensor(sQ_layout.outer, swizzle=sQ_layout.inner)
-        sQ0 = self._slice_stage_tensor(sQ, 0)
+        sQ_load = storage.sQ.get_tensor(sQ_load_layout.outer, swizzle=sQ_load_layout.inner)
         sK = storage.sK.get_tensor(sK_layout_staged.outer, swizzle=sK_layout_staged.inner)
         sV = storage.sV.get_tensor(sV_layout_staged.outer, swizzle=sV_layout_staged.inner)
         # Slice per-stage sV then logically transpose for ldsm (sV: block_n×head_dim → sVt: head_dim×block_n)
@@ -798,7 +798,7 @@ class Stage22FlashAttentionTmaExperimental:
         _ = self._load_q_to_smem(
             tidx,
             mQ,
-            sQ0,
+            sQ_load,
             sQ_load_layout,
             m_block,
             batch_size,
@@ -958,7 +958,7 @@ class Stage22FlashAttentionTmaExperimental:
             self.normalize_softmax(acc_O, row_sum)
             rO = cute.make_fragment_like(acc_O, self._dtype)
             rO.store(acc_O.load().to(self._dtype))
-            sO = cute.make_tensor(sQ0.iterator, sO_layout)
+            sO = cute.make_tensor(sQ_load.iterator, sO_layout)
 
             smem_copy_atom_O = cute.make_copy_atom(cute.nvgpu.CopyUniversalOp(), self._dtype)
             smem_tiled_copy_O = cute.make_tiled_copy_C(smem_copy_atom_O, qk_tiled_mma)
