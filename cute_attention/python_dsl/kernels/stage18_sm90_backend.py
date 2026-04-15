@@ -41,6 +41,18 @@ class Stage18FlashAttentionSm90Experimental:
         # For a 3-stage pipeline we retain one in-flight group in steady state.
         return 1 if self._num_stages_kv >= 3 else 0
 
+    def _steady_state_step(self) -> int:
+        return self._num_stages_kv
+
+    def _prefetch_block_for_slot(self, first_pipeline_block, prefetch_slot):
+        return first_pipeline_block - prefetch_slot
+
+    def _compute_block_for_slot(self, n_block_max, n_tile, stage_slot):
+        return n_block_max - n_tile - 1 - stage_slot
+
+    def _next_block_after_compute(self, n_block):
+        return n_block - self._steady_state_step()
+
     @staticmethod
     def can_implement(
         dtype,
@@ -378,7 +390,7 @@ class Stage18FlashAttentionSm90Experimental:
 
         first_pipeline_block = n_block_max - mask_steps - 1
         for prefetch_slot in cutlass.range_constexpr(1, self._num_stages_kv):
-            prefetch_block = first_pipeline_block - prefetch_slot
+            prefetch_block = self._prefetch_block_for_slot(first_pipeline_block, prefetch_slot)
             if is_producer and prefetch_block >= 0:
                 self._copy_kv_tile(
                     prefetch_block,
@@ -393,9 +405,9 @@ class Stage18FlashAttentionSm90Experimental:
                     mK,
                 )
 
-        for n_tile in range(mask_steps, n_block_max, self._num_stages_kv):
+        for n_tile in range(mask_steps, n_block_max, self._steady_state_step()):
             for stage_slot in cutlass.range_constexpr(self._num_stages_kv):
-                n_block = n_block_max - n_tile - 1 - stage_slot
+                n_block = self._compute_block_for_slot(n_block_max, n_tile, stage_slot)
                 if n_block >= 0:
                     self._compute_one_block(
                         is_consumer,
@@ -433,7 +445,7 @@ class Stage18FlashAttentionSm90Experimental:
                         tKsK=tKsK_slots[stage_slot],
                         tVsV=tVsV_slots[stage_slot],
                         tKVpKV=tKVpKV,
-                        next_k_block=n_block - self._num_stages_kv,
+                        next_k_block=self._next_block_after_compute(n_block),
                     )
 
         if is_consumer:
