@@ -721,6 +721,12 @@ def _stage16_candidate_values(preferred: int, values: list, *, limit: int) -> li
     return ordered
 
 
+def _stage16_candidate_matches_reference(q, k, v, reference_out, tuned: AttentionConfig) -> bool:
+    candidate_out = _stage16_forward_impl(q, k, v, tuned)
+    torch.testing.assert_close(candidate_out, reference_out, rtol=4e-2, atol=4e-2)
+    return True
+
+
 def autotune_stage16_config(
     q,
     k,
@@ -746,15 +752,24 @@ def autotune_stage16_config(
     cache_key = (tuple(q.shape), str(q.dtype), config.block_m, config.block_n)
     cached = _STAGE16_AUTOTUNE_CACHE.get(cache_key)
     if cached is not None:
-        return cached
+        try:
+            _stage16_candidate_matches_reference(q, k, v, reference_out, cached)
+            return cached
+        except (AssertionError, ValueError, RuntimeError):
+            _STAGE16_AUTOTUNE_CACHE.pop(cache_key, None)
 
     cache_key_disk = _stage16_autotune_cache_key(config, q)
     disk_cache = _load_stage16_autotune_cache_from_disk()
     cached_disk = disk_cache.get(cache_key_disk)
     if cached_disk is not None:
         tuned = _make_stage16_config(config, block_m=int(cached_disk["block_m"]), block_n=int(cached_disk["block_n"]))
-        _STAGE16_AUTOTUNE_CACHE[cache_key] = tuned
-        return tuned
+        try:
+            _stage16_candidate_matches_reference(q, k, v, reference_out, tuned)
+            _STAGE16_AUTOTUNE_CACHE[cache_key] = tuned
+            return tuned
+        except (AssertionError, ValueError, RuntimeError):
+            disk_cache.pop(cache_key_disk, None)
+            _save_stage16_autotune_cache_to_disk(disk_cache)
 
     block_m_values = _stage16_candidate_values(config.block_m, [128, 96, 64, 48, 32], limit=seq_len)
     block_n_values = _stage16_candidate_values(config.block_n, [256, 192, 128, 96, 64], limit=seq_len)
@@ -772,8 +787,7 @@ def autotune_stage16_config(
             ):
                 continue
             try:
-                candidate_out = _stage16_forward_impl(q, k, v, tuned)
-                torch.testing.assert_close(candidate_out, reference_out, rtol=4e-2, atol=4e-2)
+                _stage16_candidate_matches_reference(q, k, v, reference_out, tuned)
                 for _ in range(warmup):
                     _stage16_forward_impl(q, k, v, tuned)
                 torch.cuda.synchronize()
