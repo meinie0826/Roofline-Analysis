@@ -7,6 +7,9 @@ sys.path.insert(0, ".")
 import pytest
 
 from kernels import AttentionConfig, available_backends, run_stage
+from kernels.reference import (
+    causal_attention_reference,
+)
 
 
 backends = available_backends()
@@ -27,18 +30,9 @@ def make_inputs(shape, dtype):
 def test_stage0_matches_reference(shape, dtype):
     q, k, v = make_inputs(shape, dtype)
     config = AttentionConfig(block_n=64, num_threads=128)
-    ref = run_stage("reference", q, k, v, config)
+    ref = causal_attention_reference(q, k, v, config)
     out = run_stage("stage0", q, k, v, config)
     torch.testing.assert_close(out, ref, rtol=1e-2, atol=1e-2)
-
-
-@pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
-def test_stage2_reference_matches_reference():
-    q, k, v = make_inputs((1, 2, 96, 64), torch.float32)
-    config = AttentionConfig(block_m=32, block_n=64)
-    ref = run_stage("reference", q, k, v, config)
-    out = run_stage("stage2", q, k, v, config)
-    torch.testing.assert_close(out, ref, rtol=1e-3, atol=1e-3)
 
 
 @pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
@@ -46,7 +40,7 @@ def test_stage2_reference_matches_reference():
 def test_stage1_fa2_matches_reference_small():
     q, k, v = make_inputs((1, 1, 64, 64), torch.float16)
     config = AttentionConfig(block_n=32, num_threads=128)
-    ref = run_stage("reference", q, k, v, config)
+    ref = causal_attention_reference(q, k, v, config)
     out = run_stage("stage1", q, k, v, config)
     torch.testing.assert_close(out, ref, rtol=2e-2, atol=2e-2)
 
@@ -56,7 +50,7 @@ def test_stage1_fa2_matches_reference_small():
 def test_stage3_matches_reference_small():
     q, k, v = make_inputs((1, 1, 64, 64), torch.float16)
     config = AttentionConfig(block_n=32, num_threads=128)
-    ref = run_stage("reference", q, k, v, config)
+    ref = causal_attention_reference(q, k, v, config)
     out = run_stage("stage3", q, k, v, config)
     torch.testing.assert_close(out, ref, rtol=2e-2, atol=2e-2)
 
@@ -67,7 +61,7 @@ def test_stage3_matches_reference_small():
 def test_stage4_stage5_stage6_stage7_stage8_stage9_stage10_match_reference(stage_name):
     q, k, v = make_inputs((1, 1, 64, 64), torch.float16)
     config = AttentionConfig(block_m=32, block_n=32, num_threads=128)
-    ref = run_stage("reference", q, k, v, config)
+    ref = causal_attention_reference(q, k, v, config)
     out = run_stage(stage_name, q, k, v, config)
     rtol, atol = (3e-2, 3e-2) if stage_name == "stage7" else (2e-2, 2e-2)
     torch.testing.assert_close(out, ref, rtol=rtol, atol=atol)
@@ -78,6 +72,6 @@ def test_stage4_stage5_stage6_stage7_stage8_stage9_stage10_match_reference(stage
 def test_stage11_matches_reference_small():
     q, k, v = make_inputs((1, 1, 64, 64), torch.float16)
     config = AttentionConfig(block_m=64, block_n=64, num_threads=128)
-    ref = run_stage("reference", q, k, v, config)
+    ref = causal_attention_reference(q, k, v, config)
     out = run_stage("stage11", q, k, v, config)
     torch.testing.assert_close(out, ref, rtol=3e-2, atol=3e-2)

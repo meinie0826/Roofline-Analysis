@@ -6,11 +6,6 @@ from typing import Callable
 from .baseline_fa4 import baseline_fa4_forward
 from .baseline_sdpa import baseline_sdpa_forward
 from .common import AttentionConfig, available_backends
-from .reference import (
-    causal_attention_blocked_reference,
-    causal_attention_online_reference,
-    causal_attention_reference,
-)
 from .stage1_fa2 import stage1_forward
 from .stage4_mma import stage4_forward
 from .stage5_pipeline import stage5_forward
@@ -36,12 +31,6 @@ class StageDefinition:
 
 
 STAGES: dict[str, StageDefinition] = {
-    "reference": StageDefinition(
-        name="reference",
-        description="PyTorch reference: full score materialization + causal mask + softmax + PV.",
-        implementation=causal_attention_reference,
-        backend="torch",
-    ),
     "stage0": StageDefinition(
         name="stage0",
         description="Naive CuTe stage: CTA-per-row, explicit scores, no fusion.",
@@ -53,18 +42,6 @@ STAGES: dict[str, StageDefinition] = {
         description="Our own CuTe FA2-style kernel: blocked causal attention with online softmax.",
         implementation=stage1_forward,
         backend="own-cute-dsl",
-    ),
-    "stage1_ref": StageDefinition(
-        name="stage1_ref",
-        description="PyTorch online-softmax reference for validating running max/sum math.",
-        implementation=causal_attention_online_reference,
-        backend="torch",
-    ),
-    "stage2": StageDefinition(
-        name="stage2",
-        description="PyTorch blocked reference for validating KV blocking before CuTe tiling.",
-        implementation=causal_attention_blocked_reference,
-        backend="torch",
     ),
     "baseline_fa4": StageDefinition(
         name="baseline_fa4",

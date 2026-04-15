@@ -12,7 +12,6 @@ def test_parse_stage_list_all_includes_new_ablation_stages():
     assert stages == [
         "stage0",
         "stage1",
-        "stage2",
         "stage3",
         "stage4",
         "stage5",

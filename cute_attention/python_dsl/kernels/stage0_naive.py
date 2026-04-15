@@ -12,7 +12,6 @@ from .common import (
 )
 
 
-MAX_SEQ_LEN_FOR_STAGE0_CUTE = 2048
 _STAGE0_COMPILED_CACHE = {}
 
 
@@ -124,10 +123,6 @@ def stage0_forward(q, k, v, config: AttentionConfig | None = None):
         raise ValueError(f"stage0 currently only supports fp16/bf16 inputs, got {q.dtype}.")
 
     batch, heads, seq_len, head_dim = q.shape
-    if seq_len > MAX_SEQ_LEN_FOR_STAGE0_CUTE:
-        raise ValueError(
-            f"stage0 currently supports seq_len <= {MAX_SEQ_LEN_FOR_STAGE0_CUTE}, got {seq_len}."
-        )
 
     scale = config.resolve_scale(head_dim)
     q_flat = q.reshape(batch * heads, seq_len, head_dim).contiguous()

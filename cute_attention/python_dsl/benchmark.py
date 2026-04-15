@@ -54,7 +54,6 @@ def parse_stage_list(stages_arg: str) -> list[str]:
         return [
             "stage0",
             "stage1",
-            "stage2",
             "stage3",
             "stage4",
             "stage5",
