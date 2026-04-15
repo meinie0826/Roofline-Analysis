@@ -37,9 +37,6 @@ from .common import (
     torch,
     validate_qkv,
 )
-from .stage15_sm90style import stage15_forward
-
-
 MAX_SEQ_LEN_FOR_STAGE16_CUTE = 4096
 _STAGE16_COMPILED_CACHE: dict = {}
 _STAGE16_AUTOTUNE_CACHE: dict = {}
@@ -314,25 +311,33 @@ if HAS_CUTE:
                 cute.arch.cp_async_commit_group()
             else:
                 # slot0 ← tile[n_block_max-1]
-                for n in cutlass.range_constexpr(cute.size(tKsK0.shape[1])):
-                    if cute.elem_less(tKVcKV[0, n, 0][1], mK.layout.shape[1]):
-                        cute.copy(gmem_tiled_copy_KV, tKgK[None, n, None, start_n_block], tKsK0[None, n, None], pred=tKVpKV[None, n, None])
-                        cute.copy(gmem_tiled_copy_KV, tVgV[None, n, None, start_n_block], tVsV0[None, n, None], pred=tKVpKV[None, n, None])
-                    else:
-                        tKsK0[None, n, None].fill(0)
-                        tVsV0[None, n, None].fill(0)
-                cute.arch.cp_async_commit_group()
+                self._copy_kv_tile(
+                    start_n_block,
+                    start_n_block,
+                    tKVcKV,
+                    tKVpKV,
+                    tKgK,
+                    tVgV,
+                    tKsK0,
+                    tVsV0,
+                    gmem_tiled_copy_KV,
+                    mK,
+                )
                 # slot1 ← tile[n_block_max-2]
                 second = start_n_block - 1
                 if second >= 0:
-                    for n in cutlass.range_constexpr(cute.size(tKsK1.shape[1])):
-                        if cute.elem_less(tKVcKV[0, n, 0][1], mK.layout.shape[1]):
-                            cute.copy(gmem_tiled_copy_KV, tKgK[None, n, None, second], tKsK1[None, n, None], pred=tKVpKV[None, n, None])
-                            cute.copy(gmem_tiled_copy_KV, tVgV[None, n, None, second], tVsV1[None, n, None], pred=tKVpKV[None, n, None])
-                        else:
-                            tKsK1[None, n, None].fill(0)
-                            tVsV1[None, n, None].fill(0)
-                    cute.arch.cp_async_commit_group()
+                    self._copy_kv_tile(
+                        second,
+                        start_n_block,
+                        tKVcKV,
+                        tKVpKV,
+                        tKgK,
+                        tVgV,
+                        tKsK1,
+                        tVsV1,
+                        gmem_tiled_copy_KV,
+                        mK,
+                    )
                 else:
                     cute.arch.cp_async_commit_group()
 
@@ -529,20 +534,49 @@ if HAS_CUTE:
             self.cta_sync_barrier.arrive_and_wait()
 
             if is_producer and next_k_block >= 0:
-                for n in cutlass.range_constexpr(cute.size(tKsK.shape[1])):
-                    if cute.elem_less(tKVcKV[0, n, 0][1], mK.layout.shape[1]):
-                        cute.copy(gmem_tiled_copy_KV, tKgK[None, n, None, next_k_block], tKsK[None, n, None], pred=tKVpKV[None, n, None])
-                        cute.copy(gmem_tiled_copy_KV, tVgV[None, n, None, next_k_block], tVsV[None, n, None], pred=tKVpKV[None, n, None])
-                    else:
-                        tKsK[None, n, None].fill(0)
-                        tVsV[None, n, None].fill(0)
-                cute.arch.cp_async_commit_group()
+                self._copy_kv_tile(
+                    next_k_block,
+                    n_block,
+                    tKVcKV,
+                    tKVpKV,
+                    tKgK,
+                    tVgV,
+                    tKsK,
+                    tVsV,
+                    gmem_tiled_copy_KV,
+                    mK,
+                )
             else:
                 if is_producer:
                     cute.arch.cp_async_commit_group()
 
             cute.arch.cp_async_wait_group(wait_group)
             self.cta_sync_barrier.arrive_and_wait()
+
+        @cute.jit
+        def _copy_kv_tile(
+            self,
+            tile_block,
+            predicate_block,
+            tKVcKV,
+            tKVpKV,
+            tKgK,
+            tVgV,
+            tKsK,
+            tVsV,
+            gmem_tiled_copy_KV,
+            mK: cute.Tensor,
+        ):
+            block_offset = (tile_block - predicate_block) * self._n_block_size
+            for n in cutlass.range_constexpr(cute.size(tKsK.shape[1])):
+                row_idx = tKVcKV[0, n, 0][1] + block_offset
+                if cute.elem_less(row_idx, mK.layout.shape[1]):
+                    cute.copy(gmem_tiled_copy_KV, tKgK[None, n, None, tile_block], tKsK[None, n, None], pred=tKVpKV[None, n, None])
+                    cute.copy(gmem_tiled_copy_KV, tVgV[None, n, None, tile_block], tVsV[None, n, None], pred=tKVpKV[None, n, None])
+                else:
+                    tKsK[None, n, None].fill(0)
+                    tVsV[None, n, None].fill(0)
+            cute.arch.cp_async_commit_group()
 
         # ── Softmax helpers (copied from Stage15) ────────────────────────────
 
