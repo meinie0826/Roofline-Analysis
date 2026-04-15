@@ -134,7 +134,7 @@ def autotune_stage18_config(
         _save_stage18_autotune_cache_to_disk(disk_cache)
 
     block_m_values = _stage18_candidate_values(config.block_m, [128, 96, 64], limit=seq_len)
-    block_n_values = _stage18_candidate_values(config.block_n, [128, 64], limit=seq_len)
+    block_n_values = _stage18_candidate_values(config.block_n, [192, 128, 64], limit=seq_len)
     stage_values = _stage18_candidate_values(config.num_stages_kv or 3, [3, 2], limit=3)
 
     start_event = torch.cuda.Event(enable_timing=True)

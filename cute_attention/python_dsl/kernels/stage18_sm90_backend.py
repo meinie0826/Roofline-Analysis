@@ -35,6 +35,12 @@ class Stage18FlashAttentionSm90Experimental:
         self._consumer_threads = 128
         self.cta_sync_barrier = pipeline.NamedBarrier(barrier_id=1, num_threads=num_threads)
 
+    def _steady_state_wait_groups(self) -> int:
+        # Stage18 diverges from stage17 here: for a 2-stage pipeline we wait
+        # more aggressively so consumers do not keep an extra async group alive.
+        # For a 3-stage pipeline we retain one in-flight group in steady state.
+        return 1 if self._num_stages_kv >= 3 else 0
+
     @staticmethod
     def can_implement(
         dtype,
@@ -712,8 +718,10 @@ class Stage18FlashAttentionSm90Experimental:
 
         if cutlass.const_expr(in_mask_steps):
             cute.arch.cp_async_wait_group(0)
+        elif cutlass.const_expr(self._num_stages_kv >= 3):
+            cute.arch.cp_async_wait_group(self._steady_state_wait_groups())
         else:
-            cute.arch.cp_async_wait_group(1)
+            cute.arch.cp_async_wait_group(0)
         self.cta_sync_barrier.arrive_and_wait()
 
     @cute.jit

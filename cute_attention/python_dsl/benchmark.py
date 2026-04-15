@@ -91,7 +91,7 @@ _STAGE_NOTES = {
     "stage15": "SM90-style warp specialization; no dedicated autotune yet",
     "stage16": "fixed double-buffer warp-specialized kernel; current autotune is conservative block search only",
     "stage17": "independent warp-specialized multistage kernel; fixed 256-thread producer/consumer schedule with autotuned tiles and stage depth",
-    "stage18": "SM90-oriented experimental backend; independent warp-specialized multistage path prepared for further SM90-native iteration",
+    "stage18": "SM90-oriented experimental backend; independent multistage path with stage-aware cp.async wait policy and broader tile search",
 }
 
 
