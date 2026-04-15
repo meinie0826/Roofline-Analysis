@@ -11,8 +11,7 @@ Each stage is benchmarked with its most appropriate default tuning config:
   - stage16/stage17 → dedicated autotune enabled
   - non-autotuned stages use generic tile search by default to reduce
     tile-size bias in comparisons; pass --no-generic-tile-autotune to disable
-  - stage15/stage16         → num_threads always forced to 256 by the kernel
-  - stage17                 → defaults to the validated 128-thread path, but dedicated autotune also probes structurally valid 256-thread multistage tiles
+  - stage15/stage16/stage17 → num_threads always forced to 256 by the kernel
   - stage14                 → num_threads defaults to 256 in benchmark mode
   - stage0-stage11          → num_threads=128 by default
 """
@@ -42,7 +41,7 @@ if available_backends()["torch"]:
 # ---------------------------------------------------------------------------
 # Stages that benefit from a higher default num_threads (producer/consumer)
 # ---------------------------------------------------------------------------
-_WARPSPEC_STAGES = {"stage14", "stage15", "stage16"}
+_WARPSPEC_STAGES = {"stage14", "stage15", "stage16", "stage17"}
 
 _DEDICATED_AUTOTUNE_STAGES = {"stage12", "stage13", "stage16", "stage17"}
 _MULTISTAGE_STAGES = {"stage12", "stage13", "stage16", "stage17"}
@@ -79,7 +78,7 @@ _STAGE_TUNING_AXES = {
     "stage14": "benchmark fallback only",
     "stage15": "benchmark fallback only",
     "stage16": "block_m,block_n",
-    "stage17": "block_m,block_n,num_stages_kv,num_threads",
+    "stage17": "block_m,block_n,num_stages_kv",
     "baseline_fa4": "none",
     "baseline_sdpa": "none",
 }
@@ -89,7 +88,7 @@ _STAGE_NOTES = {
     "stage14": "warp-specialized producer/consumer kernel; no dedicated autotune yet",
     "stage15": "SM90-style warp specialization; no dedicated autotune yet",
     "stage16": "fixed double-buffer warp-specialized kernel; current autotune is conservative block search only",
-    "stage17": "independent MMA multistage kernel; default path is 128-thread, autotune also probes structurally valid 256-thread candidates",
+    "stage17": "independent warp-specialized multistage kernel; fixed 256-thread producer/consumer schedule with autotuned tiles and stage depth",
 }
 
 
@@ -293,7 +292,7 @@ def main():
     parser.add_argument("--block-n",     type=int,   default=128,
                         help="KV block size (default: 128). Overridden by autotune for stage12/13/16/17.")
     parser.add_argument("--num-threads", type=int,   default=128,
-                        help="Thread count (default: 128). Forced to 256 for stage14/15/16.")
+                        help="Thread count (default: 128). Forced to 256 for stage14/15/16/17.")
     parser.add_argument("--causal",      action="store_true", default=True,
                         help="Use causal masking (default: True).")
     parser.add_argument("--warmup",      type=int,   default=5,
