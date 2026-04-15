@@ -37,7 +37,6 @@ from .common import (
     validate_qkv,
 )
 from .reference import causal_attention_reference
-from .stage15_sm90style import _stage15_forward_impl
 MAX_SEQ_LEN_FOR_STAGE16_CUTE = 4096
 _STAGE16_COMPILED_CACHE: dict = {}
 _STAGE16_AUTOTUNE_CACHE: dict = {}
@@ -384,7 +383,7 @@ if HAS_CUTE:
                     tKVcKV=tKVcKV, tKgK=tKgK, tVgV=tVgV,
                     tKsK=tKsK0, tVsV=tVsV0, tKVpKV=tKVpKV,
                     next_k_block=n_block0 - 2,
-                    wait_group=0,
+                    wait_group=1 if (n_block0 - 2) >= 0 else 0,
                 )
 
                 # --- slot1 ---
@@ -404,7 +403,7 @@ if HAS_CUTE:
                         tKVcKV=tKVcKV, tKgK=tKgK, tVgV=tVgV,
                         tKsK=tKsK1, tVsV=tVsV1, tKVpKV=tKVpKV,
                         next_k_block=n_block1 - 2,
-                        wait_group=0,
+                        wait_group=1 if (n_block1 - 2) >= 0 else 0,
                     )
 
             # ── Epilogue ──────────────────────────────────────────────────────
@@ -833,12 +832,6 @@ def _stage16_forward_impl(q, k, v, config: AttentionConfig):
     _, _, seq_len, head_dim = q.shape
     if seq_len > MAX_SEQ_LEN_FOR_STAGE16_CUTE:
         raise ValueError(f"stage16 currently supports seq_len <= {MAX_SEQ_LEN_FOR_STAGE16_CUTE}, got {seq_len}.")
-
-    # Temporary conservative fallback: route all stage16 execution through the
-    # stable stage15 backend while the dedicated double-buffer stage16 kernel is
-    # being debugged. This preserves the public stage16 API and correctness.
-    stage15_config = replace(config, num_threads=256, autotune=False)
-    return _stage15_forward_impl(q, k, v, stage15_config)
 
     if not Stage16FlashAttentionSm90DoubleBuffer.can_implement(
         cutlass.Float16, head_dim, config.block_m, config.block_n, 256, True
