@@ -279,6 +279,30 @@ class Stage22FlashAttentionTma:
         acc_layout_mn = cute.composition(acc.layout, acc_layout_mn)
         return cute.make_tensor(acc.iterator, acc_layout_mn)
 
+    @cute.jit
+    def _load_tmem_fragment_to_rmem(
+        self,
+        consumer_slice_idx,
+        thr_mma,
+        acc_tmem: cute.Tensor,
+        tile_shape,
+    ):
+        tCcC = thr_mma.partition_C(cute.make_identity_tensor(tile_shape))
+        tmem_load_atom = cute.make_copy_atom(
+            tcgen05.copy.Ld32x32bOp(tcgen05.copy.Repetition(tile_shape[1] // 4)),
+            cutlass.Float32,
+        )
+        thr_tmem_load = tcgen05.make_tmem_copy(tmem_load_atom, acc_tmem).get_slice(
+            consumer_slice_idx
+        )
+        tCtC = thr_tmem_load.partition_S(acc_tmem)
+        acc_rmem = cute.make_fragment(
+            thr_tmem_load.partition_D(tCcC).shape,
+            cutlass.Float32,
+        )
+        cute.copy(thr_tmem_load, tCtC, acc_rmem)
+        return acc_rmem
+
     def _threadquad_reduce(self, val: cutlass.Float32, op):
         val = op(val, cute.arch.shuffle_sync_bfly(val, offset=2, mask=-1, mask_and_clamp=31))
         val = op(val, cute.arch.shuffle_sync_bfly(val, offset=1, mask=-1, mask_and_clamp=31))
@@ -408,8 +432,10 @@ class Stage22FlashAttentionTma:
     @cute.jit
     def _consumer_compute_loaded_block(
         self,
+        consumer_slice_idx,
         n_block,
         thr_mma_qk,
+        thr_mma_pv,
         qk_tiled_mma,
         pv_tiled_mma,
         tSrQ,
@@ -428,15 +454,21 @@ class Stage22FlashAttentionTma:
         in_mask_steps: cutlass.Boolean,
     ):
         acc_shape_S = thr_mma_qk.partition_shape_C((self._m_block_size, self._n_block_size))
-        acc_S = thr_mma_qk.make_fragment_C(acc_shape_S)
+        acc_S_tmem = thr_mma_qk.make_fragment_C(acc_shape_S)
 
         qk_tiled_mma.set(tcgen05.Field.ACCUMULATE, False)
         cute.gemm(
             qk_tiled_mma,
-            acc_S,
+            acc_S_tmem,
             tSrQ[None, None, None, 0],
             tSrK,
-            acc_S,
+            acc_S_tmem,
+        )
+        acc_S = self._load_tmem_fragment_to_rmem(
+            consumer_slice_idx,
+            thr_mma_qk,
+            acc_S_tmem,
+            (self._m_block_size, self._n_block_size),
         )
 
         self.softmax_rescale_O(
@@ -472,14 +504,23 @@ class Stage22FlashAttentionTma:
             ),
         )
         tOrS = cute.make_tensor(rP.iterator, rP_mma_view)
-        pv_tiled_mma.set(tcgen05.Field.ACCUMULATE, not is_first_n_block)
+        acc_shape_O = thr_mma_pv.partition_shape_C((self._m_block_size, self._head_dim_padded))
+        acc_O_tmem = thr_mma_pv.make_fragment_C(acc_shape_O)
+        pv_tiled_mma.set(tcgen05.Field.ACCUMULATE, False)
         cute.gemm(
             pv_tiled_mma,
-            acc_O,
+            acc_O_tmem,
             tOrS,
             tOrVt,
-            acc_O,
+            acc_O_tmem,
         )
+        acc_O_partial = self._load_tmem_fragment_to_rmem(
+            consumer_slice_idx,
+            thr_mma_pv,
+            acc_O_tmem,
+            (self._m_block_size, self._head_dim_padded),
+        )
+        acc_O.store(acc_O.load() + acc_O_partial.load())
 
     def _partition_tma_kv(self, tma_atom, tma_tensor, sTensor, gTensor):
         s_for_tma_partition = cute.group_modes(sTensor, 0, 2)
@@ -851,8 +892,10 @@ class Stage22FlashAttentionTma:
             if is_consumer:
                 if mainloop_consumer_read_state.index == 0:
                     self._consumer_compute_loaded_block(
+                        consumer_slice_idx,
                         n_block,
                         stage0_views[0],
+                        stage0_views[1],
                         qk_tiled_mma,
                         pv_tiled_mma,
                         stage0_views[2],
@@ -872,8 +915,10 @@ class Stage22FlashAttentionTma:
                     )
                 if mainloop_consumer_read_state.index == 1:
                     self._consumer_compute_loaded_block(
+                        consumer_slice_idx,
                         n_block,
                         stage1_views[0],
+                        stage1_views[1],
                         qk_tiled_mma,
                         pv_tiled_mma,
                         stage1_views[2],
@@ -894,8 +939,10 @@ class Stage22FlashAttentionTma:
                 if cutlass.const_expr(self._num_stages_kv >= 3):
                     if mainloop_consumer_read_state.index == 2:
                         self._consumer_compute_loaded_block(
+                            consumer_slice_idx,
                             n_block,
                             stage2_views[0],
+                            stage2_views[1],
                             qk_tiled_mma,
                             pv_tiled_mma,
                             stage2_views[2],
