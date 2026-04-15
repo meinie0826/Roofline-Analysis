@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -6,7 +7,6 @@ import cuda.bindings.driver as cuda
 import cutlass.pipeline as pipeline
 import cutlass.utils as utils
 from cutlass.cute.nvgpu import cpasync, warp
-from dataclasses import replace
 
 from .common import (
     AttentionConfig,
@@ -18,9 +18,6 @@ from .common import (
     torch,
     validate_qkv,
 )
-from .stage11_mma import Stage11FlashAttentionAmpere, stage11_forward
-
-
 MAX_SEQ_LEN_FOR_STAGE12_CUTE = 4096
 _STAGE12_COMPILED_CACHE = {}
 _STAGE12_AUTOTUNE_CACHE = {}
@@ -764,7 +761,7 @@ def autotune_stage12_config(
 
     block_m_values = _stage12_candidate_values(config.block_m, [128, 96, 64, 48, 32, 16], limit=seq_len)
     block_n_values = _stage12_candidate_values(config.block_n, [256, 192, 128, 96, 64], limit=seq_len)
-    stage_values = _stage12_candidate_values(config.num_stages_kv or 2, [2, 1], limit=2)
+    stage_values = _stage12_candidate_values(config.num_stages_kv or 2, [2], limit=2)
 
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
@@ -782,19 +779,13 @@ def autotune_stage12_config(
                 )
                 try:
                     for _ in range(warmup):
-                        if num_stages_kv == 1:
-                            stage11_forward(q, k, v, tuned)
-                        else:
-                            _stage12_forward_impl(q, k, v, tuned)
+                        _stage12_forward_impl(q, k, v, tuned)
 
                     torch.cuda.synchronize()
                     elapsed = 0.0
                     for _ in range(repeat):
                         start_event.record()
-                        if num_stages_kv == 1:
-                            stage11_forward(q, k, v, tuned)
-                        else:
-                            _stage12_forward_impl(q, k, v, tuned)
+                        _stage12_forward_impl(q, k, v, tuned)
                         end_event.record()
                         torch.cuda.synchronize()
                         elapsed += start_event.elapsed_time(end_event)
@@ -879,10 +870,8 @@ def stage12_forward(q, k, v, config: AttentionConfig | None = None):
     elif tuned.num_stages_kv == 0:
         tuned = replace(tuned, num_stages_kv=2)
 
-    if tuned.num_stages_kv == 1:
-        return stage11_forward(q, k, v, replace(tuned, autotune=False))
     if tuned.num_stages_kv != 2:
-        raise ValueError(f"stage12 currently supports num_stages_kv in {{1, 2}}, got {tuned.num_stages_kv}.")
+        raise ValueError(f"stage12 currently supports num_stages_kv == 2, got {tuned.num_stages_kv}.")
     return _stage12_forward_impl(q, k, v, replace(tuned, autotune=False))
 
 

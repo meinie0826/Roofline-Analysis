@@ -39,9 +39,9 @@
 
 ## 对照 FA4 仍缺失的关键优化
 
-- `stage17`: 更完整的 multistage family 入口
-  - 目标: 统一比较 `stage16` 风格的 256-thread warp-specialized double-buffer 路径，和 `stage13` 风格的更深 `num_stages_kv` 路径
-  - 现状: 已作为 autotuned family entrypoint 存在，但还没有独立的 warp-specialized `num_stages_kv > 2` kernel
+- `stage17`: 更完整的独立 multistage kernel
+  - 目标: 在独立 kernel 内继续把 `tile size / num_stages_kv / num_threads` 调优做完整，并探索更接近 FA4 的 warp-specialized multistage 形态
+  - 现状: 已经独立，不再依赖其它 stage 的执行实现；但还没有做到 Hopper/FA4 风格的更深流水和更细调度
 
 - `stage18`: Split-KV / combine
   - 参考 FA4: `flash_fwd_combine_*`, `benchmark_split_kv.py`
@@ -90,7 +90,7 @@
   - `stage14` 的 CuTe warp-specialized producer/consumer 前向版
   - `stage15` 的 CuTe SM90-style warp-specialized 前向版
   - `stage16` 的 CuTe warp-specialized double-buffer 前向版
-  - `stage17` 的 autotuned family entrypoint（当前在 `stage16` / `stage13` 后端之间选择）
+  - `stage17` 的 CuTe 独立 multistage MMA 前向版
   - `baseline_fa4` 对照入口
   - `baseline_sdpa`（PyTorch SDPA 对照）
 

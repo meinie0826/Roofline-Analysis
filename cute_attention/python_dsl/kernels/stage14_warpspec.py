@@ -15,7 +15,6 @@ from .common import (
     torch,
     validate_qkv,
 )
-from .stage11_mma import Stage11FlashAttentionAmpere, stage11_forward
 
 
 MAX_SEQ_LEN_FOR_STAGE14_CUTE = 4096

@@ -37,4 +37,5 @@ def test_stage_metadata_marks_autotune_and_multistage_coverage():
     assert rows["stage12"]["autotune"] == "True"
     assert rows["stage13"]["multistage"] == "True"
     assert rows["stage17"]["autotune"] == "True"
-    assert "stage16 backend" in rows["stage17"]["notes"]
+    assert "num_threads" in rows["stage17"]["tuning_axes"]
+    assert "independent" in rows["stage17"]["notes"]

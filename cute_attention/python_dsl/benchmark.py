@@ -81,12 +81,12 @@ _STAGE_TUNING_AXES = {
     "baseline_sdpa": "none",
 }
 _STAGE_NOTES = {
-    "stage12": "two-stage cp.async pipeline; autotune may select stages=1 and fall back to stage11 path",
-    "stage13": "true MMA multistage family; autotunes tile sizes and num_stages_kv",
+    "stage12": "independent two-stage cp.async pipeline kernel; autotunes block sizes within its own stage-2 design",
+    "stage13": "independent MMA multistage kernel; autotunes tile sizes and num_stages_kv",
     "stage14": "warp-specialized producer/consumer kernel; no dedicated autotune yet",
     "stage15": "SM90-style warp specialization; no dedicated autotune yet",
     "stage16": "fixed double-buffer warp-specialized kernel; current autotune is conservative block search only",
-    "stage17": "autotuned family entrypoint: uses stage16 backend for 256-thread double-buffer fits, otherwise stage13 multistage backend",
+    "stage17": "independent MMA multistage kernel; autotunes block sizes, num_stages_kv, and num_threads",
 }
 
 
