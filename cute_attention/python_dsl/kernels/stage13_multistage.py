@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import cuda.bindings.driver as cuda
@@ -22,28 +24,32 @@ from .stage11_mma import Stage11FlashAttentionAmpere, stage11_forward
 MAX_SEQ_LEN_FOR_STAGE13_CUTE = 4096
 _STAGE13_COMPILED_CACHE = {}
 _STAGE13_AUTOTUNE_CACHE = {}
+_STAGE13_AUTOTUNE_CACHE_PATH = Path(__file__).resolve().parents[1] / ".cache" / "stage13_autotune.json"
 
 
 if HAS_CUTE:
     class Stage13FlashAttentionAmpere:
-        def __init__(self, head_dim: int, m_block_size: int, n_block_size: int, num_threads: int, is_causal: bool):
+        def __init__(self, head_dim: int, m_block_size: int, n_block_size: int, num_threads: int, num_stages_kv: int, is_causal: bool):
             self._head_dim = head_dim
             self._m_block_size = m_block_size
             self._n_block_size = n_block_size
             self._head_dim_padded = (head_dim + 31) // 32 * 32
             self._num_threads = num_threads
+            self._num_stages_kv = num_stages_kv
             self._is_causal = is_causal
             self.cta_sync_barrier = pipeline.NamedBarrier(barrier_id=1, num_threads=num_threads)
 
         @staticmethod
-        def can_implement(dtype, head_dim, m_block_size, n_block_size, num_threads, is_causal) -> bool:
+        def can_implement(dtype, head_dim, m_block_size, n_block_size, num_threads, num_stages_kv, is_causal) -> bool:
             if dtype != cutlass.Float16:
                 return False
             if head_dim % 8 != 0:
                 return False
             if num_threads % 32 != 0:
                 return False
-            smem_usage = (m_block_size * head_dim + n_block_size * head_dim * 4) * 2
+            if num_stages_kv < 2 or num_stages_kv > 5:
+                return False
+            smem_usage = (m_block_size * head_dim + n_block_size * head_dim * 2 * num_stages_kv) * 2
             if smem_usage > utils.get_smem_capacity_in_bytes("sm_80"):
                 return False
             if (m_block_size * 2) % num_threads != 0:
@@ -85,13 +91,26 @@ if HAS_CUTE:
             )
             sO_layout = sQ_layout
 
+            shared_annotations = {
+                "sQ": cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sQ_layout)], 1024],
+                "sK0": cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024],
+                "sV0": cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024],
+                "sK1": cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024],
+                "sV1": cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024],
+            }
+            if self._num_stages_kv >= 3:
+                shared_annotations["sK2"] = cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
+                shared_annotations["sV2"] = cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
+            if self._num_stages_kv >= 4:
+                shared_annotations["sK3"] = cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
+                shared_annotations["sV3"] = cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
+            if self._num_stages_kv >= 5:
+                shared_annotations["sK4"] = cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
+                shared_annotations["sV4"] = cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
+
             @cute.struct
             class SharedStorage:
-                sQ: cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sQ_layout)], 1024]
-                sK0: cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
-                sK1: cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
-                sV0: cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
-                sV1: cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
+                __annotations__ = shared_annotations
 
             universal_copy_bits = 128
             async_copy_elems = universal_copy_bits // self._dtype.width
@@ -181,6 +200,12 @@ if HAS_CUTE:
             sK1 = storage.sK1.get_tensor(sKV_layout)
             sV0 = storage.sV0.get_tensor(sKV_layout)
             sV1 = storage.sV1.get_tensor(sKV_layout)
+            sK2 = storage.sK2.get_tensor(sKV_layout) if self._num_stages_kv >= 3 else None
+            sK3 = storage.sK3.get_tensor(sKV_layout) if self._num_stages_kv >= 4 else None
+            sK4 = storage.sK4.get_tensor(sKV_layout) if self._num_stages_kv >= 5 else None
+            sV2 = storage.sV2.get_tensor(sKV_layout) if self._num_stages_kv >= 3 else None
+            sV3 = storage.sV3.get_tensor(sKV_layout) if self._num_stages_kv >= 4 else None
+            sV4 = storage.sV4.get_tensor(sKV_layout) if self._num_stages_kv >= 5 else None
             sVt0 = cute.composition(
                 sV0,
                 cute.make_layout(
@@ -195,6 +220,39 @@ if HAS_CUTE:
                     stride=(self._n_block_size, 1),
                 ),
             )
+            sVt2 = (
+                cute.composition(
+                    sV2,
+                    cute.make_layout(
+                        (self._head_dim_padded, self._n_block_size),
+                        stride=(self._n_block_size, 1),
+                    ),
+                )
+                if self._num_stages_kv >= 3
+                else None
+            )
+            sVt3 = (
+                cute.composition(
+                    sV3,
+                    cute.make_layout(
+                        (self._head_dim_padded, self._n_block_size),
+                        stride=(self._n_block_size, 1),
+                    ),
+                )
+                if self._num_stages_kv >= 4
+                else None
+            )
+            sVt4 = (
+                cute.composition(
+                    sV4,
+                    cute.make_layout(
+                        (self._head_dim_padded, self._n_block_size),
+                        stride=(self._n_block_size, 1),
+                    ),
+                )
+                if self._num_stages_kv >= 5
+                else None
+            )
 
             gmem_thr_copy_QKV = gmem_tiled_copy_QKV.get_slice(tidx)
             tQgQ = gmem_thr_copy_QKV.partition_S(gQ)
@@ -205,6 +263,12 @@ if HAS_CUTE:
             tKsK1 = gmem_thr_copy_QKV.partition_D(sK1)
             tVsV0 = gmem_thr_copy_QKV.partition_D(sV0)
             tVsV1 = gmem_thr_copy_QKV.partition_D(sV1)
+            tKsK2 = gmem_thr_copy_QKV.partition_D(sK2) if self._num_stages_kv >= 3 else None
+            tKsK3 = gmem_thr_copy_QKV.partition_D(sK3) if self._num_stages_kv >= 4 else None
+            tKsK4 = gmem_thr_copy_QKV.partition_D(sK4) if self._num_stages_kv >= 5 else None
+            tVsV2 = gmem_thr_copy_QKV.partition_D(sV2) if self._num_stages_kv >= 3 else None
+            tVsV3 = gmem_thr_copy_QKV.partition_D(sV3) if self._num_stages_kv >= 4 else None
+            tVsV4 = gmem_thr_copy_QKV.partition_D(sV4) if self._num_stages_kv >= 5 else None
 
             thr_mma = tiled_mma.get_slice(tidx)
             tSrQ = thr_mma.make_fragment_A(thr_mma.partition_A(sQ))
@@ -212,6 +276,12 @@ if HAS_CUTE:
             tSrK1 = thr_mma.make_fragment_B(thr_mma.partition_B(sK1))
             tOrVt0 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt0))
             tOrVt1 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt1))
+            tSrK2 = thr_mma.make_fragment_B(thr_mma.partition_B(sK2)) if self._num_stages_kv >= 3 else None
+            tSrK3 = thr_mma.make_fragment_B(thr_mma.partition_B(sK3)) if self._num_stages_kv >= 4 else None
+            tSrK4 = thr_mma.make_fragment_B(thr_mma.partition_B(sK4)) if self._num_stages_kv >= 5 else None
+            tOrVt2 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt2)) if self._num_stages_kv >= 3 else None
+            tOrVt3 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt3)) if self._num_stages_kv >= 4 else None
+            tOrVt4 = thr_mma.make_fragment_B(thr_mma.partition_B(sVt4)) if self._num_stages_kv >= 5 else None
             acc_shape_O = thr_mma.partition_shape_C((self._m_block_size, self._head_dim_padded))
             acc_O = cute.make_rmem_tensor(acc_shape_O, cutlass.Float32)
             acc_O.fill(0.0)
@@ -237,6 +307,18 @@ if HAS_CUTE:
             tOsVt1 = smem_thr_copy_V.partition_S(sVt1)
             tOrVt0_copy_view = smem_thr_copy_V.retile(tOrVt0)
             tOrVt1_copy_view = smem_thr_copy_V.retile(tOrVt1)
+            tSsK2 = smem_thr_copy_K.partition_S(sK2) if self._num_stages_kv >= 3 else None
+            tSsK3 = smem_thr_copy_K.partition_S(sK3) if self._num_stages_kv >= 4 else None
+            tSsK4 = smem_thr_copy_K.partition_S(sK4) if self._num_stages_kv >= 5 else None
+            tSrK2_copy_view = smem_thr_copy_K.retile(tSrK2) if self._num_stages_kv >= 3 else None
+            tSrK3_copy_view = smem_thr_copy_K.retile(tSrK3) if self._num_stages_kv >= 4 else None
+            tSrK4_copy_view = smem_thr_copy_K.retile(tSrK4) if self._num_stages_kv >= 5 else None
+            tOsVt2 = smem_thr_copy_V.partition_S(sVt2) if self._num_stages_kv >= 3 else None
+            tOsVt3 = smem_thr_copy_V.partition_S(sVt3) if self._num_stages_kv >= 4 else None
+            tOsVt4 = smem_thr_copy_V.partition_S(sVt4) if self._num_stages_kv >= 5 else None
+            tOrVt2_copy_view = smem_thr_copy_V.retile(tOrVt2) if self._num_stages_kv >= 3 else None
+            tOrVt3_copy_view = smem_thr_copy_V.retile(tOrVt3) if self._num_stages_kv >= 4 else None
+            tOrVt4_copy_view = smem_thr_copy_V.retile(tOrVt4) if self._num_stages_kv >= 5 else None
 
             mcQ = cute.make_identity_tensor(mQ.layout.shape)
             mcKV = cute.make_identity_tensor(mK.layout.shape)
@@ -281,6 +363,21 @@ if HAS_CUTE:
             basic_params = SimpleNamespace(m_block=m_block, n_block=n_block, mQ=mQ, mK=mK, batch_size=batch_size, num_head=num_head)
             mma_params0 = SimpleNamespace(thr_mma=thr_mma, tiled_mma=tiled_mma, tSrQ=tSrQ, tSrK=tSrK0, tOrVt=tOrVt0, acc_O=acc_O)
             mma_params1 = SimpleNamespace(thr_mma=thr_mma, tiled_mma=tiled_mma, tSrQ=tSrQ, tSrK=tSrK1, tOrVt=tOrVt1, acc_O=acc_O)
+            mma_params2 = (
+                SimpleNamespace(thr_mma=thr_mma, tiled_mma=tiled_mma, tSrQ=tSrQ, tSrK=tSrK2, tOrVt=tOrVt2, acc_O=acc_O)
+                if self._num_stages_kv >= 3
+                else None
+            )
+            mma_params3 = (
+                SimpleNamespace(thr_mma=thr_mma, tiled_mma=tiled_mma, tSrQ=tSrQ, tSrK=tSrK3, tOrVt=tOrVt3, acc_O=acc_O)
+                if self._num_stages_kv >= 4
+                else None
+            )
+            mma_params4 = (
+                SimpleNamespace(thr_mma=thr_mma, tiled_mma=tiled_mma, tSrQ=tSrQ, tSrK=tSrK4, tOrVt=tOrVt4, acc_O=acc_O)
+                if self._num_stages_kv >= 5
+                else None
+            )
             gmem_copy_params0 = SimpleNamespace(
                 gmem_tiled_copy_QKV=gmem_tiled_copy_QKV,
                 tKVcKV=tKVcKV,
@@ -298,6 +395,45 @@ if HAS_CUTE:
                 tKsK=tKsK1,
                 tVsV=tVsV1,
                 tKVpKV=tKVpKV,
+            )
+            gmem_copy_params2 = (
+                SimpleNamespace(
+                    gmem_tiled_copy_QKV=gmem_tiled_copy_QKV,
+                    tKVcKV=tKVcKV,
+                    tKgK=tKgK,
+                    tVgV=tVgV,
+                    tKsK=tKsK2,
+                    tVsV=tVsV2,
+                    tKVpKV=tKVpKV,
+                )
+                if self._num_stages_kv >= 3
+                else None
+            )
+            gmem_copy_params3 = (
+                SimpleNamespace(
+                    gmem_tiled_copy_QKV=gmem_tiled_copy_QKV,
+                    tKVcKV=tKVcKV,
+                    tKgK=tKgK,
+                    tVgV=tVgV,
+                    tKsK=tKsK3,
+                    tVsV=tVsV3,
+                    tKVpKV=tKVpKV,
+                )
+                if self._num_stages_kv >= 4
+                else None
+            )
+            gmem_copy_params4 = (
+                SimpleNamespace(
+                    gmem_tiled_copy_QKV=gmem_tiled_copy_QKV,
+                    tKVcKV=tKVcKV,
+                    tKgK=tKgK,
+                    tVgV=tVgV,
+                    tKsK=tKsK4,
+                    tVsV=tVsV4,
+                    tKVpKV=tKVpKV,
+                )
+                if self._num_stages_kv >= 5
+                else None
             )
             smem_copy_params0 = SimpleNamespace(
                 smem_tiled_copy_Q=smem_tiled_copy_Q,
@@ -320,6 +456,51 @@ if HAS_CUTE:
                 tSrK_copy_view=tSrK1_copy_view,
                 tOsVt=tOsVt1,
                 tOrVt_copy_view=tOrVt1_copy_view,
+            )
+            smem_copy_params2 = (
+                SimpleNamespace(
+                    smem_tiled_copy_Q=smem_tiled_copy_Q,
+                    smem_tiled_copy_K=smem_tiled_copy_K,
+                    smem_tiled_copy_V=smem_tiled_copy_V,
+                    tSsQ=tSsQ,
+                    tSrQ_copy_view=tSrQ_copy_view,
+                    tSsK=tSsK2,
+                    tSrK_copy_view=tSrK2_copy_view,
+                    tOsVt=tOsVt2,
+                    tOrVt_copy_view=tOrVt2_copy_view,
+                )
+                if self._num_stages_kv >= 3
+                else None
+            )
+            smem_copy_params3 = (
+                SimpleNamespace(
+                    smem_tiled_copy_Q=smem_tiled_copy_Q,
+                    smem_tiled_copy_K=smem_tiled_copy_K,
+                    smem_tiled_copy_V=smem_tiled_copy_V,
+                    tSsQ=tSsQ,
+                    tSrQ_copy_view=tSrQ_copy_view,
+                    tSsK=tSsK3,
+                    tSrK_copy_view=tSrK3_copy_view,
+                    tOsVt=tOsVt3,
+                    tOrVt_copy_view=tOrVt3_copy_view,
+                )
+                if self._num_stages_kv >= 4
+                else None
+            )
+            smem_copy_params4 = (
+                SimpleNamespace(
+                    smem_tiled_copy_Q=smem_tiled_copy_Q,
+                    smem_tiled_copy_K=smem_tiled_copy_K,
+                    smem_tiled_copy_V=smem_tiled_copy_V,
+                    tSsQ=tSsQ,
+                    tSrQ_copy_view=tSrQ_copy_view,
+                    tSsK=tSsK4,
+                    tSrK_copy_view=tSrK4_copy_view,
+                    tOsVt=tOsVt4,
+                    tOrVt_copy_view=tOrVt4_copy_view,
+                )
+                if self._num_stages_kv >= 5
+                else None
             )
             softmax_params = SimpleNamespace(row_max=row_max, row_sum=row_sum, softmax_scale_log2=softmax_scale_log2)
 
@@ -353,39 +534,215 @@ if HAS_CUTE:
                     )
 
             first_pipeline_block = n_block_max - mask_steps - 1
-            second_pipeline_block = first_pipeline_block - 1
-            if second_pipeline_block >= 0:
-                cute.copy(
-                    gmem_copy_params1.gmem_tiled_copy_QKV,
-                    gmem_copy_params1.tKgK[None, None, None, second_pipeline_block],
-                    gmem_copy_params1.tKsK,
-                    pred=gmem_copy_params1.tKVpKV,
-                )
-                cute.arch.cp_async_commit_group()
+            if self._num_stages_kv >= 2:
+                second_pipeline_block = first_pipeline_block - 1
+                if second_pipeline_block >= 0:
+                    cute.copy(
+                        gmem_copy_params1.gmem_tiled_copy_QKV,
+                        gmem_copy_params1.tKgK[None, None, None, second_pipeline_block],
+                        gmem_copy_params1.tKsK,
+                        pred=gmem_copy_params1.tKVpKV,
+                    )
+                    cute.arch.cp_async_commit_group()
+            if self._num_stages_kv >= 3:
+                third_pipeline_block = first_pipeline_block - 2
+                if third_pipeline_block >= 0:
+                    cute.copy(
+                        gmem_copy_params2.gmem_tiled_copy_QKV,
+                        gmem_copy_params2.tKgK[None, None, None, third_pipeline_block],
+                        gmem_copy_params2.tKsK,
+                        pred=gmem_copy_params2.tKVpKV,
+                    )
+                    cute.arch.cp_async_commit_group()
+            if self._num_stages_kv >= 4:
+                fourth_pipeline_block = first_pipeline_block - 3
+                if fourth_pipeline_block >= 0:
+                    cute.copy(
+                        gmem_copy_params3.gmem_tiled_copy_QKV,
+                        gmem_copy_params3.tKgK[None, None, None, fourth_pipeline_block],
+                        gmem_copy_params3.tKsK,
+                        pred=gmem_copy_params3.tKVpKV,
+                    )
+                    cute.arch.cp_async_commit_group()
+            if self._num_stages_kv >= 5:
+                fifth_pipeline_block = first_pipeline_block - 4
+                if fifth_pipeline_block >= 0:
+                    cute.copy(
+                        gmem_copy_params4.gmem_tiled_copy_QKV,
+                        gmem_copy_params4.tKgK[None, None, None, fifth_pipeline_block],
+                        gmem_copy_params4.tKsK,
+                        pred=gmem_copy_params4.tKVpKV,
+                    )
+                    cute.arch.cp_async_commit_group()
 
-            for n_tile in range(mask_steps, n_block_max, 2):
-                n_block = n_block_max - n_tile - 1
-                basic_params.n_block = n_block
-                self.compute_one_n_block_pipelined(
-                    basic_params,
-                    mma_params0,
-                    gmem_copy_params0,
-                    smem_copy_params0,
-                    softmax_params,
-                    next_k_block=n_block - 2,
-                )
-
-                n_block_alt = n_block - 1
-                if n_block_alt >= 0:
-                    basic_params.n_block = n_block_alt
+            if self._num_stages_kv == 2:
+                for n_tile in range(mask_steps, n_block_max, 2):
+                    n_block = n_block_max - n_tile - 1
+                    basic_params.n_block = n_block
                     self.compute_one_n_block_pipelined(
                         basic_params,
-                        mma_params1,
-                        gmem_copy_params1,
-                        smem_copy_params1,
+                        mma_params0,
+                        gmem_copy_params0,
+                        smem_copy_params0,
                         softmax_params,
-                        next_k_block=n_block_alt - 2,
+                        next_k_block=n_block - 2,
                     )
+
+                    n_block_alt = n_block - 1
+                    if n_block_alt >= 0:
+                        basic_params.n_block = n_block_alt
+                        self.compute_one_n_block_pipelined(
+                            basic_params,
+                            mma_params1,
+                            gmem_copy_params1,
+                            smem_copy_params1,
+                            softmax_params,
+                            next_k_block=n_block_alt - 2,
+                        )
+            elif self._num_stages_kv == 3:
+                for n_tile in range(mask_steps, n_block_max, 3):
+                    n_block = n_block_max - n_tile - 1
+                    basic_params.n_block = n_block
+                    self.compute_one_n_block_pipelined(
+                        basic_params,
+                        mma_params0,
+                        gmem_copy_params0,
+                        smem_copy_params0,
+                        softmax_params,
+                        next_k_block=n_block - 3,
+                    )
+
+                    n_block_1 = n_block - 1
+                    if n_block_1 >= 0:
+                        basic_params.n_block = n_block_1
+                        self.compute_one_n_block_pipelined(
+                            basic_params,
+                            mma_params1,
+                            gmem_copy_params1,
+                            smem_copy_params1,
+                            softmax_params,
+                            next_k_block=n_block_1 - 3,
+                        )
+
+                    n_block_2 = n_block - 2
+                    if n_block_2 >= 0:
+                        basic_params.n_block = n_block_2
+                        self.compute_one_n_block_pipelined(
+                            basic_params,
+                            mma_params2,
+                            gmem_copy_params2,
+                            smem_copy_params2,
+                            softmax_params,
+                            next_k_block=n_block_2 - 3,
+                        )
+            elif self._num_stages_kv == 4:
+                for n_tile in range(mask_steps, n_block_max, 4):
+                    n_block = n_block_max - n_tile - 1
+                    basic_params.n_block = n_block
+                    self.compute_one_n_block_pipelined(
+                        basic_params,
+                        mma_params0,
+                        gmem_copy_params0,
+                        smem_copy_params0,
+                        softmax_params,
+                        next_k_block=n_block - 4,
+                    )
+
+                    n_block_1 = n_block - 1
+                    if n_block_1 >= 0:
+                        basic_params.n_block = n_block_1
+                        self.compute_one_n_block_pipelined(
+                            basic_params,
+                            mma_params1,
+                            gmem_copy_params1,
+                            smem_copy_params1,
+                            softmax_params,
+                            next_k_block=n_block_1 - 4,
+                        )
+
+                    n_block_2 = n_block - 2
+                    if n_block_2 >= 0:
+                        basic_params.n_block = n_block_2
+                        self.compute_one_n_block_pipelined(
+                            basic_params,
+                            mma_params2,
+                            gmem_copy_params2,
+                            smem_copy_params2,
+                            softmax_params,
+                            next_k_block=n_block_2 - 4,
+                        )
+
+                    n_block_3 = n_block - 3
+                    if n_block_3 >= 0:
+                        basic_params.n_block = n_block_3
+                        self.compute_one_n_block_pipelined(
+                            basic_params,
+                            mma_params3,
+                            gmem_copy_params3,
+                            smem_copy_params3,
+                            softmax_params,
+                            next_k_block=n_block_3 - 4,
+                        )
+            elif self._num_stages_kv == 5:
+                for n_tile in range(mask_steps, n_block_max, 5):
+                    n_block = n_block_max - n_tile - 1
+                    basic_params.n_block = n_block
+                    self.compute_one_n_block_pipelined(
+                        basic_params,
+                        mma_params0,
+                        gmem_copy_params0,
+                        smem_copy_params0,
+                        softmax_params,
+                        next_k_block=n_block - 5,
+                    )
+
+                    n_block_1 = n_block - 1
+                    if n_block_1 >= 0:
+                        basic_params.n_block = n_block_1
+                        self.compute_one_n_block_pipelined(
+                            basic_params,
+                            mma_params1,
+                            gmem_copy_params1,
+                            smem_copy_params1,
+                            softmax_params,
+                            next_k_block=n_block_1 - 5,
+                        )
+
+                    n_block_2 = n_block - 2
+                    if n_block_2 >= 0:
+                        basic_params.n_block = n_block_2
+                        self.compute_one_n_block_pipelined(
+                            basic_params,
+                            mma_params2,
+                            gmem_copy_params2,
+                            smem_copy_params2,
+                            softmax_params,
+                            next_k_block=n_block_2 - 5,
+                        )
+
+                    n_block_3 = n_block - 3
+                    if n_block_3 >= 0:
+                        basic_params.n_block = n_block_3
+                        self.compute_one_n_block_pipelined(
+                            basic_params,
+                            mma_params3,
+                            gmem_copy_params3,
+                            smem_copy_params3,
+                            softmax_params,
+                            next_k_block=n_block_3 - 5,
+                        )
+
+                    n_block_4 = n_block - 4
+                    if n_block_4 >= 0:
+                        basic_params.n_block = n_block_4
+                        self.compute_one_n_block_pipelined(
+                            basic_params,
+                            mma_params4,
+                            gmem_copy_params4,
+                            smem_copy_params4,
+                            softmax_params,
+                            next_k_block=n_block_4 - 5,
+                        )
 
             self.normalize_softmax(acc_O, row_sum)
             rO = cute.make_fragment_like(acc_O, self._dtype)
@@ -679,6 +1036,34 @@ def _make_stage13_config(config: AttentionConfig, *, block_m: int, block_n: int,
     )
 
 
+def _stage13_autotune_cache_key(config: AttentionConfig, q) -> str:
+    device_name = torch.cuda.get_device_name(q.device)
+    return "|".join(
+        [
+            device_name,
+            str(tuple(q.shape)),
+            str(q.dtype),
+            str(config.num_threads),
+            str(config.block_m),
+            str(config.block_n),
+        ]
+    )
+
+
+def _load_stage13_autotune_cache_from_disk() -> dict[str, dict[str, int]]:
+    if not _STAGE13_AUTOTUNE_CACHE_PATH.exists():
+        return {}
+    try:
+        return json.loads(_STAGE13_AUTOTUNE_CACHE_PATH.read_text())
+    except Exception:
+        return {}
+
+
+def _save_stage13_autotune_cache_to_disk(entries: dict[str, dict[str, int]]) -> None:
+    _STAGE13_AUTOTUNE_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _STAGE13_AUTOTUNE_CACHE_PATH.write_text(json.dumps(entries, indent=2, sort_keys=True))
+
+
 def _stage13_candidate_values(preferred: int, values: list[int], *, limit: int) -> list[int]:
     ordered = []
     for value in [preferred, *values]:
@@ -718,6 +1103,18 @@ def autotune_stage13_config(
     cached = _STAGE13_AUTOTUNE_CACHE.get(cache_key)
     if cached is not None:
         return cached
+    cache_key_disk = _stage13_autotune_cache_key(config, q)
+    disk_cache = _load_stage13_autotune_cache_from_disk()
+    cached_disk = disk_cache.get(cache_key_disk)
+    if cached_disk is not None:
+        tuned = _make_stage13_config(
+            config,
+            block_m=int(cached_disk["block_m"]),
+            block_n=int(cached_disk["block_n"]),
+            num_stages_kv=int(cached_disk["num_stages_kv"]),
+        )
+        _STAGE13_AUTOTUNE_CACHE[cache_key] = tuned
+        return tuned
 
     block_m_values = _stage13_candidate_values(config.block_m, [128, 96, 64, 48, 32, 16], limit=seq_len)
     block_n_values = _stage13_candidate_values(config.block_n, [256, 192, 128, 96, 64], limit=seq_len)
@@ -770,6 +1167,12 @@ def autotune_stage13_config(
         )
 
     _STAGE13_AUTOTUNE_CACHE[cache_key] = best_config
+    disk_cache[cache_key_disk] = {
+        "block_m": best_config.block_m,
+        "block_n": best_config.block_n,
+        "num_stages_kv": best_config.num_stages_kv,
+    }
+    _save_stage13_autotune_cache_to_disk(disk_cache)
     return best_config
 
 
@@ -788,14 +1191,19 @@ def _stage13_forward_impl(q, k, v, config: AttentionConfig):
         raise ValueError(
             f"stage13 currently supports seq_len <= {MAX_SEQ_LEN_FOR_STAGE13_CUTE}, got {seq_len}."
         )
-    if config.num_stages_kv not in {0, 1, 2}:
-        raise ValueError(
-            f"stage13 currently has executable kernels for num_stages_kv in {{1, 2}}; got {config.num_stages_kv}. "
-            "Stages 3-5 are reserved for the next multistage kernel revision."
-        )
+    if config.num_stages_kv not in {0, 1, 2, 3, 4, 5}:
+        raise ValueError(f"stage13 currently supports num_stages_kv in {{1, 2, 3, 4, 5}}, got {config.num_stages_kv}.")
     if config.num_stages_kv == 1:
         return stage11_forward(q, k, v, replace(config, autotune=False))
-    if not Stage13FlashAttentionAmpere.can_implement(cutlass.Float16, head_dim, config.block_m, config.block_n, config.num_threads, True):
+    if not Stage13FlashAttentionAmpere.can_implement(
+        cutlass.Float16,
+        head_dim,
+        config.block_m,
+        config.block_n,
+        config.num_threads,
+        config.num_stages_kv,
+        True,
+    ):
         raise ValueError("stage13 config is not supported by the MMA kernel constraints.")
 
     q_perm = q.permute(0, 2, 1, 3).contiguous()
@@ -811,7 +1219,14 @@ def _stage13_forward_impl(q, k, v, config: AttentionConfig):
     torch_stream = torch.cuda.current_stream()
     current_stream = cuda.CUstream(torch_stream.cuda_stream)
 
-    cache_key = (tuple(q_perm.shape), str(q_perm.dtype), config.block_m, config.block_n, config.num_threads)
+    cache_key = (
+        tuple(q_perm.shape),
+        str(q_perm.dtype),
+        config.block_m,
+        config.block_n,
+        config.num_threads,
+        config.num_stages_kv,
+    )
     compiled = _stage13_compile(
         cache_key,
         q_cute,
@@ -824,6 +1239,7 @@ def _stage13_forward_impl(q, k, v, config: AttentionConfig):
         config.block_m,
         config.block_n,
         config.num_threads,
+        config.num_stages_kv,
     )
     compiled(q_cute, k_cute, v_cute, o_cute, scale, current_stream)
     return o_perm.permute(0, 2, 1, 3).contiguous()
@@ -840,7 +1256,7 @@ def stage13_forward(q, k, v, config: AttentionConfig | None = None):
     return _stage13_forward_impl(q, k, v, replace(tuned, autotune=False))
 
 
-def _stage13_compile(cache_key, q_cute, k_cute, v_cute, o_cute, scale, current_stream, head_dim, block_m, block_n, num_threads):
+def _stage13_compile(cache_key, q_cute, k_cute, v_cute, o_cute, scale, current_stream, head_dim, block_m, block_n, num_threads, num_stages_kv):
     compiled = _STAGE13_COMPILED_CACHE.get(cache_key)
     if compiled is None:
         kernel = Stage13FlashAttentionAmpere(
@@ -848,6 +1264,7 @@ def _stage13_compile(cache_key, q_cute, k_cute, v_cute, o_cute, scale, current_s
             m_block_size=block_m,
             n_block_size=block_n,
             num_threads=num_threads,
+            num_stages_kv=num_stages_kv,
             is_causal=True,
         )
         compiled = cute.compile(kernel, q_cute, k_cute, v_cute, o_cute, scale, current_stream)
