@@ -124,6 +124,20 @@ class Stage22FlashAttentionTmaExperimental:
         )
         return sQ_layout, sKV_layout, sKV_layout_staged
 
+    def _make_q_layout(self):
+        smem_k_block_size = 64 if self._head_dim_padded % 64 == 0 else 32
+        swizzle_bits = 3 if smem_k_block_size == 64 else 2
+        sQ_layout_atom = cute.make_composed_layout(
+            cute.make_swizzle(swizzle_bits, 3, 3),
+            0,
+            cute.make_layout((8, smem_k_block_size), stride=(smem_k_block_size, 1)),
+        )
+        return cute.tile_to_shape(
+            sQ_layout_atom,
+            (self._m_block_size, self._head_dim_padded),
+            (0, 1),
+        )
+
     def _make_shared_storage_type(self, dtype, sQ_layout, sKV_layout_staged):
         @cute.struct
         class SharedStorage:
@@ -135,6 +149,122 @@ class Stage22FlashAttentionTmaExperimental:
             }
 
         return SharedStorage
+
+    def _make_consumer_copy_atoms_and_mma(self):
+        universal_copy_bits = 128
+        async_copy_elems = universal_copy_bits // self._dtype.width
+        atom_async_copy = cute.make_copy_atom(
+            cpasync.CopyG2SOp(cache_mode=cpasync.LoadCacheMode.GLOBAL),
+            self._dtype,
+            num_bits_per_copy=universal_copy_bits,
+        )
+        atom_universal_copy = cute.make_copy_atom(
+            cute.nvgpu.CopyUniversalOp(),
+            self._dtype,
+            num_bits_per_copy=universal_copy_bits,
+        )
+        smem_copy_atom_Q = cute.make_copy_atom(warp.LdMatrix8x8x16bOp(transpose=False, num_matrices=4), self._dtype)
+        smem_copy_atom_K = cute.make_copy_atom(warp.LdMatrix8x8x16bOp(transpose=False, num_matrices=4), self._dtype)
+        smem_copy_atom_V = cute.make_copy_atom(warp.LdMatrix8x8x16bOp(transpose=True, num_matrices=4), self._dtype)
+        tiled_mma = cute.make_tiled_mma(
+            warp.MmaF16BF16Op(self._dtype, cutlass.Float32, (16, 8, 16)),
+            (self._consumer_threads // 32, 1, 1),
+            permutation_mnk=(self._consumer_threads // 32 * 16, 16, 16),
+        )
+        return atom_async_copy, atom_universal_copy, smem_copy_atom_Q, smem_copy_atom_K, smem_copy_atom_V, tiled_mma, async_copy_elems
+
+    @cute.jit
+    def _load_q_to_smem(
+        self,
+        tidx,
+        mQ: cute.Tensor,
+        sQ,
+        sQ_layout_atom,
+        m_block,
+        batch_size,
+        num_head,
+        atom_async_copy,
+    ):
+        async_copy_elems = 128 // self._dtype.width
+        tQKV_shape_dim_1 = sQ_layout_atom.outer.shape[1] // async_copy_elems
+        consumer_layout = cute.make_layout(
+            (self._consumer_threads // tQKV_shape_dim_1, tQKV_shape_dim_1),
+            stride=(tQKV_shape_dim_1, 1),
+        )
+        vQKV_layout = cute.make_layout((1, async_copy_elems))
+        gmem_tiled_copy_Q = cute.make_tiled_copy_tv(atom_async_copy, consumer_layout, vQKV_layout)
+        consumer_slice_idx = tidx % self._consumer_threads
+        gQ = cute.local_tile(mQ[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
+        gmem_thr_copy_Q = gmem_tiled_copy_Q.get_slice(consumer_slice_idx)
+        tQgQ = gmem_thr_copy_Q.partition_S(gQ)
+        tQsQ = gmem_thr_copy_Q.partition_D(sQ)
+        mcQ = cute.make_identity_tensor(mQ.layout.shape)
+        cQ = cute.local_tile(mcQ[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
+        tQcQ = gmem_thr_copy_Q.partition_S(cQ)
+        tQpQ = cute.make_rmem_tensor(
+            cute.make_layout(
+                (tQsQ.shape[0][1], cute.size(tQsQ, mode=[1]), cute.size(tQsQ, mode=[2])),
+                stride=(cute.size(tQsQ, mode=[2]), 0, 1),
+            ),
+            cutlass.Boolean,
+        )
+        for rest_v in cutlass.range_constexpr(tQpQ.shape[0]):
+            for rest_k in cutlass.range_constexpr(tQpQ.shape[2]):
+                tQpQ[rest_v, 0, rest_k] = cute.elem_less(tQcQ[(0, rest_v), 0, rest_k][3], mQ.layout.shape[3])
+        for m in cutlass.range_constexpr(cute.size(tQsQ.shape[1])):
+            if cute.elem_less(tQcQ[0, m, 0][1], mQ.layout.shape[1]):
+                cute.copy(gmem_tiled_copy_Q, tQgQ[None, m, None], tQsQ[None, m, None], pred=tQpQ[None, m, None])
+            else:
+                tQsQ[None, m, None].fill(0)
+        cute.arch.cp_async_commit_group()
+        return gmem_tiled_copy_Q
+
+    @cute.jit
+    def _build_consumer_mma_views(
+        self,
+        tidx,
+        tiled_mma,
+        sQ,
+        sKV_layout_staged,
+        sK,
+        sV,
+        smem_copy_atom_Q,
+        smem_copy_atom_K,
+        smem_copy_atom_V,
+    ):
+        consumer_slice_idx = tidx % self._consumer_threads
+        thr_mma = tiled_mma.get_slice(consumer_slice_idx)
+        tSrQ = thr_mma.make_fragment_A(thr_mma.partition_A(sQ))
+        sVt = cute.composition(sV, cute.make_layout((self._head_dim_padded, self._n_block_size, self._num_stages_kv), stride=(self._n_block_size, 1, self._n_block_size * self._head_dim_padded)))
+        tSrK = thr_mma.make_fragment_B(thr_mma.partition_B(sK))
+        tOrVt = thr_mma.make_fragment_B(thr_mma.partition_B(sVt))
+        smem_tiled_copy_Q = cute.make_tiled_copy_A(smem_copy_atom_Q, tiled_mma)
+        smem_tiled_copy_K = cute.make_tiled_copy_B(smem_copy_atom_K, tiled_mma)
+        smem_tiled_copy_V = cute.make_tiled_copy_B(smem_copy_atom_V, tiled_mma)
+        smem_thr_copy_Q = smem_tiled_copy_Q.get_slice(consumer_slice_idx)
+        smem_thr_copy_K = smem_tiled_copy_K.get_slice(consumer_slice_idx)
+        smem_thr_copy_V = smem_tiled_copy_V.get_slice(consumer_slice_idx)
+        tSsQ = smem_thr_copy_Q.partition_S(sQ)
+        tSrQ_view = smem_thr_copy_Q.retile(tSrQ)
+        tSsK = smem_thr_copy_K.partition_S(sK)
+        tSrK_view = smem_thr_copy_K.retile(tSrK)
+        tOsVt = smem_thr_copy_V.partition_S(sVt)
+        tOrVt_view = smem_thr_copy_V.retile(tOrVt)
+        return (
+            thr_mma,
+            tSrQ,
+            tSrK,
+            tOrVt,
+            smem_tiled_copy_Q,
+            smem_tiled_copy_K,
+            smem_tiled_copy_V,
+            tSsQ,
+            tSrQ_view,
+            tSsK,
+            tSrK_view,
+            tOsVt,
+            tOrVt_view,
+        )
 
     def _make_tma_kv_atoms_and_tensors(self, gK: cute.Tensor, gV: cute.Tensor, sKV_layout_staged):
         tma_tile = (self._n_block_size, self._head_dim_padded)
@@ -309,6 +439,7 @@ class Stage22FlashAttentionTmaExperimental:
         self._dtype = mQ.element_type
         sQ_layout, sKV_layout, sKV_layout_staged = self._make_kv_layouts()
         _ = sKV_layout  # carried for parity with stage21 shape plumbing
+        q_layout = self._make_q_layout()
 
         shared_storage = self._make_shared_storage_type(self._dtype, sQ_layout, sKV_layout_staged)
         storage = cutlass.utils.SmemAllocator().allocate(shared_storage)
@@ -316,8 +447,20 @@ class Stage22FlashAttentionTmaExperimental:
         tx_count = cute.size_in_bytes(cute.slice_(sKV_layout_staged, (None, None, 0)))
         mainloop_pipeline = self._make_mainloop_pipeline(mainloop_pipeline_array_ptr, tx_count)
 
+        (
+            atom_async_copy,
+            atom_universal_copy,
+            smem_copy_atom_Q,
+            smem_copy_atom_K,
+            smem_copy_atom_V,
+            tiled_mma,
+            _async_copy_elems,
+        ) = self._make_consumer_copy_atoms_and_mma()
+        _ = atom_universal_copy
+
         gK = cute.local_tile(mK[0, None, 0, None], (self._n_block_size, self._head_dim_padded), (None, 0))
         gV = cute.local_tile(mV[0, None, 0, None], (self._n_block_size, self._head_dim_padded), (None, 0))
+        sQ = storage.sQ.get_tensor(sQ_layout)
         sK = storage.sK.get_tensor(sKV_layout_staged)
         sV = storage.sV.get_tensor(sKV_layout_staged)
         tma_atom_k, tma_tensor_k, tma_atom_v, tma_tensor_v = self._make_tma_kv_atoms_and_tensors(
@@ -328,6 +471,18 @@ class Stage22FlashAttentionTmaExperimental:
 
         tidx, _, _ = cute.arch.thread_idx()
         warp_idx = tidx // 32
+        _ = self._load_q_to_smem(
+            tidx,
+            mQ,
+            sQ,
+            q_layout,
+            cutlass.Int32(0),
+            cutlass.Int32(0),
+            cutlass.Int32(0),
+            atom_async_copy,
+        )
+        cute.arch.cp_async_wait_group(0)
+        cute.arch.barrier()
         self._prefetch_tma_descriptors_once(warp_idx, tma_atom_k, tma_atom_v)
         mainloop_producer_state = self._make_producer_state()
         mainloop_consumer_state = self._make_consumer_state()
@@ -348,7 +503,18 @@ class Stage22FlashAttentionTmaExperimental:
         )
         _ = self._consumer_tma_try_wait(mainloop_pipeline, mainloop_consumer_read_state, k_tile_cnt)
         _ = self._consumer_tma_advance_states(mainloop_consumer_read_state, mainloop_consumer_release_state)
+        _ = self._build_consumer_mma_views(
+            tidx,
+            tiled_mma,
+            sQ,
+            sKV_layout_staged,
+            sK,
+            sV,
+            smem_copy_atom_Q,
+            smem_copy_atom_K,
+            smem_copy_atom_V,
+        )
 
         raise NotImplementedError(
-            "stage22_tma now has real TMA atom/pipeline scaffolding, but the K/V mainloop load path is not wired into a runnable kernel yet."
+            "stage22_tma now wires Q-side consumer setup together with the TMA producer pipeline, but the K/V TMA mainloop compute path is not yet runnable."
         )
