@@ -109,7 +109,7 @@ _STAGE_NOTES = {
     "stage19": "warpgroup-layout experimental backend; independent multistage path that swaps to Hopper-style warpgroup shared-memory layout atoms",
     "stage20": "aggressive warpspec experimental backend; circular-buffer steady-state mainloop with full-slot prefetch and dedicated multistage autotune",
     "stage21": "explicit producer/consumer state-machine backend; stage18-derived mainline with dedicated prefetch, advance, and wait helpers",
-    "stage22": "independent rewritten backend path; autotunes block sizes and num_stages_kv while the experimental TMA scaffold remains out of the benchmark hot path",
+    "stage22": "independent TMA producer backend; reuses the proven stage21 consumer math while autotuning block sizes and num_stages_kv",
 }
 
 

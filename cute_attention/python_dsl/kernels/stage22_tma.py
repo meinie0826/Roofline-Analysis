@@ -14,7 +14,7 @@ from .common import (
     torch,
     validate_qkv,
 )
-from .stage22_rewrite_backend import Stage22FlashAttentionRewrite
+from .stage22_tma_backend import Stage22FlashAttentionTma
 
 MAX_SEQ_LEN_FOR_STAGE22_CUTE = 4096
 _STAGE22_COMPILED_CACHE = {}
@@ -72,7 +72,7 @@ def _stage22_candidate_values(preferred: int, values: list[int], *, limit: int) 
 
 
 def _stage22_can_implement(head_dim: int, config: AttentionConfig) -> bool:
-    return Stage22FlashAttentionRewrite.can_implement(
+    return Stage22FlashAttentionTma.can_implement(
         cutlass.Float16,
         head_dim,
         config.block_m,
@@ -205,7 +205,7 @@ def _stage22_forward_impl(q, k, v, config: AttentionConfig):
 
     normalized = replace(config, num_threads=256, num_stages_kv=(config.num_stages_kv or 3), autotune=False)
     if not _stage22_can_implement(head_dim, normalized):
-        raise ValueError("stage22 config is not supported by the state-machine kernel constraints.")
+        raise ValueError("stage22 config is not supported by the TMA kernel constraints.")
 
     q_perm = q.permute(0, 2, 1, 3).contiguous()
     k_perm = k.permute(0, 2, 1, 3).contiguous()
@@ -260,7 +260,7 @@ def stage22_forward(q, k, v, config: AttentionConfig | None = None):
 def _stage22_compile(cache_key, q_cute, k_cute, v_cute, o_cute, scale, current_stream, head_dim, block_m, block_n, num_threads, num_stages_kv):
     compiled = _STAGE22_COMPILED_CACHE.get(cache_key)
     if compiled is None:
-        kernel = Stage22FlashAttentionRewrite(
+        kernel = Stage22FlashAttentionTma(
             head_dim=head_dim,
             m_block_size=block_m,
             n_block_size=block_n,
