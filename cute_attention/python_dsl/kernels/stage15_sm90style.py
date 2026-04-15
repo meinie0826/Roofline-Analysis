@@ -172,6 +172,8 @@ if HAS_CUTE:
             is_consumer = not is_producer
             consumer_tidx = tidx - self._producer_threads
             producer_tidx = tidx
+            consumer_slice_idx = tidx % self._consumer_threads
+            producer_slice_idx = tidx % self._producer_threads
             m_block, batch_size, num_head = cute.arch.block_idx()
 
             n_block_max = cute.ceil_div(mK.shape[1], self._n_block_size)
@@ -196,7 +198,7 @@ if HAS_CUTE:
                 ),
             )
 
-            gmem_thr_copy_Q = gmem_tiled_copy_Q.get_slice(consumer_tidx)
+            gmem_thr_copy_Q = gmem_tiled_copy_Q.get_slice(consumer_slice_idx)
             tQgQ = gmem_thr_copy_Q.partition_S(gQ)
             tQsQ = gmem_thr_copy_Q.partition_D(sQ)
             mcQ = cute.make_identity_tensor(mQ.layout.shape)
@@ -213,7 +215,7 @@ if HAS_CUTE:
                 for rest_k in cutlass.range_constexpr(tQpQ.shape[2]):
                     tQpQ[rest_v, 0, rest_k] = cute.elem_less(tQcQ[(0, rest_v), 0, rest_k][3], mQ.layout.shape[3])
 
-            thr_mma = tiled_mma.get_slice(consumer_tidx)
+            thr_mma = tiled_mma.get_slice(consumer_slice_idx)
             tSrQ = thr_mma.make_fragment_A(thr_mma.partition_A(sQ))
             tSrK = thr_mma.make_fragment_B(thr_mma.partition_B(sK))
             tOrVt = thr_mma.make_fragment_B(thr_mma.partition_B(sVt))
@@ -228,9 +230,9 @@ if HAS_CUTE:
             smem_tiled_copy_K = cute.make_tiled_copy_B(smem_copy_atom_K, tiled_mma)
             smem_tiled_copy_V = cute.make_tiled_copy_B(smem_copy_atom_V, tiled_mma)
 
-            smem_thr_copy_Q = smem_tiled_copy_Q.get_slice(consumer_tidx)
-            smem_thr_copy_K = smem_tiled_copy_K.get_slice(consumer_tidx)
-            smem_thr_copy_V = smem_tiled_copy_V.get_slice(consumer_tidx)
+            smem_thr_copy_Q = smem_tiled_copy_Q.get_slice(consumer_slice_idx)
+            smem_thr_copy_K = smem_tiled_copy_K.get_slice(consumer_slice_idx)
+            smem_thr_copy_V = smem_tiled_copy_V.get_slice(consumer_slice_idx)
 
             tSsQ = smem_thr_copy_Q.partition_S(sQ)
             tSrQ_copy_view = smem_thr_copy_Q.retile(tSrQ)
@@ -244,7 +246,7 @@ if HAS_CUTE:
             row_max.fill(-cutlass.Float32.inf)
             row_sum.fill(0.0)
 
-            gmem_thr_copy_KV = gmem_tiled_copy_KV.get_slice(producer_tidx)
+            gmem_thr_copy_KV = gmem_tiled_copy_KV.get_slice(producer_slice_idx)
             tKgK = gmem_thr_copy_KV.partition_S(gK)
             tKsK = gmem_thr_copy_KV.partition_D(sK)
             tVgV = gmem_thr_copy_KV.partition_S(gV)
@@ -361,13 +363,13 @@ if HAS_CUTE:
 
                 smem_copy_atom_O = cute.make_copy_atom(cute.nvgpu.CopyUniversalOp(), self._dtype)
                 smem_tiled_copy_O = cute.make_tiled_copy_C(smem_copy_atom_O, tiled_mma)
-                smem_thr_copy_O = smem_tiled_copy_O.get_slice(consumer_tidx)
+                smem_thr_copy_O = smem_tiled_copy_O.get_slice(consumer_slice_idx)
                 taccOrO = smem_thr_copy_O.retile(rO)
                 taccOsO = smem_thr_copy_O.partition_D(sO)
                 cute.copy(smem_copy_atom_O, taccOrO, taccOsO)
 
                 gO = cute.local_tile(mO[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
-                gmem_thr_copy_O = gmem_tiled_copy_O.get_slice(consumer_tidx)
+                gmem_thr_copy_O = gmem_tiled_copy_O.get_slice(consumer_slice_idx)
                 tOsO = gmem_thr_copy_O.partition_S(sO)
                 tOgO = gmem_thr_copy_O.partition_D(gO)
                 tOrO = cute.make_fragment_like(tOgO, self._dtype)
