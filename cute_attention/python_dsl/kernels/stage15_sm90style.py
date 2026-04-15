@@ -41,7 +41,7 @@ if HAS_CUTE:
                 return False
             if head_dim % 8 != 0:
                 return False
-            if num_threads != 256:
+            if num_threads % 32 != 0 or num_threads < 128 or num_threads > 256:
                 return False
             if producer_warps not in (1, 2, 4):
                 return False
@@ -505,7 +505,11 @@ def _stage15_forward_impl(q, k, v, config: AttentionConfig):
     if seq_len > MAX_SEQ_LEN_FOR_STAGE15_CUTE:
         raise ValueError(f"stage15 currently supports seq_len <= {MAX_SEQ_LEN_FOR_STAGE15_CUTE}, got {seq_len}.")
 
-    tuned = replace(config, num_threads=256, producer_warps=config.producer_warps or 4)
+    tuned = replace(
+        config,
+        num_threads=config.num_threads or 256,
+        producer_warps=config.producer_warps or 4,
+    )
     if not Stage15FlashAttentionSm90Style.can_implement(cutlass.Float16, head_dim, tuned.block_m, tuned.block_n, tuned.num_threads, tuned.producer_warps, True):
         raise ValueError("stage15 config is not supported by the SM90-style kernel constraints.")
 
@@ -543,7 +547,7 @@ def _stage15_forward_impl(q, k, v, config: AttentionConfig):
 
 def stage15_forward(q, k, v, config: AttentionConfig | None = None):
     config = config or AttentionConfig(block_m=64, block_n=128, num_threads=256)
-    tuned = replace(config, autotune=False, num_threads=256)
+    tuned = replace(config, autotune=False)
     if config.autotune:
         tuned = autotune_stage15_config(q, k, v, tuned)
     return _stage15_forward_impl(q, k, v, tuned)
@@ -565,13 +569,13 @@ def _stage15_compile(cache_key, q_cute, k_cute, v_cute, o_cute, scale, current_s
     return compiled
 
 
-def _make_stage15_config(config: AttentionConfig, *, block_m: int, block_n: int, producer_warps: int) -> AttentionConfig:
+def _make_stage15_config(config: AttentionConfig, *, block_m: int, block_n: int, num_threads: int, producer_warps: int) -> AttentionConfig:
     return AttentionConfig(
         softmax_scale=config.softmax_scale,
         causal=config.causal,
         block_m=block_m,
         block_n=block_n,
-        num_threads=256,
+        num_threads=num_threads,
         producer_warps=producer_warps,
         autotune=False,
     )
@@ -615,6 +619,7 @@ def autotune_stage15_config(
 
     block_m_values = _stage15_candidate_values(config.block_m or 64, [128, 64], limit=seq_len)
     block_n_values = _stage15_candidate_values(config.block_n, [192, 128, 96, 64], limit=seq_len)
+    num_thread_values = _stage15_candidate_values(config.num_threads or 256, [256, 192, 160, 128])
     producer_warp_values = _stage15_candidate_values(config.producer_warps or 4, [4, 2, 1])
 
     start_event = torch.cuda.Event(enable_timing=True)
@@ -622,31 +627,38 @@ def autotune_stage15_config(
     best_config = None
     best_ms = None
 
-    for block_m in block_m_values:
-        for block_n in block_n_values:
-            for producer_warps in producer_warp_values:
-                tuned = _make_stage15_config(config, block_m=block_m, block_n=block_n, producer_warps=producer_warps)
-                try:
-                    if not Stage15FlashAttentionSm90Style.can_implement(cutlass.Float16, head_dim, tuned.block_m, tuned.block_n, tuned.num_threads, tuned.producer_warps, True):
-                        continue
-                    for _ in range(warmup):
-                        _stage15_forward_impl(q, k, v, tuned)
+    for num_threads in num_thread_values:
+        for block_m in block_m_values:
+            for block_n in block_n_values:
+                for producer_warps in producer_warp_values:
+                    tuned = _make_stage15_config(
+                        config,
+                        block_m=block_m,
+                        block_n=block_n,
+                        num_threads=num_threads,
+                        producer_warps=producer_warps,
+                    )
+                    try:
+                        if not Stage15FlashAttentionSm90Style.can_implement(cutlass.Float16, head_dim, tuned.block_m, tuned.block_n, tuned.num_threads, tuned.producer_warps, True):
+                            continue
+                        for _ in range(warmup):
+                            _stage15_forward_impl(q, k, v, tuned)
 
-                    torch.cuda.synchronize()
-                    elapsed = 0.0
-                    for _ in range(repeat):
-                        start_event.record()
-                        _stage15_forward_impl(q, k, v, tuned)
-                        end_event.record()
                         torch.cuda.synchronize()
-                        elapsed += start_event.elapsed_time(end_event)
-                    elapsed /= repeat
-                except ValueError:
-                    continue
+                        elapsed = 0.0
+                        for _ in range(repeat):
+                            start_event.record()
+                            _stage15_forward_impl(q, k, v, tuned)
+                            end_event.record()
+                            torch.cuda.synchronize()
+                            elapsed += start_event.elapsed_time(end_event)
+                        elapsed /= repeat
+                    except ValueError:
+                        continue
 
-                if best_ms is None or elapsed < best_ms:
-                    best_ms = elapsed
-                    best_config = tuned
+                    if best_ms is None or elapsed < best_ms:
+                        best_ms = elapsed
+                        best_config = tuned
 
     if best_config is None:
         raise ValueError("stage15 autotune failed to find a valid config.")

@@ -35,6 +35,8 @@ def benchmark(stage_name, q, k, v, config, warmup=5, repeat=20):
 
 def _config_status_suffix(config: AttentionConfig) -> str | None:
     parts = []
+    if config.num_threads:
+        parts.append(f"num_threads={config.num_threads}")
     if config.block_m:
         parts.append(f"block_m={config.block_m}")
     if config.block_n:
