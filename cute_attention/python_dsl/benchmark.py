@@ -30,6 +30,7 @@ from kernels import (
     autotune_stage17_config,
     autotune_stage18_config,
     autotune_stage19_config,
+    autotune_stage20_config,
     available_backends,
     run_stage,
 )
@@ -43,10 +44,10 @@ if available_backends()["torch"]:
 # ---------------------------------------------------------------------------
 # Stages that benefit from a higher default num_threads (producer/consumer)
 # ---------------------------------------------------------------------------
-_WARPSPEC_STAGES = {"stage14", "stage15", "stage16", "stage17", "stage18", "stage19"}
+_WARPSPEC_STAGES = {"stage14", "stage15", "stage16", "stage17", "stage18", "stage19", "stage20"}
 
-_DEDICATED_AUTOTUNE_STAGES = {"stage12", "stage13", "stage16", "stage17", "stage18", "stage19"}
-_MULTISTAGE_STAGES = {"stage12", "stage13", "stage16", "stage17", "stage18", "stage19"}
+_DEDICATED_AUTOTUNE_STAGES = {"stage12", "stage13", "stage16", "stage17", "stage18", "stage19", "stage20"}
+_MULTISTAGE_STAGES = {"stage12", "stage13", "stage16", "stage17", "stage18", "stage19", "stage20"}
 _GENERIC_TILE_TUNABLE_STAGES = {
     "stage0",
     "stage1",
@@ -83,6 +84,7 @@ _STAGE_TUNING_AXES = {
     "stage17": "block_m,block_n,num_stages_kv",
     "stage18": "block_m,block_n,num_stages_kv",
     "stage19": "block_m,block_n,num_stages_kv",
+    "stage20": "block_m,block_n,num_stages_kv",
     "baseline_fa4": "none",
     "baseline_sdpa": "none",
 }
@@ -95,6 +97,7 @@ _STAGE_NOTES = {
     "stage17": "independent warp-specialized multistage kernel; fixed 256-thread producer/consumer schedule with autotuned tiles and stage depth",
     "stage18": "SM90-oriented experimental backend; independent multistage path with stage-state mainloop, stage-aware cp.async waits, and broader tile search",
     "stage19": "warpgroup-layout experimental backend; independent multistage path that swaps to Hopper-style warpgroup shared-memory layout atoms",
+    "stage20": "aggressive warpspec experimental backend; circular-buffer steady-state mainloop with full-slot prefetch and dedicated multistage autotune",
 }
 
 
@@ -179,7 +182,7 @@ def _config_status_suffix(config: AttentionConfig) -> str | None:
 
 def _make_config_for_stage(stage_name: str, base: AttentionConfig) -> AttentionConfig:
     """Return a config tailored to the given stage from the base config."""
-    if stage_name in {"stage17", "stage18", "stage19"}:
+    if stage_name in {"stage17", "stage18", "stage19", "stage20"}:
         return replace(base, block_m=64, block_n=64, num_threads=256, num_stages_kv=3)
     if stage_name in _WARPSPEC_STAGES:
         return replace(base, num_threads=256)
@@ -234,6 +237,9 @@ def benchmark_stage_with_fallback(stage_name, q, k, v, config, warmup=5, repeat=
     if stage_name == "stage19":
         tuned = autotune_stage19_config(q, k, v, config)
         return benchmark(stage_name, q, k, v, tuned, warmup=warmup, repeat=repeat), _config_status_suffix(tuned)
+    if stage_name == "stage20":
+        tuned = autotune_stage20_config(q, k, v, config)
+        return benchmark(stage_name, q, k, v, tuned, warmup=warmup, repeat=repeat), _config_status_suffix(tuned)
 
     if generic_tile_autotune and stage_name in _GENERIC_TILE_TUNABLE_STAGES:
         return _benchmark_with_generic_tile_search(stage_name, q, k, v, config, warmup=warmup, repeat=repeat)
@@ -276,6 +282,7 @@ def parse_stage_list(stages_arg: str) -> list[str]:
             "stage17",
             "stage18",
             "stage19",
+            "stage20",
             "baseline_fa4",
             "baseline_sdpa",
         ]
