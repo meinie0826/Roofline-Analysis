@@ -571,14 +571,14 @@ class Stage22FlashAttentionTmaExperimental:
         tKsK, tKgK = cute.nvgpu.cpasync.tma_partition(
             tma_atom_k,
             0,
-            cute.make_layout(1),
+            cute.make_layout((1,)),
             cute.group_modes(sK, 0, 3),
             cute.group_modes(tSgK, 0, 3),
         )
         tVsV, tVgV = cute.nvgpu.cpasync.tma_partition(
             tma_atom_v,
             0,
-            cute.make_layout(1),
+            cute.make_layout((1,)),
             cute.group_modes(sV, 0, 3),
             cute.group_modes(tSgV, 0, 3),
         )
