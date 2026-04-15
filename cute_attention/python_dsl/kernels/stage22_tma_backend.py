@@ -562,13 +562,13 @@ class Stage22FlashAttentionTmaExperimental:
     ):
         cute.copy(
             tma_atom_k,
-            tKgK[(None, mainloop_producer_state.count)],
+            tKgK[(None, mainloop_producer_state.count, None, None)],
             tKsK[(None, mainloop_producer_state.index)],
             tma_bar_ptr=mainloop_pipeline.producer_get_barrier(mainloop_producer_state),
         )
         cute.copy(
             tma_atom_v,
-            tVgV[(None, mainloop_producer_state.count)],
+            tVgV[(None, mainloop_producer_state.count, None, None)],
             tVsV[(None, mainloop_producer_state.index)],
             tma_bar_ptr=mainloop_pipeline.producer_get_barrier(mainloop_producer_state),
         )
