@@ -557,23 +557,26 @@ class Stage22FlashAttentionTmaExperimental:
         tma_atom_v,
         tma_tensor_v,
     ):
+        thr_mma = tiled_mma.get_slice(tidx)
         qk_mma_tiler = (self._m_block_size, self._n_block_size, self._head_dim_padded)
         pv_mma_tiler = (self._m_block_size, self._head_dim_padded, self._n_block_size)
         gK_tiled = cute.flat_divide(tma_tensor_k, cute.select(qk_mma_tiler, mode=[1, 2]))
         gV_tiled = cute.flat_divide(tma_tensor_v, cute.select(pv_mma_tiler, mode=[1, 2]))
+        tSgK = thr_mma.partition_B(gK_tiled)
+        tSgV = thr_mma.partition_B(gV_tiled)
         tKsK, tKgK = cute.nvgpu.cpasync.tma_partition(
             tma_atom_k,
             0,
             cute.make_layout(1),
-            cute.group_modes(sK, 0, 2),
-            cute.group_modes(gK_tiled, 0, 2),
+            cute.group_modes(sK, 0, 3),
+            cute.group_modes(tSgK, 0, 3),
         )
         tVsV, tVgV = cute.nvgpu.cpasync.tma_partition(
             tma_atom_v,
             0,
             cute.make_layout(1),
-            cute.group_modes(sV, 0, 2),
-            cute.group_modes(gV_tiled, 0, 2),
+            cute.group_modes(sV, 0, 3),
+            cute.group_modes(tSgV, 0, 3),
         )
         return tKsK, tKgK, tVsV, tVgV
 
