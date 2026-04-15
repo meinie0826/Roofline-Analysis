@@ -560,14 +560,10 @@ class Stage22FlashAttentionTmaExperimental:
         tma_tensor_v,
     ):
         thr_mma = tiled_mma.get_slice(tidx)
-        qk_mma_tiler = (self._m_block_size, self._n_block_size, self._head_dim_padded)
-        pv_mma_tiler = (self._m_block_size, self._head_dim_padded, self._n_block_size)
         _ = tma_tensor_k
         _ = tma_tensor_v
-        gK_tiled = cute.flat_divide(gK, cute.select(qk_mma_tiler, mode=[1, 2]))
-        gV_tiled = cute.flat_divide(gV, cute.select(pv_mma_tiler, mode=[1, 2]))
-        tSgK = thr_mma.partition_B(gK_tiled)
-        tSgV = thr_mma.partition_B(gV_tiled)
+        tSgK = thr_mma.partition_B(gK)
+        tSgV = thr_mma.partition_B(gV)
         tKsK, tKgK = cute.nvgpu.cpasync.tma_partition(
             tma_atom_k,
             0,
