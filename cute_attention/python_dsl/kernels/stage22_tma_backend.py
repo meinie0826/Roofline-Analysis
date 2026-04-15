@@ -159,7 +159,7 @@ class Stage22FlashAttentionTmaExperimental:
             self._head_dim_padded,
             self._n_block_size,
         )
-        qk_tiled_mma, pv_tiled_mma, _, _ = self._make_blackwell_tma_mmas()
+        qk_tiled_mma, pv_tiled_mma, cluster_layout_shape, cta_group = self._make_blackwell_tma_mmas()
         sK_layout_staged = sm100_utils.make_smem_layout_b(
             qk_tiled_mma,
             qk_mma_tiler,
@@ -172,7 +172,15 @@ class Stage22FlashAttentionTmaExperimental:
             self._dtype,
             self._num_stages_kv,
         )
-        return sQ_layout, sK_layout_staged, sV_layout_staged
+        return (
+            sQ_layout,
+            sK_layout_staged,
+            sV_layout_staged,
+            qk_tiled_mma,
+            pv_tiled_mma,
+            cluster_layout_shape,
+            cta_group,
+        )
 
     def _make_q_layout(self):
         smem_k_block_size = 64 if self._head_dim_padded % 64 == 0 else 32
@@ -412,12 +420,15 @@ class Stage22FlashAttentionTmaExperimental:
 
     def _make_tma_kv_atoms_and_tensors(
         self,
-        gK: cute.Tensor,
-        gVt: cute.Tensor,
+        mK: cute.Tensor,
+        mV: cute.Tensor,
         sK_layout_staged,
         sV_layout_staged,
+        qk_tiled_mma,
+        pv_tiled_mma,
+        cluster_layout_shape,
+        cta_group,
     ):
-        qk_tiled_mma, pv_tiled_mma, cluster_layout_shape, cta_group = self._make_blackwell_tma_mmas()
         tma_load_op = cute.nvgpu.cpasync.CopyBulkTensorTileG2SOp(cta_group)
         k_smem_layout = cute.select(sK_layout_staged, mode=[0, 1, 2])
         v_smem_layout = cute.select(sV_layout_staged, mode=[0, 1, 2])
@@ -433,7 +444,7 @@ class Stage22FlashAttentionTmaExperimental:
         )
         tma_atom_k, tma_tensor_k = cute.nvgpu.make_tiled_tma_atom_B(
             tma_load_op,
-            gK,
+            mK,
             k_smem_layout,
             qk_mma_tiler,
             qk_tiled_mma,
@@ -441,7 +452,7 @@ class Stage22FlashAttentionTmaExperimental:
         )
         tma_atom_v, tma_tensor_v = cute.nvgpu.make_tiled_tma_atom_B(
             tma_load_op,
-            gVt,
+            mV,
             v_smem_layout,
             pv_mma_tiler,
             pv_tiled_mma,
@@ -549,7 +560,8 @@ class Stage22FlashAttentionTmaExperimental:
     def _partition_tma_kv_for_mma(
         self,
         tidx,
-        tiled_mma,
+        qk_tiled_mma,
+        pv_tiled_mma,
         gK: cute.Tensor,
         gV: cute.Tensor,
         sK: cute.Tensor,
@@ -559,11 +571,12 @@ class Stage22FlashAttentionTmaExperimental:
         tma_atom_v,
         tma_tensor_v,
     ):
-        thr_mma = tiled_mma.get_slice(tidx)
         _ = tma_tensor_k
         _ = tma_tensor_v
-        tSgK = thr_mma.partition_B(gK)
-        tSgV = thr_mma.partition_B(gV)
+        thr_mma_qk = qk_tiled_mma.get_slice(tidx)
+        thr_mma_pv = pv_tiled_mma.get_slice(tidx)
+        tSgK = thr_mma_qk.partition_B(gK)
+        tSgV = thr_mma_pv.partition_B(gV)
         tKsK, tKgK = cute.nvgpu.cpasync.tma_partition(
             tma_atom_k,
             0,
@@ -734,7 +747,15 @@ class Stage22FlashAttentionTmaExperimental:
         self._dtype = mQ.element_type
         LOG2_E = 1.4426950408889634074
         softmax_scale_log2 = softmax_scale * LOG2_E
-        sQ_layout, sK_layout_staged, sV_layout_staged = self._make_kv_layouts()
+        (
+            sQ_layout,
+            sK_layout_staged,
+            sV_layout_staged,
+            qk_tiled_mma,
+            pv_tiled_mma,
+            cluster_layout_shape,
+            cta_group,
+        ) = self._make_kv_layouts()
         q_layout = self._make_q_layout()
         sO_layout = sQ_layout
 
@@ -779,8 +800,6 @@ class Stage22FlashAttentionTmaExperimental:
         mK_kdl = cute.make_tensor(mK.iterator, k_layout)
         mV_dkl = cute.make_tensor(mV.iterator, v_layout)
         gQ = cute.local_tile(mQ[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
-        gK = cute.local_tile(mK_kdl[None, None, ((0, num_head), batch_size)], (self._n_block_size, self._head_dim_padded), (None, 0))
-        gV = cute.local_tile(mV_dkl[None, None, ((0, num_head), batch_size)], (self._head_dim_padded, self._n_block_size), (0, None))
         gO = cute.local_tile(mO[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
 
         sQ = storage.sQ.get_tensor(sQ_layout.outer, swizzle=sQ_layout.inner)
@@ -805,14 +824,26 @@ class Stage22FlashAttentionTmaExperimental:
             )
             if cutlass.const_expr(self._num_stages_kv >= 3) else None
         )
+        mK_tma = mK_kdl[None, None, ((0, num_head), batch_size)]
+        mV_tma = mV_dkl[None, None, ((0, num_head), batch_size)]
         tma_atom_k, tma_tensor_k, tma_atom_v, tma_tensor_v = self._make_tma_kv_atoms_and_tensors(
-            gK, gV, sK_layout_staged, sV_layout_staged
+            mK_tma,
+            mV_tma,
+            sK_layout_staged,
+            sV_layout_staged,
+            qk_tiled_mma,
+            pv_tiled_mma,
+            cluster_layout_shape,
+            cta_group,
         )
+        gK = cute.local_tile(tma_tensor_k, (self._n_block_size, self._head_dim_padded), (None, 0))
+        gV = cute.local_tile(tma_tensor_v, (self._head_dim_padded, self._n_block_size), (0, None))
         _ = tma_tensor_k
         _ = tma_tensor_v
         tKsK, tKgK, tVsV, tVgV = self._partition_tma_kv_for_mma(
             tidx,
-            tiled_mma,
+            qk_tiled_mma,
+            pv_tiled_mma,
             gK,
             gV,
             sK,
