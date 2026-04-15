@@ -154,7 +154,7 @@ STAGES: dict[str, StageDefinition] = {
     ),
     "stage18": StageDefinition(
         name="stage18",
-        description="Our own CuTe stage: SM90-oriented experimental entrypoint for warp-specialized multistage evolution.",
+        description="Our own CuTe stage: SM90-oriented experimental backend for independent warp-specialized multistage evolution.",
         implementation=stage18_forward,
         backend="own-cute-dsl",
     ),
