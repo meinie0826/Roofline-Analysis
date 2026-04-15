@@ -1,9 +1,9 @@
 import cuda.bindings.driver as cuda
 import cutlass.pipeline as pipeline
 import cutlass.utils as utils
-import cutlass.utils.hopper_helpers as sm90_utils_basic
+import cutlass.utils.blackwell_helpers as sm100_utils
+import cutlass.cute.nvgpu.tcgen05 as tcgen05
 from cutlass.cute.nvgpu import cpasync, warp
-from cutlass.utils import LayoutEnum
 
 from .common import cutlass, cute
 
@@ -64,11 +64,46 @@ class Stage22FlashAttentionTmaExperimental:
         if n_block_size % 64 != 0:
             return False
         smem_usage = (m_block_size * head_dim + n_block_size * head_dim * 2 * num_stages_kv) * 2
-        if smem_usage > utils.get_smem_capacity_in_bytes("sm_90"):
+        if smem_usage > utils.get_smem_capacity_in_bytes("sm_100"):
             return False
         if (m_block_size * 2) % 128 != 0:
             return False
         return True
+
+    def _make_blackwell_tma_mmas(self):
+        qk_mma_tiler = (
+            self._m_block_size,
+            self._n_block_size,
+            self._head_dim_padded,
+        )
+        pv_mma_tiler = (
+            self._m_block_size,
+            self._head_dim_padded,
+            self._n_block_size,
+        )
+        cta_group = tcgen05.CtaGroup.ONE
+        qk_tiled_mma = sm100_utils.make_trivial_tiled_mma(
+            self._dtype,
+            tcgen05.OperandMajorMode.K,
+            tcgen05.OperandMajorMode.K,
+            cutlass.Float32,
+            cta_group,
+            qk_mma_tiler[:2],
+        )
+        pv_tiled_mma = sm100_utils.make_trivial_tiled_mma(
+            self._dtype,
+            tcgen05.OperandMajorMode.K,
+            tcgen05.OperandMajorMode.K,
+            cutlass.Float32,
+            cta_group,
+            pv_mma_tiler[:2],
+        )
+        cluster_shape_mnk = (1, 1, 1)
+        cluster_layout_vmnk = cute.tiled_divide(
+            cute.make_layout(cluster_shape_mnk),
+            (qk_tiled_mma.thr_id.shape,),
+        )
+        return qk_tiled_mma, pv_tiled_mma, cluster_layout_vmnk.shape, cta_group
 
     @staticmethod
     def _make_tma_atom_and_tensor(
@@ -124,15 +159,16 @@ class Stage22FlashAttentionTmaExperimental:
             self._head_dim_padded,
             self._n_block_size,
         )
-        sK_layout_staged = sm90_utils_basic.make_smem_layout_b(
-            LayoutEnum.ROW_MAJOR,
+        qk_tiled_mma, pv_tiled_mma, _, _ = self._make_blackwell_tma_mmas()
+        sK_layout_staged = sm100_utils.make_smem_layout_b(
+            qk_tiled_mma,
             qk_mma_tiler,
             self._dtype,
             self._num_stages_kv,
         )
-        sV_layout_staged = sm90_utils_basic.make_smem_layout_b(
-            LayoutEnum.ROW_MAJOR,
-            qk_mma_tiler,
+        sV_layout_staged = sm100_utils.make_smem_layout_b(
+            pv_tiled_mma,
+            pv_mma_tiler,
             self._dtype,
             self._num_stages_kv,
         )
@@ -381,15 +417,35 @@ class Stage22FlashAttentionTmaExperimental:
         sK_layout_staged,
         sV_layout_staged,
     ):
-        tma_atom_k, tma_tensor_k = self._make_tma_atom_and_tensor(
-            gK,
-            sK_layout_staged,
-            (self._n_block_size, self._head_dim_padded),
+        qk_tiled_mma, pv_tiled_mma, cluster_layout_shape, cta_group = self._make_blackwell_tma_mmas()
+        tma_load_op = cute.nvgpu.cpasync.CopyBulkTensorTileG2SOp(cta_group)
+        k_smem_layout = cute.select(sK_layout_staged, mode=[0, 1, 2])
+        v_smem_layout = cute.select(sV_layout_staged, mode=[0, 1, 2])
+        qk_mma_tiler = (
+            self._m_block_size,
+            self._n_block_size,
+            self._head_dim_padded,
         )
-        tma_atom_v, tma_tensor_v = self._make_tma_atom_and_tensor(
+        pv_mma_tiler = (
+            self._m_block_size,
+            self._head_dim_padded,
+            self._n_block_size,
+        )
+        tma_atom_k, tma_tensor_k = cute.nvgpu.make_tiled_tma_atom_B(
+            tma_load_op,
+            gK,
+            k_smem_layout,
+            qk_mma_tiler,
+            qk_tiled_mma,
+            cluster_layout_shape,
+        )
+        tma_atom_v, tma_tensor_v = cute.nvgpu.make_tiled_tma_atom_B(
+            tma_load_op,
             gVt,
-            sV_layout_staged,
-            (self._n_block_size, self._head_dim_padded),
+            v_smem_layout,
+            pv_mma_tiler,
+            pv_tiled_mma,
+            cluster_layout_shape,
         )
         return tma_atom_k, tma_tensor_k, tma_atom_v, tma_tensor_v
 
