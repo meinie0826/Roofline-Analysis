@@ -467,6 +467,41 @@ class Stage22FlashAttentionTmaExperimental:
             g_for_tma_partition,
         )
 
+    def _partition_tma_kv_for_mma(
+        self,
+        tidx,
+        tiled_mma,
+        gK: cute.Tensor,
+        gV: cute.Tensor,
+        sK: cute.Tensor,
+        sV: cute.Tensor,
+        tma_atom_k,
+        tma_tensor_k,
+        tma_atom_v,
+        tma_tensor_v,
+    ):
+        mma_slice_idx = tidx % self._consumer_threads
+        thr_mma = tiled_mma.get_slice(mma_slice_idx)
+        gK_tiled = cute.flat_divide(gK, cute.select(tiled_mma, mode=[1, 2]))
+        gV_tiled = cute.flat_divide(gV, cute.select(tiled_mma, mode=[1, 2]))
+        tSgK = thr_mma.partition_B(gK_tiled)
+        tSgV = thr_mma.partition_B(gV_tiled)
+        tKsK, tKgK = cute.nvgpu.cpasync.tma_partition(
+            tma_atom_k,
+            0,
+            cute.make_layout(1),
+            cute.group_modes(sK, 0, 2),
+            cute.group_modes(tSgK, 0, 3),
+        )
+        tVsV, tVgV = cute.nvgpu.cpasync.tma_partition(
+            tma_atom_v,
+            0,
+            cute.make_layout(1),
+            cute.group_modes(sV, 0, 2),
+            cute.group_modes(tSgV, 0, 3),
+        )
+        return tKsK, tKgK, tVsV, tVgV
+
     @cute.jit
     def _tma_prefetch_descriptors(self, tma_atom_k, tma_atom_v, warp_idx):
         if warp_idx == 0:
@@ -674,8 +709,18 @@ class Stage22FlashAttentionTmaExperimental:
         )
         _ = tma_tensor_k
         _ = tma_tensor_v
-        tKsK, tKgK = self._partition_tma_kv(tma_atom_k, tma_tensor_k, sK, gK)
-        tVsV, tVgV = self._partition_tma_kv(tma_atom_v, tma_tensor_v, sV, gV)
+        tKsK, tKgK, tVsV, tVgV = self._partition_tma_kv_for_mma(
+            tidx,
+            tiled_mma,
+            gK,
+            gV,
+            sK,
+            sV,
+            tma_atom_k,
+            tma_tensor_k,
+            tma_atom_v,
+            tma_tensor_v,
+        )
         _ = self._load_q_to_smem(
             tidx,
             mQ,
