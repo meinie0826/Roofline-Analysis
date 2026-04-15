@@ -225,7 +225,6 @@ class Stage22FlashAttentionTmaExperimental:
         tidx,
         tiled_mma,
         sQ,
-        sKV_layout_staged,
         sK,
         sV,
         smem_copy_atom_Q,
@@ -235,7 +234,7 @@ class Stage22FlashAttentionTmaExperimental:
         consumer_slice_idx = tidx % self._consumer_threads
         thr_mma = tiled_mma.get_slice(consumer_slice_idx)
         tSrQ = thr_mma.make_fragment_A(thr_mma.partition_A(sQ))
-        sVt = cute.composition(sV, cute.make_layout((self._head_dim_padded, self._n_block_size, self._num_stages_kv), stride=(self._n_block_size, 1, self._n_block_size * self._head_dim_padded)))
+        sVt = cute.composition(sV, cute.make_layout((self._head_dim_padded, self._n_block_size), stride=(self._n_block_size, 1)))
         tSrK = thr_mma.make_fragment_B(thr_mma.partition_B(sK))
         tOrVt = thr_mma.make_fragment_B(thr_mma.partition_B(sVt))
         smem_tiled_copy_Q = cute.make_tiled_copy_A(smem_copy_atom_Q, tiled_mma)
@@ -620,9 +619,12 @@ class Stage22FlashAttentionTmaExperimental:
             raise TypeError("Only Float16 is supported")
 
         self._dtype = mQ.element_type
+        LOG2_E = 1.4426950408889634074
+        softmax_scale_log2 = softmax_scale * LOG2_E
         sQ_layout, sKV_layout, sKV_layout_staged = self._make_kv_layouts()
         _ = sKV_layout  # carried for parity with stage21 shape plumbing
         q_layout = self._make_q_layout()
+        sO_layout = sQ_layout
 
         shared_storage = self._make_shared_storage_type(self._dtype, sQ_layout, sKV_layout_staged)
         storage = cutlass.utils.SmemAllocator().allocate(shared_storage)
@@ -641,37 +643,97 @@ class Stage22FlashAttentionTmaExperimental:
         ) = self._make_consumer_copy_atoms_and_mma()
         _ = atom_universal_copy
 
-        gK = cute.local_tile(mK[0, None, 0, None], (self._n_block_size, self._head_dim_padded), (None, 0))
-        gV = cute.local_tile(mV[0, None, 0, None], (self._n_block_size, self._head_dim_padded), (None, 0))
+        tidx, _, _ = cute.arch.thread_idx()
+        warp_idx = tidx // 32
+        is_producer = warp_idx < 4
+        is_consumer = not is_producer
+        consumer_slice_idx = tidx % self._consumer_threads
+        m_block, batch_size, num_head = cute.arch.block_idx()
+
+        n_block_max = cute.ceil_div(mK.shape[1], self._n_block_size)
+        if self._is_causal:
+            n_block_max = min(cute.ceil_div((m_block + 1) * self._m_block_size, self._n_block_size), n_block_max)
+
+        gQ = cute.local_tile(mQ[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
+        gK = cute.local_tile(mK[batch_size, None, num_head, None], (self._n_block_size, self._head_dim_padded), (None, 0))
+        gV = cute.local_tile(mV[batch_size, None, num_head, None], (self._n_block_size, self._head_dim_padded), (None, 0))
+        gO = cute.local_tile(mO[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
+
         sQ = storage.sQ.get_tensor(sQ_layout)
         sK = storage.sK.get_tensor(sKV_layout_staged)
         sV = storage.sV.get_tensor(sKV_layout_staged)
+        sK0 = self._slice_stage_tensor(sK, 0)
+        sV0 = self._slice_stage_tensor(sV, 0)
+        sK1 = self._slice_stage_tensor(sK, 1)
+        sV1 = self._slice_stage_tensor(sV, 1)
+        sK2 = self._slice_stage_tensor(sK, 2) if cutlass.const_expr(self._num_stages_kv >= 3) else None
+        sV2 = self._slice_stage_tensor(sV, 2) if cutlass.const_expr(self._num_stages_kv >= 3) else None
         tma_atom_k, tma_tensor_k, tma_atom_v, tma_tensor_v = self._make_tma_kv_atoms_and_tensors(
             gK, gV, sKV_layout_staged
         )
+        _ = tma_tensor_k
+        _ = tma_tensor_v
         tKsK, tKgK = self._partition_tma_kv(tma_atom_k, tma_tensor_k, sK, gK)
         tVsV, tVgV = self._partition_tma_kv(tma_atom_v, tma_tensor_v, sV, gV)
-
-        tidx, _, _ = cute.arch.thread_idx()
-        warp_idx = tidx // 32
         _ = self._load_q_to_smem(
             tidx,
             mQ,
             sQ,
             q_layout,
-            cutlass.Int32(0),
-            cutlass.Int32(0),
-            cutlass.Int32(0),
+            m_block,
+            batch_size,
+            num_head,
             atom_async_copy,
         )
         cute.arch.cp_async_wait_group(0)
         cute.arch.barrier()
+        stage0_views = self._build_consumer_mma_views(
+            tidx,
+            tiled_mma,
+            sQ,
+            sK0,
+            sV0,
+            smem_copy_atom_Q,
+            smem_copy_atom_K,
+            smem_copy_atom_V,
+        )
+        stage1_views = self._build_consumer_mma_views(
+            tidx,
+            tiled_mma,
+            sQ,
+            sK1,
+            sV1,
+            smem_copy_atom_Q,
+            smem_copy_atom_K,
+            smem_copy_atom_V,
+        )
+        stage2_views = (
+            self._build_consumer_mma_views(
+                tidx,
+                tiled_mma,
+                sQ,
+                sK2,
+                sV2,
+                smem_copy_atom_Q,
+                smem_copy_atom_K,
+                smem_copy_atom_V,
+            )
+            if cutlass.const_expr(self._num_stages_kv >= 3)
+            else None
+        )
+        thr_mma = stage0_views[0]
+        acc_shape_O = thr_mma.partition_shape_C((self._m_block_size, self._head_dim_padded))
+        acc_O = cute.make_rmem_tensor(acc_shape_O, cutlass.Float32)
+        acc_O.fill(0.0)
+        row_max = cute.make_rmem_tensor((acc_O.shape[0][0] * acc_O.shape[1]), cutlass.Float32)
+        row_sum = cute.make_rmem_tensor((acc_O.shape[0][0] * acc_O.shape[1]), cutlass.Float32)
+        row_max.fill(-cutlass.Float32.inf)
+        row_sum.fill(0.0)
+
         self._prefetch_tma_descriptors_once(warp_idx, tma_atom_k, tma_atom_v)
         mainloop_producer_state = self._make_producer_state()
-        mainloop_consumer_state = self._make_consumer_state()
         mainloop_consumer_read_state, mainloop_consumer_release_state = self._make_consumer_state_pair()
-        k_tile_cnt = cute.size(tKgK, mode=[1])
-        _ = self._consumer_tma_try_wait(mainloop_pipeline, mainloop_consumer_state, k_tile_cnt)
+        k_tile_cnt = n_block_max
         _ = self._producer_tma_prefetch_prologue(
             warp_idx,
             mainloop_pipeline,
@@ -684,20 +746,158 @@ class Stage22FlashAttentionTmaExperimental:
             tVsV,
             k_tile_cnt,
         )
-        _ = self._consumer_tma_try_wait(mainloop_pipeline, mainloop_consumer_read_state, k_tile_cnt)
-        _ = self._consumer_tma_advance_states(mainloop_consumer_read_state, mainloop_consumer_release_state)
-        _ = self._build_consumer_mma_views(
-            tidx,
-            tiled_mma,
-            sQ,
-            sKV_layout_staged,
-            sK,
-            sV,
-            smem_copy_atom_Q,
-            smem_copy_atom_K,
-            smem_copy_atom_V,
-        )
+        peek_kv_full_status = cutlass.Boolean(1)
+        if mainloop_consumer_read_state.count < k_tile_cnt:
+            peek_kv_full_status = self._consumer_tma_try_wait(mainloop_pipeline, mainloop_consumer_read_state, k_tile_cnt)
 
-        raise NotImplementedError(
-            "stage22_tma now wires Q-side consumer setup together with the TMA producer pipeline, but the K/V TMA mainloop compute path is not yet runnable."
-        )
+        for _ in cutlass.range(k_tile_cnt, unroll=1):
+            mainloop_pipeline.consumer_wait(mainloop_consumer_read_state, peek_kv_full_status)
+            n_block = mainloop_consumer_read_state.count
+            in_mask_steps = n_block == (n_block_max - 1)
+            is_first_n_block = n_block == 0
+            if is_consumer:
+                if mainloop_consumer_read_state.index == 0:
+                    self._consumer_compute_loaded_block(
+                        n_block,
+                        stage0_views[0],
+                        tiled_mma,
+                        stage0_views[1],
+                        stage0_views[2],
+                        stage0_views[3],
+                        acc_O,
+                        stage0_views[4],
+                        stage0_views[5],
+                        stage0_views[6],
+                        stage0_views[7],
+                        stage0_views[8],
+                        stage0_views[9],
+                        stage0_views[10],
+                        stage0_views[11],
+                        stage0_views[12],
+                        row_max,
+                        row_sum,
+                        softmax_scale_log2,
+                        mQ,
+                        mK,
+                        batch_size,
+                        num_head,
+                        m_block,
+                        is_first_n_block=is_first_n_block,
+                        in_mask_steps=in_mask_steps,
+                    )
+                if mainloop_consumer_read_state.index == 1:
+                    self._consumer_compute_loaded_block(
+                        n_block,
+                        stage1_views[0],
+                        tiled_mma,
+                        stage1_views[1],
+                        stage1_views[2],
+                        stage1_views[3],
+                        acc_O,
+                        stage1_views[4],
+                        stage1_views[5],
+                        stage1_views[6],
+                        stage1_views[7],
+                        stage1_views[8],
+                        stage1_views[9],
+                        stage1_views[10],
+                        stage1_views[11],
+                        stage1_views[12],
+                        row_max,
+                        row_sum,
+                        softmax_scale_log2,
+                        mQ,
+                        mK,
+                        batch_size,
+                        num_head,
+                        m_block,
+                        is_first_n_block=is_first_n_block,
+                        in_mask_steps=in_mask_steps,
+                    )
+                if cutlass.const_expr(self._num_stages_kv >= 3):
+                    if mainloop_consumer_read_state.index == 2:
+                        self._consumer_compute_loaded_block(
+                            n_block,
+                            stage2_views[0],
+                            tiled_mma,
+                            stage2_views[1],
+                            stage2_views[2],
+                            stage2_views[3],
+                            acc_O,
+                            stage2_views[4],
+                            stage2_views[5],
+                            stage2_views[6],
+                            stage2_views[7],
+                            stage2_views[8],
+                            stage2_views[9],
+                            stage2_views[10],
+                            stage2_views[11],
+                            stage2_views[12],
+                            row_max,
+                            row_sum,
+                            softmax_scale_log2,
+                            mQ,
+                            mK,
+                            batch_size,
+                            num_head,
+                            m_block,
+                            is_first_n_block=is_first_n_block,
+                            in_mask_steps=in_mask_steps,
+                        )
+
+            mainloop_pipeline.consumer_release(mainloop_consumer_release_state)
+            mainloop_consumer_read_state.advance()
+            mainloop_consumer_release_state.advance()
+            peek_kv_full_status = cutlass.Boolean(1)
+            if mainloop_consumer_read_state.count < k_tile_cnt:
+                peek_kv_full_status = self._consumer_tma_try_wait(mainloop_pipeline, mainloop_consumer_read_state, k_tile_cnt)
+            mainloop_producer_state = self._producer_tma_step(
+                warp_idx,
+                mainloop_pipeline,
+                mainloop_producer_state,
+                tma_atom_k,
+                tma_atom_v,
+                tKgK,
+                tKsK,
+                tVgV,
+                tVsV,
+                k_tile_cnt,
+            )
+
+        if is_consumer:
+            self.normalize_softmax(acc_O, row_sum)
+            rO = cute.make_fragment_like(acc_O, self._dtype)
+            rO.store(acc_O.load().to(self._dtype))
+            sO = cute.make_tensor(sQ.iterator, sO_layout)
+
+            smem_copy_atom_O = cute.make_copy_atom(cute.nvgpu.CopyUniversalOp(), self._dtype)
+            smem_tiled_copy_O = cute.make_tiled_copy_C(smem_copy_atom_O, tiled_mma)
+            smem_thr_copy_O = smem_tiled_copy_O.get_slice(consumer_slice_idx)
+            taccOrO = smem_thr_copy_O.retile(rO)
+            taccOsO = smem_thr_copy_O.partition_D(sO)
+            cute.copy(smem_copy_atom_O, taccOrO, taccOsO)
+
+            gmem_tiled_copy_O = cute.make_tiled_copy_tv(
+                atom_universal_copy,
+                cute.make_layout((self._consumer_threads // (128 // self._dtype.width), (128 // self._dtype.width)), stride=((128 // self._dtype.width), 1)),
+                cute.make_layout((1, 128 // self._dtype.width)),
+            )
+            gmem_thr_copy_O = gmem_tiled_copy_O.get_slice(consumer_slice_idx)
+            tOsO = gmem_thr_copy_O.partition_S(sO)
+            tOgO = gmem_thr_copy_O.partition_D(gO)
+            tOrO = cute.make_fragment_like(tOgO, self._dtype)
+            cute.copy(gmem_tiled_copy_O, tOsO, tOrO)
+
+            mcO = cute.make_identity_tensor(mO.layout.shape)
+            cO = cute.local_tile(mcO[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
+            tOcO = gmem_thr_copy_O.partition_D(cO)
+            tOpO = cute.make_rmem_tensor(
+                cute.make_layout((tOgO.shape[0][1], tOgO.shape[1], tOgO.shape[2]), stride=(tOgO.shape[2], 0, 1)),
+                cutlass.Boolean,
+            )
+            for rest_v in cutlass.range_constexpr(tOpO.shape[0]):
+                for rest_n in cutlass.range_constexpr(cute.size(tOpO.shape[2])):
+                    tOpO[rest_v, 0, rest_n] = cute.elem_less(tOcO[(0, rest_v), 0, rest_n][3], mO.layout.shape[3])
+            for rest_m in cutlass.range_constexpr(cute.size(tOpO.shape[1])):
+                if cute.elem_less(tOcO[0, rest_m, 0][1], mO.layout.shape[1]):
+                    cute.copy(gmem_tiled_copy_O, tOrO[None, rest_m, None], tOgO[None, rest_m, None], pred=tOpO[None, rest_m, None])
