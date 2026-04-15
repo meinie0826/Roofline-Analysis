@@ -9,8 +9,8 @@ the seq-len limits of all CuTe stages (max 4096).
 Each stage is benchmarked with its most appropriate default tuning config:
   - stage12/stage13 → dedicated autotune enabled
   - stage16/stage17 → dedicated autotune enabled
-  - non-autotuned stages can optionally use generic tile search via
-    --generic-tile-autotune to reduce tile-size bias in comparisons
+  - non-autotuned stages use generic tile search by default to reduce
+    tile-size bias in comparisons; pass --no-generic-tile-autotune to disable
   - stage15/stage16/stage17 → num_threads always forced to 256 by the kernel
   - stage14                 → num_threads defaults to 256 in benchmark mode
   - stage0-stage11          → num_threads=128 by default
@@ -295,8 +295,8 @@ def main():
                         help="Warmup iterations (default: 5).")
     parser.add_argument("--repeat",      type=int,   default=20,
                         help="Benchmark iterations (default: 20).")
-    parser.add_argument("--generic-tile-autotune", action="store_true",
-                        help="For stages without dedicated autotune, search a small set of block_m/block_n candidates.")
+    parser.add_argument("--generic-tile-autotune", action=argparse.BooleanOptionalAction, default=True,
+                        help="For stages without dedicated autotune, search a small set of block_m/block_n candidates (default: enabled).")
     parser.add_argument("--report-tensorcore", action="store_true",
                         help="Add estimated attention TFLOP/s and optional Tensor Core utilization columns.")
     parser.add_argument("--tensorcore-peak-tflops", type=float, default=None,
