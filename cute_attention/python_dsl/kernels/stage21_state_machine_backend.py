@@ -419,6 +419,22 @@ class Stage21FlashAttentionStateMachine:
         if cutlass.const_expr(self._is_causal):
             mask_steps = cute.ceil_div(self._m_block_size, self._n_block_size)
 
+        first_pipeline_block = n_block_max - mask_steps - 1
+        for prefetch_slot in cutlass.range_constexpr(1, self._num_stages_kv):
+            self._producer_prefetch_slot(
+                first_pipeline_block,
+                prefetch_slot,
+                is_producer,
+                tKVcKV,
+                tKVpKV,
+                tKgK,
+                tVgV,
+                tKsK_slots[prefetch_slot],
+                tVsV_slots[prefetch_slot],
+                gmem_tiled_copy_KV,
+                mK,
+            )
+
         for n_tile in cutlass.range_constexpr(mask_steps):
             n_block = n_block_max - n_tile - 1
             self._compute_one_block(
@@ -458,22 +474,6 @@ class Stage21FlashAttentionStateMachine:
                 tVsV=tVsV0,
                 tKVpKV=tKVpKV,
                 next_k_block=n_block - 1,
-            )
-
-        first_pipeline_block = n_block_max - mask_steps - 1
-        for prefetch_slot in cutlass.range_constexpr(1, self._num_stages_kv):
-            self._producer_prefetch_slot(
-                first_pipeline_block,
-                prefetch_slot,
-                is_producer,
-                tKVcKV,
-                tKVpKV,
-                tKgK,
-                tVgV,
-                tKsK_slots[prefetch_slot],
-                tVsV_slots[prefetch_slot],
-                gmem_tiled_copy_KV,
-                mK,
             )
 
         for n_tile in range(mask_steps, n_block_max, self._steady_state_step()):
