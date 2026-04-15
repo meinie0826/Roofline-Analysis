@@ -47,6 +47,19 @@ def test_stage1_fa2_matches_reference_small():
 
 @pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
 @pytest.mark.skipif(not backends["cute"], reason="CuTe DSL is not installed")
+@pytest.mark.parametrize("shape", [(1, 1, 64, 64), (1, 2, 128, 64), (2, 4, 128, 128)])
+@pytest.mark.parametrize("dtype", [torch.float16])
+def test_stage2_matches_reference(shape, dtype):
+    q, k, v = make_inputs(shape, dtype)
+    head_dim = shape[-1]
+    config = AttentionConfig(block_m=head_dim, num_threads=128)
+    ref = causal_attention_reference(q, k, v, config)
+    out = run_stage("stage2", q, k, v, config)
+    torch.testing.assert_close(out, ref, rtol=2e-2, atol=2e-2)
+
+
+@pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
+@pytest.mark.skipif(not backends["cute"], reason="CuTe DSL is not installed")
 def test_stage3_matches_reference_small():
     q, k, v = make_inputs((1, 1, 64, 64), torch.float16)
     config = AttentionConfig(block_n=32, num_threads=128)
