@@ -289,7 +289,75 @@ if HAS_CUTE:
             if cutlass.const_expr(self._is_causal):
                 mask_steps = cute.ceil_div(self._m_block_size, self._n_block_size)
 
-            for n_tile in range(0, n_block_max):
+            # Process mask steps with constexpr is_first_n_block and in_mask_steps=True
+            for n_tile in cutlass.range_constexpr(mask_steps):
+                n_block = n_block_max - n_tile - 1
+                if n_block >= 0:
+                    if is_consumer:
+                        acc_shape_S = thr_mma.partition_shape_C((self._m_block_size, self._n_block_size))
+                        acc_S = cute.make_rmem_tensor(acc_shape_S, cutlass.Float32)
+                        acc_S.fill(0.0)
+
+                        cute.copy(smem_tiled_copy_Q, tSsQ[None, None, 0], tSrQ_copy_view[None, None, 0])
+                        cute.copy(smem_tiled_copy_K, tSsK[None, None, 0], tSrK_copy_view[None, None, 0])
+                        for k_idx in cutlass.range_constexpr(cute.size(tSsQ.shape[2])):
+                            k_next = (k_idx + 1) % cute.size(tSsQ.shape[2])
+                            cute.copy(smem_tiled_copy_Q, tSsQ[None, None, k_next], tSrQ_copy_view[None, None, k_next])
+                            cute.copy(smem_tiled_copy_K, tSsK[None, None, k_next], tSrK_copy_view[None, None, k_next])
+                            cute.gemm(tiled_mma, acc_S, tSrQ[None, None, k_idx], tSrK[None, None, k_idx], acc_S)
+
+                        self.softmax_rescale_O(
+                            acc_S,
+                            acc_O,
+                            row_max,
+                            row_sum,
+                            softmax_scale_log2,
+                            mQ,
+                            mK,
+                            batch_size,
+                            num_head,
+                            m_block,
+                            n_block,
+                            is_first_n_block=(n_tile == 0),
+                            in_mask_steps=True,
+                            thr_mma=thr_mma,
+                        )
+
+                        rP = cute.make_fragment_like(acc_S, self._dtype)
+                        rP.store(acc_S.load().to(self._dtype))
+                        rP_layout_divided = cute.logical_divide(rP.layout, (None, None, 2))
+                        rP_mma_view = cute.make_layout(
+                            (
+                                (rP_layout_divided.shape[0], rP_layout_divided.shape[2][0]),
+                                rP_layout_divided.shape[1],
+                                rP_layout_divided.shape[2][1],
+                            ),
+                            stride=(
+                                (rP_layout_divided.stride[0], rP_layout_divided.stride[2][0]),
+                                rP_layout_divided.stride[1],
+                                rP_layout_divided.stride[2][1],
+                            ),
+                        )
+                        tOrS = cute.make_tensor(rP.iterator, rP_mma_view)
+                        cute.copy(smem_tiled_copy_V, tOsVt[None, None, 0], tOrVt_copy_view[None, None, 0])
+                        for k_idx in cutlass.range_constexpr(cute.size(tOrS.shape[2])):
+                            k_next = (k_idx + 1) % cute.size(tOrS.shape[2])
+                            cute.copy(smem_tiled_copy_V, tOsVt[None, None, k_next], tOrVt_copy_view[None, None, k_next])
+                            cute.gemm(tiled_mma, acc_O, tOrS[None, None, k_idx], tOrVt[None, None, k_idx], acc_O)
+
+                    self.cta_sync_barrier.arrive_and_wait()
+
+                    next_k_block = n_block - 1
+                    if is_producer and next_k_block >= 0:
+                        cute.copy(gmem_tiled_copy_KV, tKgK[None, None, None, next_k_block], tKsK, pred=tKVpKV)
+                        cute.copy(gmem_tiled_copy_KV, tVgV[None, None, None, next_k_block], tVsV, pred=tKVpKV)
+                        cute.arch.cp_async_commit_group()
+
+                    cute.arch.cp_async_wait_group(0)
+                    self.cta_sync_barrier.arrive_and_wait()
+
+            # Process remaining (non-mask) n blocks with in_mask_steps=False, is_first_n_block=False
+            for n_tile in range(mask_steps, n_block_max):
                 n_block = n_block_max - n_tile - 1
 
                 if is_consumer:
@@ -317,8 +385,8 @@ if HAS_CUTE:
                         num_head,
                         m_block,
                         n_block,
-                        is_first_n_block=(n_tile == 0),
-                        in_mask_steps=(n_tile < mask_steps),
+                        is_first_n_block=False,
+                        in_mask_steps=False,
                         thr_mma=thr_mma,
                     )
 
@@ -403,22 +471,25 @@ if HAS_CUTE:
             num_head: cutlass.Int32,
             m_block: cutlass.Int32,
             n_block: cutlass.Int32,
-            is_first_n_block,
-            in_mask_steps,
+            is_first_n_block: cutlass.Constexpr,
+            in_mask_steps: cutlass.Constexpr,
             thr_mma: cute.TiledMma,
         ):
             acc_S_mn = self._make_acc_tensor_mn_view(acc_S)
             acc_O_mn = self._make_acc_tensor_mn_view(acc_O)
-            row_max_prev = cute.make_fragment_like(row_max, cutlass.Float32)
-            cute.basic_copy(row_max, row_max_prev)
-
-            mcS = cute.make_identity_tensor((mQ.shape[0], mQ.shape[1], mQ.shape[2], mK.shape[1]))
-            cS = cute.local_tile(mcS[batch_size, None, num_head, None], (self._m_block_size, self._n_block_size), (m_block, n_block))
-            tScS = thr_mma.partition_C(cS)
-            tScS_mn = self._make_acc_tensor_mn_view(tScS)
+            row_max_prev = None
+            if cutlass.const_expr(not is_first_n_block):
+                row_max_prev = cute.make_fragment_like(row_max, cutlass.Float32)
+                cute.basic_copy(row_max, row_max_prev)
+            tScS_mn = None
+            if cutlass.const_expr(in_mask_steps):
+                mcS = cute.make_identity_tensor((mQ.shape[0], mQ.shape[1], mQ.shape[2], mK.shape[1]))
+                cS = cute.local_tile(mcS[batch_size, None, num_head, None], (self._m_block_size, self._n_block_size), (m_block, n_block))
+                tScS = thr_mma.partition_C(cS)
+                tScS_mn = self._make_acc_tensor_mn_view(tScS)
 
             for r in cutlass.range_constexpr(cute.size(row_max)):
-                if in_mask_steps:
+                if cutlass.const_expr(in_mask_steps):
                     col_idx_limit = cutlass.min(tScS_mn[r, 0][1] + 1, mK.shape[1])
                     for c in cutlass.range_constexpr(cute.size(tScS_mn.shape[1])):
                         if cute.elem_less(col_idx_limit, tScS_mn[0, c][3] + 1):
@@ -427,8 +498,9 @@ if HAS_CUTE:
                 acc_S_row = acc_S_mn[r, None].load()
                 row_max_cur_row = acc_S_row.reduce(cute.ReductionOp.MAX, -cutlass.Float32.inf, 0)
                 row_max_cur_row = self._threadquad_reduce_max(row_max_cur_row)
-                row_max_prev_row = row_max_prev[r]
-                if not is_first_n_block:
+                row_max_prev_row = None
+                if cutlass.const_expr(not is_first_n_block):
+                    row_max_prev_row = row_max_prev[r]
                     row_max_cur_row = cute.arch.fmax(row_max_prev_row, row_max_cur_row)
                 if cutlass.const_expr(self._is_causal):
                     row_max_cur_row = 0.0 if row_max_cur_row == -cutlass.Float32.inf else row_max_cur_row
@@ -438,7 +510,7 @@ if HAS_CUTE:
                     fastmath=True,
                 )
                 acc_S_row_sum = acc_S_row_exp.reduce(cute.ReductionOp.ADD, cutlass.Float32.zero, 0)
-                if not is_first_n_block:
+                if cutlass.const_expr(not is_first_n_block):
                     prev_minus_cur_exp = cute.math.exp2(
                         row_max_prev_row * softmax_scale_log2 - row_max_cur_row * softmax_scale_log2,
                         fastmath=True,
