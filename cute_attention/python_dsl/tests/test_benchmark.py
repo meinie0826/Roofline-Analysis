@@ -63,7 +63,7 @@ def test_stage_metadata_marks_autotune_and_multistage_coverage():
     assert rows["stage22"]["autotune"] == "True"
     assert rows["stage22"]["multistage"] == "True"
     assert rows["stage22"]["tuning_axes"] == "block_m,block_n,num_stages_kv"
-    assert "TMA producer backend" in rows["stage22"]["notes"]
+    assert "tcgen05+TMA" in rows["stage22"]["notes"]
 
 
 def test_stage17_benchmark_uses_safe_warpspec_seed_config():
