@@ -435,7 +435,7 @@ class Stage22FlashAttentionTmaExperimental:
         in_mask_steps: cutlass.Boolean,
     ):
         acc_shape_S = thr_mma_qk.partition_shape_C((self._m_block_size, self._n_block_size))
-        acc_S = cute.make_rmem_tensor(acc_shape_S, cutlass.Float32)
+        acc_S = thr_mma_qk.make_fragment_C(acc_shape_S)
         acc_S.fill(0.0)
 
         cute.gemm(
@@ -821,8 +821,9 @@ class Stage22FlashAttentionTmaExperimental:
             else None
         )
         thr_mma = stage0_views[0]
-        acc_shape_O = thr_mma.partition_shape_C((self._m_block_size, self._head_dim_padded))
-        acc_O = cute.make_rmem_tensor(acc_shape_O, cutlass.Float32)
+        pv_thr_mma = stage0_views[1]
+        acc_shape_O = pv_thr_mma.partition_shape_C((self._m_block_size, self._head_dim_padded))
+        acc_O = pv_thr_mma.make_fragment_C(acc_shape_O)
         acc_O.fill(0.0)
         row_max = cute.make_rmem_tensor((acc_O.shape[0][0] * acc_O.shape[1]), cutlass.Float32)
         row_sum = cute.make_rmem_tensor((acc_O.shape[0][0] * acc_O.shape[1]), cutlass.Float32)
