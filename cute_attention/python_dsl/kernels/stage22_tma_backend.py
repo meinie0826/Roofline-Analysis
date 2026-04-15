@@ -629,7 +629,8 @@ class Stage22FlashAttentionTmaExperimental:
         shared_storage = self._make_shared_storage_type(self._dtype, sQ_layout, sKV_layout_staged)
         storage = cutlass.utils.SmemAllocator().allocate(shared_storage)
         mainloop_pipeline_array_ptr = storage.mainloop_pipeline_array_ptr.data_ptr()
-        tx_count = cute.size_in_bytes(cute.slice_(sKV_layout_staged, (None, None, 0)))
+        kv_stage_layout = cute.slice_(sKV_layout_staged, (None, None, 0))
+        tx_count = cute.size_in_bytes(self._dtype, kv_stage_layout) + cute.size_in_bytes(self._dtype, kv_stage_layout)
         mainloop_pipeline = self._make_mainloop_pipeline(mainloop_pipeline_array_ptr, tx_count)
 
         (
