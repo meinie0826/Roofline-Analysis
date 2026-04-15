@@ -346,7 +346,6 @@ if HAS_CUTE:
                     tKVcKV=tKVcKV, tKgK=tKgK, tVgV=tVgV,
                     tKsK=tKsK0, tVsV=tVsV0, tKVpKV=tKVpKV,
                     next_k_block=n_block - 1,
-                    wait_group=0,
                 )
 
             first_pipeline_block = n_block_max - mask_steps - 1
@@ -383,7 +382,6 @@ if HAS_CUTE:
                     tKVcKV=tKVcKV, tKgK=tKgK, tVgV=tVgV,
                     tKsK=tKsK0, tVsV=tVsV0, tKVpKV=tKVpKV,
                     next_k_block=n_block0 - 2,
-                    wait_group=1 if (n_block0 - 2) >= 0 else 0,
                 )
 
                 # --- slot1 ---
@@ -403,7 +401,6 @@ if HAS_CUTE:
                         tKVcKV=tKVcKV, tKgK=tKgK, tVgV=tVgV,
                         tKsK=tKsK1, tVsV=tVsV1, tKVpKV=tKVpKV,
                         next_k_block=n_block1 - 2,
-                        wait_group=1 if (n_block1 - 2) >= 0 else 0,
                     )
 
             # ── Epilogue ──────────────────────────────────────────────────────
@@ -481,8 +478,7 @@ if HAS_CUTE:
             tKsK,
             tVsV,
             tKVpKV,
-            next_k_block,
-            wait_group: cutlass.Constexpr,
+            next_k_block: cutlass.Int32,
         ):
             if is_consumer:
                 acc_shape_S = thr_mma.partition_shape_C((self._m_block_size, self._n_block_size))
@@ -542,14 +538,20 @@ if HAS_CUTE:
                 if is_producer:
                     cute.arch.cp_async_commit_group()
 
-            cute.arch.cp_async_wait_group(wait_group)
+            # Keep the wait-group depth compile-time constant for the DSL:
+            # masked steps are synchronous, the steady-state loop keeps one
+            # cp.async group in flight.
+            if cutlass.const_expr(in_mask_steps):
+                cute.arch.cp_async_wait_group(0)
+            else:
+                cute.arch.cp_async_wait_group(1)
             self.cta_sync_barrier.arrive_and_wait()
 
         @cute.jit
         def _copy_kv_tile(
             self,
-            tile_block,
-            predicate_block,
+            tile_block: cutlass.Int32,
+            predicate_block: cutlass.Int32,
             tKVcKV,
             tKVpKV,
             tKgK,
