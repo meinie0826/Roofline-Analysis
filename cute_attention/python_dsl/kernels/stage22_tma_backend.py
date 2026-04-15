@@ -371,6 +371,90 @@ class Stage22FlashAttentionTmaExperimental:
         tma_atom_v, tma_tensor_v = self._make_tma_atom_and_tensor(gV, sKV_layout_staged, tma_tile)
         return tma_atom_k, tma_tensor_k, tma_atom_v, tma_tensor_v
 
+    def _slice_stage_tensor(self, staged_tensor: cute.Tensor, stage_slot: int) -> cute.Tensor:
+        return cute.slice_(staged_tensor, (None, None, stage_slot))
+
+    @cute.jit
+    def _consumer_compute_loaded_block(
+        self,
+        n_block,
+        thr_mma,
+        tiled_mma,
+        tSrQ,
+        tSrK,
+        tOrVt,
+        acc_O,
+        smem_tiled_copy_Q,
+        smem_tiled_copy_K,
+        smem_tiled_copy_V,
+        tSsQ,
+        tSrQ_view,
+        tSsK,
+        tSrK_view,
+        tOsVt,
+        tOrVt_view,
+        row_max,
+        row_sum,
+        softmax_scale_log2: cutlass.Float32,
+        mQ: cute.Tensor,
+        mK: cute.Tensor,
+        batch_size: cutlass.Int32,
+        num_head: cutlass.Int32,
+        m_block: cutlass.Int32,
+        is_first_n_block: cutlass.Constexpr,
+        in_mask_steps: cutlass.Constexpr,
+    ):
+        acc_shape_S = thr_mma.partition_shape_C((self._m_block_size, self._n_block_size))
+        acc_S = cute.make_rmem_tensor(acc_shape_S, cutlass.Float32)
+        acc_S.fill(0.0)
+
+        cute.copy(smem_tiled_copy_Q, tSsQ[None, None, 0], tSrQ_view[None, None, 0])
+        cute.copy(smem_tiled_copy_K, tSsK[None, None, 0], tSrK_view[None, None, 0])
+        for k_idx in cutlass.range_constexpr(cute.size(tSsQ.shape[2])):
+            k_next = (k_idx + 1) % cute.size(tSsQ.shape[2])
+            cute.copy(smem_tiled_copy_Q, tSsQ[None, None, k_next], tSrQ_view[None, None, k_next])
+            cute.copy(smem_tiled_copy_K, tSsK[None, None, k_next], tSrK_view[None, None, k_next])
+            cute.gemm(tiled_mma, acc_S, tSrQ[None, None, k_idx], tSrK[None, None, k_idx], acc_S)
+
+        self.softmax_rescale_O(
+            acc_S,
+            acc_O,
+            row_max,
+            row_sum,
+            softmax_scale_log2,
+            mQ,
+            mK,
+            batch_size,
+            num_head,
+            m_block,
+            n_block,
+            is_first_n_block=is_first_n_block,
+            in_mask_steps=in_mask_steps,
+            thr_mma=thr_mma,
+        )
+
+        rP = cute.make_fragment_like(acc_S, self._dtype)
+        rP.store(acc_S.load().to(self._dtype))
+        rP_layout_divided = cute.logical_divide(rP.layout, (None, None, 2))
+        rP_mma_view = cute.make_layout(
+            (
+                (rP_layout_divided.shape[0], rP_layout_divided.shape[2][0]),
+                rP_layout_divided.shape[1],
+                rP_layout_divided.shape[2][1],
+            ),
+            stride=(
+                (rP_layout_divided.stride[0], rP_layout_divided.stride[2][0]),
+                rP_layout_divided.stride[1],
+                rP_layout_divided.stride[2][1],
+            ),
+        )
+        tOrS = cute.make_tensor(rP.iterator, rP_mma_view)
+        cute.copy(smem_tiled_copy_V, tOsVt[None, None, 0], tOrVt_view[None, None, 0])
+        for k_idx in cutlass.range_constexpr(cute.size(tOrS.shape[2])):
+            k_next = (k_idx + 1) % cute.size(tOrS.shape[2])
+            cute.copy(smem_tiled_copy_V, tOsVt[None, None, k_next], tOrVt_view[None, None, k_next])
+            cute.gemm(tiled_mma, acc_O, tOrS[None, None, k_idx], tOrVt[None, None, k_idx], acc_O)
+
     def _partition_tma_kv(self, tma_atom, tma_tensor, sTensor, gTensor):
         s_for_tma_partition = cute.group_modes(sTensor, 0, 2)
         g_for_tma_partition = cute.group_modes(gTensor, 0, 2)
