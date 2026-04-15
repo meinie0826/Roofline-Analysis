@@ -288,14 +288,15 @@ class Stage22FlashAttentionTma:
         tile_shape,
     ):
         tCcC = thr_mma.partition_C(cute.make_identity_tensor(tile_shape))
+        acc_tmem_2d = cute.composition(acc_tmem, cute.make_layout(tile_shape))
         tmem_load_atom = cute.make_copy_atom(
             tcgen05.copy.Ld32x32bOp(tcgen05.copy.Repetition(tile_shape[1] // 4)),
             cutlass.Float32,
         )
-        thr_tmem_load = tcgen05.make_tmem_copy(tmem_load_atom, acc_tmem).get_slice(
+        thr_tmem_load = tcgen05.make_tmem_copy(tmem_load_atom, acc_tmem_2d).get_slice(
             consumer_slice_idx
         )
-        tCtC = thr_tmem_load.partition_S(acc_tmem)
+        tCtC = thr_tmem_load.partition_S(acc_tmem_2d)
         acc_rmem = cute.make_fragment(
             thr_tmem_load.partition_D(tCcC).shape,
             cutlass.Float32,
