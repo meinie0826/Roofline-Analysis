@@ -772,9 +772,19 @@ class Stage22FlashAttentionTmaExperimental:
         if self._is_causal:
             n_block_max = min(cute.ceil_div((m_block + 1) * self._m_block_size, self._n_block_size), n_block_max)
 
+        k_layout = cute.make_layout(
+            (mK.shape[1], mK.shape[3], ((1, mK.shape[2]), mK.shape[0])),
+            stride=(mK.stride[1], mK.stride[3], ((0, mK.stride[2]), mK.stride[0])),
+        )
+        v_layout = cute.make_layout(
+            (mV.shape[3], mV.shape[1], ((1, mV.shape[2]), mV.shape[0])),
+            stride=(mV.stride[3], mV.stride[1], ((0, mV.stride[2]), mV.stride[0])),
+        )
+        mK_kdl = cute.make_tensor(mK.iterator, k_layout)
+        mV_dkl = cute.make_tensor(mV.iterator, v_layout)
         gQ = cute.local_tile(mQ[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
-        gK = cute.local_tile(mK[batch_size, None, num_head, None], (self._n_block_size, self._head_dim_padded), (None, 0))
-        gV = cute.local_tile(mV[batch_size, None, num_head, None], (self._n_block_size, self._head_dim_padded), (None, 0))
+        gK = cute.local_tile(mK_kdl[None, None, ((0, num_head), batch_size)], (self._n_block_size, self._head_dim_padded), (None, 0))
+        gV = cute.local_tile(mV_dkl[None, None, ((0, num_head), batch_size)], (self._head_dim_padded, self._n_block_size), (0, None))
         gO = cute.local_tile(mO[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
 
         sQ = storage.sQ.get_tensor(sQ_layout.outer, swizzle=sQ_layout.inner)
