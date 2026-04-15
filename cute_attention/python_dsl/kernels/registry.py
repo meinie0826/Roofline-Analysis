@@ -21,6 +21,7 @@ from .stage14_warpspec import stage14_forward
 from .stage15_sm90style import stage15_forward
 from .stage16_multistage import stage16_forward
 from .stage17_multistage import stage17_forward
+from .stage18_sm90_features import stage18_forward
 from .stage0_naive import stage0_forward
 from .stage3_blocked import stage3_forward
 
@@ -149,6 +150,12 @@ STAGES: dict[str, StageDefinition] = {
         name="stage17",
         description="Our own CuTe stage: dedicated stage17 entrypoint for deeper warp-specialized multistage K/V staging.",
         implementation=stage17_forward,
+        backend="own-cute-dsl",
+    ),
+    "stage18": StageDefinition(
+        name="stage18",
+        description="Our own CuTe stage: SM90-oriented experimental entrypoint for warp-specialized multistage evolution.",
+        implementation=stage18_forward,
         backend="own-cute-dsl",
     ),
 }

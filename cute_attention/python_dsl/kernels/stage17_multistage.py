@@ -113,7 +113,9 @@ def autotune_stage17_config(
     )
     cached = _STAGE17_AUTOTUNE_CACHE.get(cache_key)
     if cached is not None:
-        return cached
+        if _stage17_can_implement(head_dim, cached):
+            return cached
+        _STAGE17_AUTOTUNE_CACHE.pop(cache_key, None)
     cache_key_disk = _stage17_autotune_cache_key(config, q)
     disk_cache = _load_stage17_autotune_cache_from_disk()
     cached_disk = disk_cache.get(cache_key_disk)
@@ -124,8 +126,11 @@ def autotune_stage17_config(
             block_n=int(cached_disk["block_n"]),
             num_stages_kv=int(cached_disk["num_stages_kv"]),
         )
-        _STAGE17_AUTOTUNE_CACHE[cache_key] = tuned
-        return tuned
+        if _stage17_can_implement(head_dim, tuned):
+            _STAGE17_AUTOTUNE_CACHE[cache_key] = tuned
+            return tuned
+        disk_cache.pop(cache_key_disk, None)
+        _save_stage17_autotune_cache_to_disk(disk_cache)
 
     block_m_values = _stage17_candidate_values(config.block_m, [128, 96, 64], limit=seq_len)
     block_n_values = _stage17_candidate_values(config.block_n, [128, 64], limit=seq_len)

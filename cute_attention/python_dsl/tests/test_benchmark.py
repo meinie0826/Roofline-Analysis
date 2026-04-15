@@ -4,7 +4,8 @@ import sys
 
 sys.path.insert(0, ".")
 
-from benchmark import get_stage_metadata, parse_stage_list
+from benchmark import _make_config_for_stage, get_stage_metadata, parse_stage_list
+from kernels import AttentionConfig
 
 
 def test_parse_stage_list_all_includes_new_ablation_stages():
@@ -27,6 +28,7 @@ def test_parse_stage_list_all_includes_new_ablation_stages():
         "stage15",
         "stage16",
         "stage17",
+        "stage18",
         "baseline_fa4",
         "baseline_sdpa",
     ]
@@ -39,3 +41,22 @@ def test_stage_metadata_marks_autotune_and_multistage_coverage():
     assert rows["stage17"]["autotune"] == "True"
     assert rows["stage17"]["tuning_axes"] == "block_m,block_n,num_stages_kv"
     assert "warp-specialized" in rows["stage17"]["notes"]
+    assert rows["stage18"]["autotune"] == "True"
+    assert rows["stage18"]["tuning_axes"] == "block_m,block_n,num_stages_kv"
+    assert "SM90-oriented" in rows["stage18"]["notes"]
+
+
+def test_stage17_benchmark_uses_safe_warpspec_seed_config():
+    config = _make_config_for_stage("stage17", AttentionConfig(block_m=64, block_n=128, num_threads=128))
+    assert config.block_m == 64
+    assert config.block_n == 64
+    assert config.num_threads == 256
+    assert config.num_stages_kv == 3
+
+
+def test_stage18_benchmark_uses_safe_sm90_seed_config():
+    config = _make_config_for_stage("stage18", AttentionConfig(block_m=64, block_n=128, num_threads=128))
+    assert config.block_m == 64
+    assert config.block_n == 64
+    assert config.num_threads == 256
+    assert config.num_stages_kv == 3
