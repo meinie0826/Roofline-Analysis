@@ -18,6 +18,8 @@ Each stage is benchmarked with its most appropriate default tuning config:
 """
 
 import argparse
+import csv
+import sys
 import time
 from dataclasses import replace
 
@@ -163,6 +165,8 @@ def _config_status_suffix(config: AttentionConfig) -> str | None:
         parts.append(f"block_m={config.block_m}")
     if config.block_n:
         parts.append(f"block_n={config.block_n}")
+    if config.num_threads:
+        parts.append(f"num_threads={config.num_threads}")
     if config.num_stages_kv:
         parts.append(f"stages={config.num_stages_kv}")
     return ",".join(parts) if parts else None
@@ -289,7 +293,7 @@ def main():
     parser.add_argument("--block-n",     type=int,   default=128,
                         help="KV block size (default: 128). Overridden by autotune for stage12/13/16/17.")
     parser.add_argument("--num-threads", type=int,   default=128,
-                        help="Thread count (default: 128). Forced to 256 for stage14/15/16/17.")
+                        help="Thread count (default: 128). Forced to 256 for stage14/15/16.")
     parser.add_argument("--causal",      action="store_true", default=True,
                         help="Use causal masking (default: True).")
     parser.add_argument("--warmup",      type=int,   default=5,
@@ -347,12 +351,12 @@ def main():
     })
     if args.print_stage_metadata:
         print("stage_metadata")
-        print("stage,autotune,multistage,tuning_axes,notes")
+        metadata_writer = csv.writer(sys.stdout)
+        metadata_writer.writerow(["stage", "autotune", "multistage", "tuning_axes", "notes"])
         for row in get_stage_metadata():
             if row["stage"] in stages:
-                print(
-                    f'{row["stage"]},{row["autotune"]},{row["multistage"]},'
-                    f'{row["tuning_axes"]},{row["notes"]}'
+                metadata_writer.writerow(
+                    [row["stage"], row["autotune"], row["multistage"], row["tuning_axes"], row["notes"]]
                 )
     if args.report_tensorcore:
         print("stage,time_ms,tflops_est,tc_util_pct,status")
