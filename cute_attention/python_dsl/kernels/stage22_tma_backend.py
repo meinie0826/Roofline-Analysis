@@ -747,25 +747,12 @@ class Stage22FlashAttentionTmaExperimental:
         sQ_load = storage.sQ.get_tensor(sQ_load_layout.outer, swizzle=sQ_load_layout.inner)
         sK = storage.sK.get_tensor(sK_layout_staged.outer, swizzle=sK_layout_staged.inner)
         sV = storage.sV.get_tensor(sV_layout_staged.outer, swizzle=sV_layout_staged.inner)
-        # Slice per-stage sV then logically transpose for ldsm (sV: block_n×head_dim → sVt: head_dim×block_n)
         sK0 = self._slice_stage_tensor(sK, 0)
-        sV0 = cute.composition(
-            self._slice_stage_tensor(sV, 0),
-            cute.make_layout((self._head_dim_padded, self._n_block_size), stride=(self._n_block_size, 1)),
-        )
+        sV0 = self._slice_stage_tensor(sV, 0)
         sK1 = self._slice_stage_tensor(sK, 1)
-        sV1 = cute.composition(
-            self._slice_stage_tensor(sV, 1),
-            cute.make_layout((self._head_dim_padded, self._n_block_size), stride=(self._n_block_size, 1)),
-        )
+        sV1 = self._slice_stage_tensor(sV, 1)
         sK2 = self._slice_stage_tensor(sK, 2) if cutlass.const_expr(self._num_stages_kv >= 3) else None
-        sV2 = (
-            cute.composition(
-                self._slice_stage_tensor(sV, 2),
-                cute.make_layout((self._head_dim_padded, self._n_block_size), stride=(self._n_block_size, 1)),
-            )
-            if cutlass.const_expr(self._num_stages_kv >= 3) else None
-        )
+        sV2 = self._slice_stage_tensor(sV, 2) if cutlass.const_expr(self._num_stages_kv >= 3) else None
         mK_tma = mK_kdl[None, None, ((0, num_head), batch_size)]
         mV_tma = mV_dkl[None, None, ((0, num_head), batch_size)]
         tma_atom_k, tma_tensor_k, tma_atom_v, tma_tensor_v = self._make_tma_kv_atoms_and_tensors(
