@@ -118,13 +118,16 @@ if HAS_CUTE:
             )
             sO_layout = sQ_layout
 
+            _sQ_field  = cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sQ_layout)],  1024]
+            _sKV_field = cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
+
             @cute.struct
             class SharedStorage:
-                sQ:  cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sQ_layout)], 1024]
-                sK0: cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
-                sV0: cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
-                sK1: cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
-                sV1: cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
+                sQ:  _sQ_field
+                sK0: _sKV_field
+                sV0: _sKV_field
+                sK1: _sKV_field
+                sV1: _sKV_field
 
             universal_copy_bits = 128
             async_copy_elems = universal_copy_bits // self._dtype.width
