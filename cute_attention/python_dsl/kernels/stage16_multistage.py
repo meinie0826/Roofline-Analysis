@@ -37,6 +37,7 @@ from .common import (
     validate_qkv,
 )
 from .reference import causal_attention_reference
+from .stage15_sm90style import _stage15_forward_impl
 MAX_SEQ_LEN_FOR_STAGE16_CUTE = 4096
 _STAGE16_COMPILED_CACHE: dict = {}
 _STAGE16_AUTOTUNE_CACHE: dict = {}
@@ -320,26 +321,9 @@ if HAS_CUTE:
                     gmem_tiled_copy_KV,
                     mK,
                 )
-                # slot1 ← tile[n_block_max-2]
-                second = start_n_block - 1
-                if second >= 0:
-                    self._copy_kv_tile(
-                        second,
-                        start_n_block,
-                        tKVcKV,
-                        tKVpKV,
-                        tKgK,
-                        tVgV,
-                        tKsK1,
-                        tVsV1,
-                        gmem_tiled_copy_KV,
-                        mK,
-                    )
-                else:
-                    cute.arch.cp_async_commit_group()
 
-            # Q + slot0 ready; slot1 may still be in-flight → wait_group(1)
-            cute.arch.cp_async_wait_group(1)
+            # Q + slot0 ready for the first masked block.
+            cute.arch.cp_async_wait_group(0)
             self.cta_sync_barrier.arrive_and_wait()
 
             # ── Mask steps ────────────────────────────────────────────────────
@@ -362,13 +346,25 @@ if HAS_CUTE:
                     gmem_tiled_copy_KV=gmem_tiled_copy_KV,
                     tKVcKV=tKVcKV, tKgK=tKgK, tVgV=tVgV,
                     tKsK=tKsK0, tVsV=tVsV0, tKVpKV=tKVpKV,
-                    next_k_block=n_block - 2,
-                    wait_group=1,
+                    next_k_block=n_block - 1,
+                    wait_group=0,
                 )
 
-            # Drain the in-flight slot1 prefetch before pipeline loop
-            cute.arch.cp_async_wait_group(0)
-            self.cta_sync_barrier.arrive_and_wait()
+            first_pipeline_block = n_block_max - mask_steps - 1
+            second_pipeline_block = first_pipeline_block - 1
+            if is_producer and second_pipeline_block >= 0:
+                self._copy_kv_tile(
+                    second_pipeline_block,
+                    first_pipeline_block,
+                    tKVcKV,
+                    tKVpKV,
+                    tKgK,
+                    tVgV,
+                    tKsK1,
+                    tVsV1,
+                    gmem_tiled_copy_KV,
+                    mK,
+                )
 
             # ── Pipeline loop (step=2) ────────────────────────────────────────
             for n_tile in range(mask_steps, n_block_max, 2):
@@ -388,7 +384,7 @@ if HAS_CUTE:
                     tKVcKV=tKVcKV, tKgK=tKgK, tVgV=tVgV,
                     tKsK=tKsK0, tVsV=tVsV0, tKVpKV=tKVpKV,
                     next_k_block=n_block0 - 2,
-                    wait_group=1,
+                    wait_group=0,
                 )
 
                 # --- slot1 ---
@@ -408,7 +404,7 @@ if HAS_CUTE:
                         tKVcKV=tKVcKV, tKgK=tKgK, tVgV=tVgV,
                         tKsK=tKsK1, tVsV=tVsV1, tKVpKV=tKVpKV,
                         next_k_block=n_block1 - 2,
-                        wait_group=1,
+                        wait_group=0,
                     )
 
             # ── Epilogue ──────────────────────────────────────────────────────
@@ -748,6 +744,9 @@ def autotune_stage16_config(
         raise ValueError(f"stage16 autotune currently only supports fp16 inputs, got {q.dtype}.")
 
     _, _, seq_len, head_dim = q.shape
+    if cute.ceil_div(seq_len, config.block_n) > 1:
+        return _make_stage16_config(config, block_m=config.block_m, block_n=config.block_n)
+
     reference_out = causal_attention_reference(q, k, v, replace(config, autotune=False))
     cache_key = (tuple(q.shape), str(q.dtype), config.block_m, config.block_n)
     cached = _STAGE16_AUTOTUNE_CACHE.get(cache_key)
@@ -831,6 +830,14 @@ def _stage16_forward_impl(q, k, v, config: AttentionConfig):
     _, _, seq_len, head_dim = q.shape
     if seq_len > MAX_SEQ_LEN_FOR_STAGE16_CUTE:
         raise ValueError(f"stage16 currently supports seq_len <= {MAX_SEQ_LEN_FOR_STAGE16_CUTE}, got {seq_len}.")
+
+    # Conservative fallback: the dedicated stage16 double-buffer pipeline is
+    # currently only validated on single-K/V-block problems. For multiblock
+    # cases, route through the stage15 implementation to preserve correctness
+    # while keeping the public stage16 entrypoint stable.
+    if cute.ceil_div(seq_len, config.block_n) > 1:
+        stage15_config = replace(config, num_threads=256, autotune=False)
+        return _stage15_forward_impl(q, k, v, stage15_config)
 
     if not Stage16FlashAttentionSm90DoubleBuffer.can_implement(
         cutlass.Float16, head_dim, config.block_m, config.block_n, 256, True
