@@ -1,7 +1,9 @@
 import cuda.bindings.driver as cuda
 import cutlass.pipeline as pipeline
 import cutlass.utils as utils
+import cutlass.utils.hopper_helpers as sm90_utils_basic
 from cutlass.cute.nvgpu import cpasync, warp
+from cutlass.utils import LayoutEnum
 
 from .common import cutlass, cute
 from .stage21_state_machine_backend import Stage21FlashAttentionStateMachine
@@ -318,7 +320,12 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
             (0, 1),
         )
         sO_layout = sQ_layout
-        sKV_layout_staged = cute.append(sKV_layout, self._num_stages_kv)
+        sKV_layout_staged = sm90_utils_basic.make_smem_layout(
+            self._dtype,
+            LayoutEnum.ROW_MAJOR,
+            (self._n_block_size, self._head_dim_padded),
+            self._num_stages_kv,
+        )
 
         SharedStorage = self._make_shared_storage_type(self._dtype, sQ_layout, sKV_layout_staged)
 
@@ -407,8 +414,8 @@ class Stage22FlashAttentionTma(Stage21FlashAttentionStateMachine):
         smem = cutlass.utils.SmemAllocator()
         storage = smem.allocate(SharedStorage)
         sQ = storage.sQ.get_tensor(sQ_layout)
-        sK = storage.sK.get_tensor(sKV_layout_staged)
-        sV = storage.sV.get_tensor(sKV_layout_staged)
+        sK = storage.sK.get_tensor(sKV_layout_staged.outer, swizzle=sKV_layout_staged.inner)
+        sV = storage.sV.get_tensor(sKV_layout_staged.outer, swizzle=sKV_layout_staged.inner)
         sK0 = cute.slice_(sK, (None, None, 0))
         sV0 = cute.slice_(sV, (None, None, 0))
         sK1 = cute.slice_(sK, (None, None, 1))
