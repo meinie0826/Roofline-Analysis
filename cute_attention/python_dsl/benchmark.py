@@ -51,7 +51,7 @@ def benchmark_stage_with_fallback(stage_name, q, k, v, config, warmup=5, repeat=
         tuned = autotune_stage13_config(q, k, v, config)
         return benchmark(stage_name, q, k, v, tuned, warmup=warmup, repeat=repeat), _config_status_suffix(tuned)
 
-    if stage_name not in {"stage1", "stage4", "stage5", "stage6", "stage7", "stage8", "stage9", "stage10", "stage11", "stage12", "stage13", "stage14"}:
+    if stage_name not in {"stage1", "stage4", "stage5", "stage6", "stage7", "stage8", "stage9", "stage10", "stage11", "stage12", "stage13", "stage14", "stage15"}:
         return benchmark(stage_name, q, k, v, config, warmup=warmup, repeat=repeat), None
 
     block_m = config.block_m
@@ -90,6 +90,7 @@ def parse_stage_list(stages_arg: str) -> list[str]:
             "stage12",
             "stage13",
             "stage14",
+            "stage15",
             "baseline_fa4",
             "baseline_sdpa",
         ]
