@@ -409,47 +409,48 @@ class Stage20FlashAttentionWarpSpecExtreme:
                 )
 
         for n_tile in range(mask_steps, n_block_max):
-            stage_slot = self._steady_state_slot_for_iteration(n_tile - mask_steps)
+            active_stage_slot = self._steady_state_slot_for_iteration(n_tile - mask_steps)
             n_block = n_block_max - n_tile - 1
-            if n_block >= 0:
-                self._compute_one_block(
-                    is_consumer,
-                    is_producer,
-                    n_block,
-                    thr_mma,
-                    tiled_mma,
-                    tSrQ,
-                    tSrK_slots[stage_slot],
-                    tOrVt_slots[stage_slot],
-                    acc_O,
-                    smem_tiled_copy_Q,
-                    smem_tiled_copy_K,
-                    smem_tiled_copy_V,
-                    tSsQ,
-                    tSrQ_view,
-                    tSsK_slots[stage_slot],
-                    tSrK_view_slots[stage_slot],
-                    tOsVt_slots[stage_slot],
-                    tOrVt_view_slots[stage_slot],
-                    row_max,
-                    row_sum,
-                    softmax_scale_log2,
-                    mQ,
-                    mK,
-                    batch_size,
-                    num_head,
-                    m_block,
-                    is_first_n_block=False,
-                    in_mask_steps=False,
-                    gmem_tiled_copy_KV=gmem_tiled_copy_KV,
-                    tKVcKV=tKVcKV,
-                    tKgK=tKgK,
-                    tVgV=tVgV,
-                    tKsK=tKsK_slots[stage_slot],
-                    tVsV=tVsV_slots[stage_slot],
-                    tKVpKV=tKVpKV,
-                    next_k_block=self._next_block_after_compute(n_block),
-                )
+            for stage_slot in cutlass.range_constexpr(self._num_stages_kv):
+                if active_stage_slot == stage_slot and n_block >= 0:
+                    self._compute_one_block(
+                        is_consumer,
+                        is_producer,
+                        n_block,
+                        thr_mma,
+                        tiled_mma,
+                        tSrQ,
+                        tSrK_slots[stage_slot],
+                        tOrVt_slots[stage_slot],
+                        acc_O,
+                        smem_tiled_copy_Q,
+                        smem_tiled_copy_K,
+                        smem_tiled_copy_V,
+                        tSsQ,
+                        tSrQ_view,
+                        tSsK_slots[stage_slot],
+                        tSrK_view_slots[stage_slot],
+                        tOsVt_slots[stage_slot],
+                        tOrVt_view_slots[stage_slot],
+                        row_max,
+                        row_sum,
+                        softmax_scale_log2,
+                        mQ,
+                        mK,
+                        batch_size,
+                        num_head,
+                        m_block,
+                        is_first_n_block=False,
+                        in_mask_steps=False,
+                        gmem_tiled_copy_KV=gmem_tiled_copy_KV,
+                        tKVcKV=tKVcKV,
+                        tKgK=tKgK,
+                        tVgV=tVgV,
+                        tKsK=tKsK_slots[stage_slot],
+                        tVsV=tVsV_slots[stage_slot],
+                        tKVpKV=tKVpKV,
+                        next_k_block=self._next_block_after_compute(n_block),
+                    )
 
         if is_consumer:
             self.normalize_softmax(acc_O, row_sum)
