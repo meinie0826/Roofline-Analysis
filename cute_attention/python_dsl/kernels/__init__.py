@@ -16,6 +16,7 @@ from .stage8_noscore import stage8_forward
 from .stage9_threadgroup import stage9_forward
 from .stage10_hybrid import stage10_forward
 from .stage11_mma import stage11_forward
+from .stage12_pipeline2 import stage12_forward
 from .stage0_naive import stage0_forward
 from .stage3_blocked import stage3_forward
 
@@ -42,4 +43,5 @@ __all__ = [
     "stage9_forward",
     "stage10_forward",
     "stage11_forward",
+    "stage12_forward",
 ]
