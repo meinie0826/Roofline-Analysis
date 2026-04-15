@@ -660,9 +660,9 @@ class Stage22FlashAttentionTmaExperimental:
         gV = cute.local_tile(mV[batch_size, None, num_head, None], (self._n_block_size, self._head_dim_padded), (None, 0))
         gO = cute.local_tile(mO[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
 
-        sQ = storage.sQ.get_tensor(sQ_layout)
-        sK = storage.sK.get_tensor(sKV_layout_staged)
-        sV = storage.sV.get_tensor(sKV_layout_staged)
+        sQ = storage.sQ.get_tensor(sQ_layout.outer, swizzle=sQ_layout.inner)
+        sK = storage.sK.get_tensor(sKV_layout_staged.outer, swizzle=sKV_layout_staged.inner)
+        sV = storage.sV.get_tensor(sKV_layout_staged.outer, swizzle=sKV_layout_staged.inner)
         sK0 = self._slice_stage_tensor(sK, 0)
         sV0 = self._slice_stage_tensor(sV, 0)
         sK1 = self._slice_stage_tensor(sK, 1)
