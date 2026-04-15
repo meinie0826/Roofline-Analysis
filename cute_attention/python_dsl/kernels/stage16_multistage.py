@@ -120,13 +120,11 @@ if HAS_CUTE:
 
             @cute.struct
             class SharedStorage:
-                __annotations__ = {
-                    "sQ":  cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sQ_layout)], 1024],
-                    "sK0": cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024],
-                    "sV0": cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024],
-                    "sK1": cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024],
-                    "sV1": cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024],
-                }
+                sQ:  cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sQ_layout)], 1024]
+                sK0: cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
+                sV0: cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
+                sK1: cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
+                sV1: cute.struct.Align[cute.struct.MemRange[self._dtype, cute.cosize(sKV_layout)], 1024]
 
             universal_copy_bits = 128
             async_copy_elems = universal_copy_bits // self._dtype.width
