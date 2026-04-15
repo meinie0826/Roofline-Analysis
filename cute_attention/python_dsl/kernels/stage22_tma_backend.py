@@ -139,13 +139,13 @@ class Stage22FlashAttentionTmaExperimental:
     def _make_kv_layouts(self):
         smem_k_block_size = 64 if self._head_dim_padded % 64 == 0 else 32
         swizzle_bits = 3 if smem_k_block_size == 64 else 2
-        sQ_layout_atom = cute.make_composed_layout(
+        sQ_load_layout_atom = cute.make_composed_layout(
             cute.make_swizzle(swizzle_bits, 3, 3),
             0,
             cute.make_layout((8, smem_k_block_size), stride=(smem_k_block_size, 1)),
         )
-        sQ_layout = cute.tile_to_shape(
-            sQ_layout_atom,
+        sQ_load_layout = cute.tile_to_shape(
+            sQ_load_layout_atom,
             (self._m_block_size, self._head_dim_padded),
             (0, 1),
         )
@@ -160,6 +160,12 @@ class Stage22FlashAttentionTmaExperimental:
             self._n_block_size,
         )
         qk_tiled_mma, pv_tiled_mma, cluster_layout_shape, cta_group = self._make_blackwell_tma_mmas()
+        sQ_layout_staged = sm100_utils.make_smem_layout_a(
+            qk_tiled_mma,
+            qk_mma_tiler,
+            self._dtype,
+            1,
+        )
         sK_layout_staged = sm100_utils.make_smem_layout_b(
             qk_tiled_mma,
             qk_mma_tiler,
@@ -173,27 +179,14 @@ class Stage22FlashAttentionTmaExperimental:
             self._num_stages_kv,
         )
         return (
-            sQ_layout,
+            sQ_layout_staged,
+            sQ_load_layout,
             sK_layout_staged,
             sV_layout_staged,
             qk_tiled_mma,
             pv_tiled_mma,
             cluster_layout_shape,
             cta_group,
-        )
-
-    def _make_q_layout(self):
-        smem_k_block_size = 64 if self._head_dim_padded % 64 == 0 else 32
-        swizzle_bits = 3 if smem_k_block_size == 64 else 2
-        sQ_layout_atom = cute.make_composed_layout(
-            cute.make_swizzle(swizzle_bits, 3, 3),
-            0,
-            cute.make_layout((8, smem_k_block_size), stride=(smem_k_block_size, 1)),
-        )
-        return cute.tile_to_shape(
-            sQ_layout_atom,
-            (self._m_block_size, self._head_dim_padded),
-            (0, 1),
         )
 
     def _make_shared_storage_type(self, dtype, sQ_layout, sK_layout_staged, sV_layout_staged):
@@ -716,6 +709,7 @@ class Stage22FlashAttentionTmaExperimental:
         softmax_scale_log2 = softmax_scale * LOG2_E
         (
             sQ_layout,
+            sQ_load_layout,
             sK_layout_staged,
             sV_layout_staged,
             qk_tiled_mma,
@@ -723,8 +717,7 @@ class Stage22FlashAttentionTmaExperimental:
             cluster_layout_shape,
             cta_group,
         ) = self._make_kv_layouts()
-        q_layout = self._make_q_layout()
-        sO_layout = sQ_layout
+        sO_layout = sQ_load_layout
 
         shared_storage = self._make_shared_storage_type(self._dtype, sQ_layout, sK_layout_staged, sV_layout_staged)
         storage = cutlass.utils.SmemAllocator().allocate(shared_storage)
@@ -766,6 +759,7 @@ class Stage22FlashAttentionTmaExperimental:
         gO = cute.local_tile(mO[batch_size, None, num_head, None], (self._m_block_size, self._head_dim_padded), (m_block, 0))
 
         sQ = storage.sQ.get_tensor(sQ_layout.outer, swizzle=sQ_layout.inner)
+        sQ0 = self._slice_stage_tensor(sQ, 0)
         sK = storage.sK.get_tensor(sK_layout_staged.outer, swizzle=sK_layout_staged.inner)
         sV = storage.sV.get_tensor(sV_layout_staged.outer, swizzle=sV_layout_staged.inner)
         # Slice per-stage sV then logically transpose for ldsm (sV: block_n×head_dim → sVt: head_dim×block_n)
@@ -819,8 +813,8 @@ class Stage22FlashAttentionTmaExperimental:
         _ = self._load_q_to_smem(
             tidx,
             mQ,
-            sQ,
-            q_layout,
+            sQ0,
+            sQ_load_layout,
             m_block,
             batch_size,
             num_head,
@@ -979,7 +973,7 @@ class Stage22FlashAttentionTmaExperimental:
             self.normalize_softmax(acc_O, row_sum)
             rO = cute.make_fragment_like(acc_O, self._dtype)
             rO.store(acc_O.load().to(self._dtype))
-            sO = cute.make_tensor(sQ.iterator, sO_layout)
+            sO = cute.make_tensor(sQ0.iterator, sO_layout)
 
             smem_copy_atom_O = cute.make_copy_atom(cute.nvgpu.CopyUniversalOp(), self._dtype)
             smem_tiled_copy_O = cute.make_tiled_copy_C(smem_copy_atom_O, qk_tiled_mma)
