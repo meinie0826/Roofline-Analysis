@@ -27,6 +27,7 @@ from .stage19_warpgroup import autotune_stage19_config, stage19_forward
 from .stage20_warpspec import autotune_stage20_config, stage20_forward
 from .stage21_state_machine import autotune_stage21_config, stage21_forward
 from .stage0_naive import stage0_forward
+from .stage2_colblocked import stage2_forward
 from .stage3_blocked import stage3_forward
 
 __all__ = [
@@ -43,6 +44,7 @@ __all__ = [
     "run_stage",
     "stage1_forward",
     "stage0_forward",
+    "stage2_forward",
     "stage3_forward",
     "stage4_forward",
     "stage5_forward",

@@ -26,6 +26,7 @@ from .stage19_warpgroup import stage19_forward
 from .stage20_warpspec import stage20_forward
 from .stage21_state_machine import stage21_forward
 from .stage0_naive import stage0_forward
+from .stage2_colblocked import stage2_forward
 from .stage3_blocked import stage3_forward
 
 
@@ -64,6 +65,12 @@ STAGES: dict[str, StageDefinition] = {
         description="PyTorch SDPA baseline (causal, qkv only).",
         implementation=baseline_sdpa_forward,
         backend="torch-sdpa-baseline",
+    ),
+    "stage2": StageDefinition(
+        name="stage2",
+        description="Column-blocked CuTe kernel: blocked along head_dim with per-tile dot-product reduction.",
+        implementation=stage2_forward,
+        backend="own-cute-dsl",
     ),
     "stage3": StageDefinition(
         name="stage3",
