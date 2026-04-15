@@ -76,7 +76,7 @@ _STAGE_TUNING_AXES = {
     "stage14": "benchmark fallback only",
     "stage15": "benchmark fallback only",
     "stage16": "block_m,block_n",
-    "stage17": "block_m,block_n,num_stages_kv (num_threads not yet tuned)",
+    "stage17": "block_m,block_n,num_stages_kv,num_threads",
     "baseline_fa4": "none",
     "baseline_sdpa": "none",
 }
@@ -86,7 +86,7 @@ _STAGE_NOTES = {
     "stage14": "warp-specialized producer/consumer kernel; no dedicated autotune yet",
     "stage15": "SM90-style warp specialization; no dedicated autotune yet",
     "stage16": "fixed double-buffer warp-specialized kernel; current autotune is conservative block search only",
-    "stage17": "public stage17 API exists, but execution still delegates to stage16 while dedicated kernel is under development",
+    "stage17": "autotuned family entrypoint: uses stage16 backend for 256-thread double-buffer fits, otherwise stage13 multistage backend",
 }
 
 

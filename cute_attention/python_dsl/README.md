@@ -37,6 +37,37 @@
 - 目标: 用我们自己的 CuTe DSL kernel 覆盖 full causal forward 路径
 - `flash-attention` 和 `cutlass/examples/77_blackwell_fmha` 只作为设计和性能参考
 
+## 对照 FA4 仍缺失的关键优化
+
+- `stage17`: 更完整的 multistage family 入口
+  - 目标: 统一比较 `stage16` 风格的 256-thread warp-specialized double-buffer 路径，和 `stage13` 风格的更深 `num_stages_kv` 路径
+  - 现状: 已作为 autotuned family entrypoint 存在，但还没有独立的 warp-specialized `num_stages_kv > 2` kernel
+
+- `stage18`: Split-KV / combine
+  - 参考 FA4: `flash_fwd_combine_*`, `benchmark_split_kv.py`
+  - 目标: 把长序列或 decode 场景下的 KV 维切分与 combine 纳入自研路径
+
+- `stage19`: Persistent tile scheduler
+  - 参考 FA4: `tile_scheduler.hpp`, `flash_prepare_scheduler.cu`
+  - 目标: 降低 CTA launch / tile assignment 开销，改善长序列和不规则问题尺寸下的调度效率
+
+- `stage20`: Hopper TMA + GMMA 主循环
+  - 参考 FA4: `mainloop_fwd_sm90_tma_gmma_ws.hpp`
+  - 目标: 从当前 cp.async / warp MMA 风格，升级到更接近 Hopper 最优路径的 TMA + GMMA
+
+- `stage21`: Packed GQA / MQA
+  - 参考 FA4: `pack_gqa.h`
+  - 目标: 支持更贴近推理场景的头映射优化，同时减少无效读取和调度开销
+
+- `stage22`: Paged KV cache / decode-oriented path
+  - 参考 FA4: `paged_kv.h`, `flash_attn_with_kvcache`
+  - 目标: 面向真实 serving 场景而不是只做 dense prefill
+
+- 可选后续:
+  - softcap
+  - rotary fusion
+  - FP8 / E4M3
+
 ## 当前代码状态
 
 - 已实现:
@@ -54,6 +85,12 @@
   - `stage9` 的 CuTe Q/K/V/score-tile shared-memory staging（每行 thread-group 归约）前向版
   - `stage10` 的 CuTe Q/K/V/score-tile shared-memory staging（lane0 行归约 + 组并行 acc）前向版
   - `stage11` 的 CuTe Ampere MMA 前向版
+  - `stage12` 的 CuTe double-buffer cp.async pipeline 前向版
+  - `stage13` 的 CuTe multistage MMA 前向版
+  - `stage14` 的 CuTe warp-specialized producer/consumer 前向版
+  - `stage15` 的 CuTe SM90-style warp-specialized 前向版
+  - `stage16` 的 CuTe warp-specialized double-buffer 前向版
+  - `stage17` 的 autotuned family entrypoint（当前在 `stage16` / `stage13` 后端之间选择）
   - `baseline_fa4` 对照入口
   - `baseline_sdpa`（PyTorch SDPA 对照）
 
