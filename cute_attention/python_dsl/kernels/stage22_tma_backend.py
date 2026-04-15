@@ -287,21 +287,24 @@ class Stage22FlashAttentionTma:
         acc_tmem: cute.Tensor,
         tile_shape,
     ):
-        tCcC = thr_mma.partition_C(cute.make_identity_tensor(tile_shape))
-        acc_tmem_2d = cute.group_modes(acc_tmem, 1, 3)
+        chunk_cols = 16
         tmem_load_atom = cute.make_copy_atom(
-            tcgen05.copy.Ld32x32bOp(tcgen05.copy.Repetition(tile_shape[1] // 4)),
+            tcgen05.copy.Ld32x32bOp(tcgen05.copy.Repetition(chunk_cols)),
             cutlass.Float32,
         )
-        thr_tmem_load = tcgen05.make_tmem_copy(tmem_load_atom, acc_tmem_2d).get_slice(
+        acc_tmem_chunk = cute.composition(acc_tmem, cute.make_layout((tile_shape[0], chunk_cols)))
+        acc_shape = thr_mma.partition_shape_C(tile_shape)
+        acc_rmem = cute.make_rmem_tensor(acc_shape, cutlass.Float32)
+        acc_rmem_chunk = cute.composition(acc_rmem, cute.make_layout((tile_shape[0], chunk_cols)))
+        thr_tmem_load = tcgen05.make_tmem_copy(tmem_load_atom, acc_tmem_chunk).get_slice(
             consumer_slice_idx
         )
-        tCtC = thr_tmem_load.partition_S(acc_tmem_2d)
-        acc_rmem = cute.make_fragment(
-            thr_tmem_load.partition_D(tCcC).shape,
-            cutlass.Float32,
-        )
-        cute.copy(thr_tmem_load, tCtC, acc_rmem)
+        tCtC = thr_tmem_load.partition_S(acc_tmem_chunk)
+        tCrC = thr_tmem_load.partition_D(acc_rmem_chunk)
+        for i in cutlass.range_constexpr(tile_shape[1] // chunk_cols):
+            tCtC_i = cute.make_tensor(tCtC.iterator + i * chunk_cols, tCtC.layout)
+            tCrC_i = cute.make_tensor(tCrC.iterator + i * chunk_cols, tCrC.layout)
+            cute.copy(thr_tmem_load, tCtC_i, tCrC_i)
         return acc_rmem
 
     def _threadquad_reduce(self, val: cutlass.Float32, op):
@@ -859,7 +862,8 @@ class Stage22FlashAttentionTma:
         thr_mma = stage0_views[0]
         pv_thr_mma = stage0_views[1]
         acc_shape_O = pv_thr_mma.partition_shape_C((self._m_block_size, self._head_dim_padded))
-        acc_O = pv_thr_mma.make_fragment_C(acc_shape_O)
+        acc_O = cute.make_rmem_tensor(acc_shape_O, cutlass.Float32)
+        acc_O.fill(0.0)
         row_max = cute.make_rmem_tensor((acc_O.shape[0][0] * acc_O.shape[1]), cutlass.Float32)
         row_sum = cute.make_rmem_tensor((acc_O.shape[0][0] * acc_O.shape[1]), cutlass.Float32)
         row_max.fill(-cutlass.Float32.inf)
