@@ -23,6 +23,7 @@ from .stage15_sm90style import stage15_forward
 from .stage16_multistage import autotune_stage16_config, stage16_forward
 from .stage17_multistage import autotune_stage17_config, stage17_forward
 from .stage18_sm90_features import autotune_stage18_config, stage18_forward
+from .stage19_warpgroup import autotune_stage19_config, stage19_forward
 from .stage0_naive import stage0_forward
 from .stage3_blocked import stage3_forward
 
@@ -61,4 +62,6 @@ __all__ = [
     "autotune_stage17_config",
     "stage18_forward",
     "autotune_stage18_config",
+    "stage19_forward",
+    "autotune_stage19_config",
 ]
