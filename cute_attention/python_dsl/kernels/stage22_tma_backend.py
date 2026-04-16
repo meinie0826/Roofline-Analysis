@@ -289,6 +289,26 @@ class Stage22FlashAttentionTma:
         return cute.make_tensor(acc.iterator, acc_layout_mn)
 
     @cute.jit
+    def _make_rmem_accumulator_like_tmem_load(
+        self,
+        consumer_slice_idx,
+        thr_mma,
+        acc_tmem: cute.Tensor,
+        tile_shape,
+    ):
+        tmem_load_atom = cute.make_copy_atom(
+            tcgen05.copy.Ld32x32bOp(tcgen05.copy.Repetition(tile_shape[1] // 2)),
+            cutlass.Float32,
+        )
+        tCcC = thr_mma.partition_C(cute.make_identity_tensor(tile_shape))
+        tCcC = tCcC[(None, None), 0, 0]
+        tiled_tmem_load = tcgen05.make_tmem_copy(tmem_load_atom, acc_tmem)
+        thr_tmem_load = tiled_tmem_load.get_slice(consumer_slice_idx)
+        tCrC = thr_tmem_load.partition_D(tCcC)
+        acc_rmem = cute.make_rmem_tensor(tCrC.shape, cutlass.Float32)
+        return acc_rmem
+
+    @cute.jit
     def _load_tmem_fragment_to_rmem(
         self,
         consumer_slice_idx,
@@ -307,10 +327,11 @@ class Stage22FlashAttentionTma:
             consumer_slice_idx
         )
         tCtC = thr_tmem_load.partition_S(acc_tmem)
-        tCrC = thr_tmem_load.partition_D(tCcC)
-        acc_rmem = cute.make_rmem_tensor(
-            tCrC.shape,
-            cutlass.Float32,
+        acc_rmem = self._make_rmem_accumulator_like_tmem_load(
+            consumer_slice_idx,
+            thr_mma,
+            acc_tmem,
+            tile_shape,
         )
         cute.copy(tiled_tmem_load, tCtC, acc_rmem)
         return acc_rmem
@@ -881,7 +902,14 @@ class Stage22FlashAttentionTma:
         thr_mma = stage0_views[0]
         pv_thr_mma = stage0_views[1]
         acc_shape_O = pv_thr_mma.partition_shape_C((self._m_block_size, self._head_dim_padded))
-        acc_O = cute.make_rmem_tensor(acc_shape_O, cutlass.Float32)
+        acc_bootstrap_tmem = pv_thr_mma.make_fragment_C(cute.append(acc_shape_O, 2))
+        acc_bootstrap_load = acc_bootstrap_tmem[(None, None), 0, 0, 0]
+        acc_O = self._make_rmem_accumulator_like_tmem_load(
+            consumer_slice_idx,
+            pv_thr_mma,
+            acc_bootstrap_load,
+            (self._m_block_size, self._head_dim_padded),
+        )
         acc_O.fill(0.0)
         row_max = cute.make_rmem_tensor((acc_O.shape[0][0] * acc_O.shape[1]), cutlass.Float32)
         row_sum = cute.make_rmem_tensor((acc_O.shape[0][0] * acc_O.shape[1]), cutlass.Float32)
