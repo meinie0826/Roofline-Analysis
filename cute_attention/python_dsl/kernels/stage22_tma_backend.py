@@ -460,7 +460,7 @@ class Stage22FlashAttentionTma:
         )
         tPrP_f32 = cute.make_fragment(
             thr_tmem_store.partition_S(
-                cute.make_identity_tensor((self._m_block_size, self._n_block_size))
+                cute.make_identity_tensor((self._m_block_size, p_tile_like_fp32))
             ).shape,
             cutlass.Float32,
         )
@@ -470,7 +470,8 @@ class Stage22FlashAttentionTma:
         )
         tPrP.store(acc_S.load().to(self._dtype))
         tPtP = thr_tmem_store.partition_D(tP_store)
-        cute.copy(thr_tmem_store, tPrP_f32, tPtP)
+        for i in cutlass.range_constexpr(cute.size(tPtP.shape[2])):
+            cute.copy(thr_tmem_store, tPrP_f32[None, None, i], tPtP[None, None, i])
         cute.arch.fence_view_async_tmem_store()
         return tOrP
 
