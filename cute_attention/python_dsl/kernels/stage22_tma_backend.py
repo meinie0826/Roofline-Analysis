@@ -470,8 +470,7 @@ class Stage22FlashAttentionTma:
         )
         tPrP.store(acc_S.load().to(self._dtype))
         tPtP = thr_tmem_store.partition_D(tP_store)
-        for i in cutlass.range_constexpr(cute.size(tPtP.shape[2])):
-            cute.copy(thr_tmem_store, tPrP_f32[None, None, i], tPtP[None, None, i])
+        cute.copy(thr_tmem_store, tPrP_f32, tPtP)
         cute.arch.fence_view_async_tmem_store()
         return tOrP
 
