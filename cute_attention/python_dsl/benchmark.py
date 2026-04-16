@@ -194,7 +194,9 @@ def _config_status_suffix(config: AttentionConfig) -> str | None:
 
 def _make_config_for_stage(stage_name: str, base: AttentionConfig) -> AttentionConfig:
     """Return a config tailored to the given stage from the base config."""
-    if stage_name in {"stage17", "stage18", "stage19", "stage20", "stage21", "stage22"}:
+    if stage_name == "stage22":
+        return replace(base, block_m=128, block_n=128, num_threads=256, num_stages_kv=3)
+    if stage_name in {"stage17", "stage18", "stage19", "stage20", "stage21"}:
         return replace(base, block_m=64, block_n=64, num_threads=256, num_stages_kv=3)
     if stage_name in _WARPSPEC_STAGES:
         return replace(base, num_threads=256)

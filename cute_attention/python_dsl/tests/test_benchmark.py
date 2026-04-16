@@ -108,7 +108,7 @@ def test_stage21_benchmark_uses_safe_state_machine_seed_config():
 
 def test_stage22_benchmark_uses_safe_tma_seed_config():
     config = _make_config_for_stage("stage22", AttentionConfig(block_m=64, block_n=128, num_threads=128))
-    assert config.block_m == 64
-    assert config.block_n == 64
+    assert config.block_m == 128
+    assert config.block_n == 128
     assert config.num_threads == 256
     assert config.num_stages_kv == 3

@@ -84,8 +84,8 @@ def _stage22_can_implement(head_dim: int, config: AttentionConfig) -> bool:
 
 
 def _stage22_find_safe_runtime_config(head_dim: int, seq_len: int, config: AttentionConfig) -> AttentionConfig | None:
-    m_candidates = _stage22_candidate_values(min(max(config.block_m, 1), 128), [128, 96, 64], limit=max(seq_len, 1))
-    n_candidates = _stage22_candidate_values(128, [192, 128], limit=max(seq_len, 1))
+    m_candidates = _stage22_candidate_values(128, [128, 96, 64], limit=max(seq_len, 1))
+    n_candidates = _stage22_candidate_values(128, [192, 128, 64], limit=max(seq_len, 1))
     s_candidates = _stage22_candidate_values(config.num_stages_kv or 3, [3, 2], limit=3)
     for num_stages_kv in s_candidates:
         for block_m in m_candidates:

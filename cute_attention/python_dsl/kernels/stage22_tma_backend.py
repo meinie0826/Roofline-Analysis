@@ -54,6 +54,11 @@ class Stage22FlashAttentionTma:
             return False
         if num_stages_kv not in {2, 3}:
             return False
+        # The current SM100 tcgen05+tmem bring-up path mirrors the reference
+        # FMHA structure, which assumes 128-row Q tiles for the accumulator/tmem
+        # layout contracts.
+        if m_block_size < 128:
+            return False
         # The current SM100 tcgen05+tmem bring-up path is validated on N >= 128 tiles.
         # Smaller N tiles (e.g. 64) lead to invalid tmem copy atom/layout pairings.
         if n_block_size < 128:
