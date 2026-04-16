@@ -228,7 +228,7 @@ class Stage22FlashAttentionTma:
         seq_len = o.shape[0]
         q_row = m_block * self.block_m + row
         row_in_bounds = q_row < seq_len
-        block_row_limit = cute.min((m_block + 1) * self.block_m, seq_len)
+        block_row_limit = min((m_block + 1) * self.block_m, seq_len)
         n_tiles = cute.ceil_div(block_row_limit, self.block_n)
 
         acc_o = cute.make_rmem_tensor((self.head_dim,), cutlass.Float32)
@@ -265,7 +265,7 @@ class Stage22FlashAttentionTma:
 
             if row_in_bounds:
                 tile_start = n_tile * self.block_n
-                tile_stop = cute.min(tile_start + self.block_n, q_row + 1)
+                tile_stop = min(tile_start + self.block_n, q_row + 1)
                 tile_cols = tile_stop - tile_start
 
                 block_max = -cutlass.Float32.inf
