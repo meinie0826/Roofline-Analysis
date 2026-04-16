@@ -83,6 +83,24 @@ def _stage22_can_implement(head_dim: int, config: AttentionConfig) -> bool:
     )
 
 
+def _stage22_find_safe_runtime_config(head_dim: int, seq_len: int, config: AttentionConfig) -> AttentionConfig | None:
+    m_candidates = _stage22_candidate_values(min(max(config.block_m, 1), 128), [128, 96, 64], limit=max(seq_len, 1))
+    n_candidates = _stage22_candidate_values(128, [192, 128], limit=max(seq_len, 1))
+    s_candidates = _stage22_candidate_values(config.num_stages_kv or 3, [3, 2], limit=3)
+    for num_stages_kv in s_candidates:
+        for block_m in m_candidates:
+            for block_n in n_candidates:
+                candidate = _make_stage22_config(
+                    config,
+                    block_m=block_m,
+                    block_n=block_n,
+                    num_stages_kv=num_stages_kv,
+                )
+                if _stage22_can_implement(head_dim, candidate):
+                    return candidate
+    return None
+
+
 def autotune_stage22_config(
     q,
     k,
@@ -205,7 +223,10 @@ def _stage22_forward_impl(q, k, v, config: AttentionConfig):
 
     normalized = replace(config, num_threads=256, num_stages_kv=(config.num_stages_kv or 3), autotune=False)
     if not _stage22_can_implement(head_dim, normalized):
-        raise ValueError("stage22 config is not supported by the TMA kernel constraints.")
+        fallback = _stage22_find_safe_runtime_config(head_dim, seq_len, normalized)
+        if fallback is None:
+            raise ValueError("stage22 config is not supported by the TMA kernel constraints.")
+        normalized = fallback
 
     q_perm = q.permute(0, 2, 1, 3).contiguous()
     k_perm = k.permute(0, 2, 1, 3).contiguous()
