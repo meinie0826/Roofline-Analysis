@@ -396,6 +396,13 @@ class Stage22FlashAttentionTma:
             scale = 1.0 if acc_O_mn_row_is_zero_or_nan else cute.arch.rcp_approx(row_sum[r])
             acc_O_mn[r, None] = acc_O_mn[r, None].load() * scale
 
+    @cute.jit
+    def _accumulate_partial_O(self, acc_O: cute.Tensor, acc_O_partial: cute.Tensor):
+        acc_O_mn = self._make_acc_tensor_mn_view(acc_O)
+        acc_O_partial_mn = self._make_acc_tensor_mn_view(acc_O_partial)
+        for r in cutlass.range_constexpr(cute.size(acc_O_mn.shape[0])):
+            acc_O_mn[r, None] = acc_O_mn[r, None].load() + acc_O_partial_mn[r, None].load()
+
     def _make_tma_kv_atoms_and_tensors(
         self,
         mK: cute.Tensor,
@@ -536,7 +543,7 @@ class Stage22FlashAttentionTma:
             acc_O_load,
             (self._m_block_size, self._head_dim_padded),
         )
-        acc_O.store(acc_O.load() + acc_O_partial.load())
+        self._accumulate_partial_O(acc_O, acc_O_partial)
 
     def _partition_tma_kv(self, tma_atom, tma_tensor, sTensor, gTensor):
         s_for_tma_partition = cute.group_modes(sTensor, 0, 2)
