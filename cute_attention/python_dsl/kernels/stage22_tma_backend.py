@@ -301,6 +301,7 @@ class Stage22FlashAttentionTma:
             cutlass.Float32,
         )
         tCcC = thr_mma.partition_C(cute.make_identity_tensor(tile_shape))
+        tCcC = tCcC[(None, None), 0, 0]
         tiled_tmem_load = tcgen05.make_tmem_copy(tmem_load_atom, acc_tmem)
         thr_tmem_load = tiled_tmem_load.get_slice(
             consumer_slice_idx
