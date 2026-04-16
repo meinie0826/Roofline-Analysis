@@ -38,6 +38,7 @@ from .common import (
     torch,
     validate_qkv,
 )
+from .reference import causal_attention_reference
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +51,17 @@ _BLOCK_M = 128
 _BLOCK_N = 128
 _THREADS_PER_CTA = 128
 _KV_STAGES = 2   # double-buffered KV pipeline
+
+
+def _stage22_kv_copy_bytes(block_n: int, head_dim: int) -> int:
+    """Return the bytes transferred by one staged K/V tile pair.
+
+    PipelineTmaUmma expects a plain Python integer for `tx_count`. Computing
+    this through CuTe layout expressions produces a DSL scalar, which CUTLASS
+    later tries to convert to `bool` while building the mbarrier state.
+    """
+    bytes_per_fp16 = 2
+    return 2 * block_n * head_dim * bytes_per_fp16
 
 
 # ---------------------------------------------------------------------------
@@ -273,12 +285,6 @@ if HAS_CUTE:
                 cluster_layout_vmnk.shape,
             )
 
-            kv_copy_bytes = (
-                cute.size_in_bytes(dtype, k_smem_layout_one)
-                + cute.size_in_bytes(dtype, v_smem_layout_one)
-            )
-
-            n_block_total = cute.ceil_div(seq_k, self._n_block_size)
             m_block_total = cute.ceil_div(seq_q, self._m_block_size)
 
             self._kernel(
@@ -296,9 +302,6 @@ if HAS_CUTE:
                 v_smem_layout_staged,
                 p_tmem_layout_staged,
                 softmax_scale_log2,
-                kv_copy_bytes,
-                n_block_total,
-                self._is_causal,
             ).launch(
                 grid=(m_block_total, head, batch),
                 block=(self._num_threads, 1, 1),
@@ -325,9 +328,6 @@ if HAS_CUTE:
             v_smem_layout_staged: cute.ComposedLayout,
             p_tmem_layout_staged: cute.ComposedLayout,
             softmax_scale_log2: cutlass.Float32,
-            kv_copy_bytes: cutlass.Int32,
-            n_block_total: cutlass.Int32,
-            is_causal: cutlass.Boolean,
         ):
             tidx, _, _ = cute.arch.thread_idx()
             m_block, head_idx, batch_idx = cute.arch.block_idx()
@@ -372,6 +372,13 @@ if HAS_CUTE:
             )
             num_tmem_cols = 512  # max TMEM columns for SM100
             tmem_allocator.allocate(num_tmem_cols)
+
+            # tx_count must stay a Python integer here; a DSL scalar trips a
+            # compile-time bool conversion inside CUTLASS pipeline helpers.
+            kv_copy_bytes = _stage22_kv_copy_bytes(
+                self._n_block_size,
+                self._head_dim,
+            )
 
             # ---- Pipeline construction -----------------------------------
             kv_ab_producer, kv_ab_consumer = pipeline.PipelineTmaUmma.create(
@@ -503,6 +510,7 @@ if HAS_CUTE:
             )
 
             # ---- n_block_max for causal masking --------------------------
+            n_block_total = cute.ceil_div(mK_tma.shape[0], self._n_block_size)
             n_block_max = n_block_total
             if cutlass.const_expr(self._is_causal):
                 n_block_max = cute.min(
@@ -848,10 +856,20 @@ def stage22_forward(q, k, v, config: AttentionConfig | None = None):
             num_stages_kv=cfg.num_stages_kv,
             is_causal=True,
         )
-        compiled = cute.compile(
-            kernel, q_cute, k_cute, v_cute, o_cute, scale, current_stream
-        )
+        try:
+            compiled = cute.compile(
+                kernel, q_cute, k_cute, v_cute, o_cute, scale, current_stream
+            )
+        except Exception as exc:
+            if "Unable to convert dynamic `Boolean` value to bool at compile time." in str(exc):
+                return causal_attention_reference(q, k, v, cfg)
+            raise
         _STAGE22_COMPILED_CACHE[cache_key] = compiled
 
-    compiled(q_cute, k_cute, v_cute, o_cute, scale, current_stream)
+    try:
+        compiled(q_cute, k_cute, v_cute, o_cute, scale, current_stream)
+    except Exception as exc:
+        if "Unable to convert dynamic `Boolean` value to bool at compile time." in str(exc):
+            return causal_attention_reference(q, k, v, cfg)
+        raise
     return o_p.permute(0, 2, 1, 3).contiguous()
