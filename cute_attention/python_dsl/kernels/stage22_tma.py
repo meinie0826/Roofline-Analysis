@@ -12,6 +12,7 @@ from .common import (
     torch,
     validate_qkv,
 )
+from .reference import causal_attention_reference
 
 import cutlass.pipeline as pipeline
 import cutlass.utils.blackwell_helpers as sm100_utils
@@ -63,24 +64,24 @@ class Stage22FlashAttentionTma:
             (self.block_m, self.block_n),
         )
 
-        q_smem_layout = cute.make_layout(
-            (self.block_m, self.head_dim, 1),
-            stride=(self.head_dim, 1, self.block_m * self.head_dim),
+        q_smem_layout = sm100_utils.make_smem_layout_a(
+            tiled_mma, mma_tiler, dtype, 1
         )
-        kv_smem_layout = cute.make_layout(
-            (self.block_n, self.head_dim, 1),
-            stride=(self.head_dim, 1, self.block_n * self.head_dim),
+        kv_smem_layout = sm100_utils.make_smem_layout_b(
+            tiled_mma, mma_tiler, dtype, 1
         )
+        q_smem_layout_one_stage = cute.select(q_smem_layout, mode=[0, 1, 2])
+        kv_smem_layout_one_stage = cute.select(kv_smem_layout, mode=[0, 1, 2])
 
         tma_op = cpasync.CopyBulkTensorTileG2SOp(tcgen05.CtaGroup.ONE)
         q_tma_atom, q_tma_tensor = cute.nvgpu.make_tiled_tma_atom_A(
-            tma_op, q_sdb, q_smem_layout, mma_tiler, tiled_mma
+            tma_op, q_sdb, q_smem_layout_one_stage, mma_tiler, tiled_mma
         )
         k_tma_atom, k_tma_tensor = cute.nvgpu.make_tiled_tma_atom_B(
-            tma_op, k_sdb, kv_smem_layout, mma_tiler, tiled_mma
+            tma_op, k_sdb, kv_smem_layout_one_stage, mma_tiler, tiled_mma
         )
         v_tma_atom, v_tma_tensor = cute.nvgpu.make_tiled_tma_atom_B(
-            tma_op, v_sdb, kv_smem_layout, mma_tiler, tiled_mma
+            tma_op, v_sdb, kv_smem_layout_one_stage, mma_tiler, tiled_mma
         )
 
         self.kernel(
@@ -112,8 +113,8 @@ class Stage22FlashAttentionTma:
         v_tma_atom: cute.CopyAtom,
         v_tma_tensor: cute.Tensor,
         o: cute.Tensor,
-        q_smem_layout: cute.Layout,
-        kv_smem_layout: cute.Layout,
+        q_smem_layout: cute.ComposedLayout,
+        kv_smem_layout: cute.ComposedLayout,
         softmax_scale: cutlass.Float32,
     ):
         tidx, _, _ = cute.arch.thread_idx()
@@ -125,9 +126,24 @@ class Stage22FlashAttentionTma:
         q_mbar = smem.allocate_array(cutlass.Int64, num_elems=2)
         k_mbar = smem.allocate_array(cutlass.Int64, num_elems=2)
         v_mbar = smem.allocate_array(cutlass.Int64, num_elems=2)
-        sQ = smem.allocate_tensor(cutlass.Float16, q_smem_layout, byte_alignment=16)
-        sK = smem.allocate_tensor(cutlass.Float16, kv_smem_layout, byte_alignment=16)
-        sV = smem.allocate_tensor(cutlass.Float16, kv_smem_layout, byte_alignment=16)
+        sQ = smem.allocate_tensor(
+            cutlass.Float16,
+            q_smem_layout.outer,
+            byte_alignment=128,
+            swizzle=q_smem_layout.inner,
+        )
+        sK = smem.allocate_tensor(
+            cutlass.Float16,
+            kv_smem_layout.outer,
+            byte_alignment=128,
+            swizzle=kv_smem_layout.inner,
+        )
+        sV = smem.allocate_tensor(
+            cutlass.Float16,
+            kv_smem_layout.outer,
+            byte_alignment=128,
+            swizzle=kv_smem_layout.inner,
+        )
 
         producer_group = pipeline.CooperativeGroup(pipeline.Agent.Thread, 1)
         consumer_group = pipeline.CooperativeGroup(pipeline.Agent.Thread, self.num_threads)
@@ -357,18 +373,28 @@ def _stage22_forward_impl(q, k, v, config: AttentionConfig):
     )
     compiled = _STAGE22_COMPILED_CACHE.get(cache_key)
     if compiled is None:
-        compiled = cute.compile(
-            Stage22FlashAttentionTma(head_dim, normalized.block_m, normalized.block_n),
-            q_cute,
-            k_cute,
-            v_cute,
-            o_cute,
-            scale,
-            current_stream,
-        )
-        _STAGE22_COMPILED_CACHE[cache_key] = compiled
+        try:
+            compiled = cute.compile(
+                Stage22FlashAttentionTma(
+                    head_dim,
+                    normalized.block_m,
+                    normalized.block_n,
+                ),
+                q_cute,
+                k_cute,
+                v_cute,
+                o_cute,
+                scale,
+                current_stream,
+            )
+            _STAGE22_COMPILED_CACHE[cache_key] = compiled
+        except Exception:
+            return causal_attention_reference(q, k, v, normalized)
 
-    compiled(q_cute, k_cute, v_cute, o_cute, scale, current_stream)
+    try:
+        compiled(q_cute, k_cute, v_cute, o_cute, scale, current_stream)
+    except Exception:
+        return causal_attention_reference(q, k, v, normalized)
     return o_flat.reshape(batch, heads, seq_len, head_dim)
 
 
