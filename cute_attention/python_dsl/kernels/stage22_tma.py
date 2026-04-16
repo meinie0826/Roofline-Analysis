@@ -367,10 +367,10 @@ if HAS_CUTE:
                 barrier_id=2, num_threads=self._num_threads
             )
             tmem_allocator = utils.TmemAllocator(
-                tmem_holding_buf,
+                tmem_holding_buf.data_ptr(),
                 barrier_for_retrieve=tmem_alloc_barrier,
             )
-            num_tmem_cols = cute.arch.get_max_tmem_alloc_cols("sm_100")
+            num_tmem_cols = 512  # max TMEM columns for SM100
             tmem_allocator.allocate(num_tmem_cols)
 
             # ---- Pipeline construction -----------------------------------
@@ -380,15 +380,6 @@ if HAS_CUTE:
                 consumer_group=pipeline.CooperativeGroup(pipeline.Agent.Thread),
                 tx_count=kv_copy_bytes,
                 barrier_storage=kv_mbar_storage,
-            ).make_participants()
-
-            acc_producer, acc_consumer = pipeline.PipelineUmmaAsync.create(
-                num_stages=1,
-                producer_group=pipeline.CooperativeGroup(pipeline.Agent.Thread),
-                consumer_group=pipeline.CooperativeGroup(
-                    pipeline.Agent.Thread, self._num_threads
-                ),
-                barrier_storage=umma_mbar_storage,
             ).make_participants()
 
             # ---- Global tile slices for this CTA -------------------------
@@ -437,9 +428,8 @@ if HAS_CUTE:
                 cute.group_modes(tVgV_mma, 0, 3),
             )
 
-            # TMA partition for Q (single stage)
+            # TMA partition for Q (single stage, no pipeline)
             tQgQ_mma = thr_mma_qk.partition_A(gQ)
-            q_smem_one = cute.select(sQ_smem, mode=[0, 1, 2]) if cutlass.const_expr(False) else sQ_smem
             tQsQ, tQgQ = cpasync.tma_partition(
                 tma_atom_q,
                 0,
@@ -489,19 +479,17 @@ if HAS_CUTE:
                 cpasync.prefetch_descriptor(tma_atom_k)
                 cpasync.prefetch_descriptor(tma_atom_v)
 
-            # ---- Load Q into SMEM (one shot, no pipeline for Q) ----------
+            # ---- Load Q into SMEM via simple TMA (no pipeline) -----------
+            # Use a NamedBarrier to synchronise Q load completion
+            q_load_barrier = pipeline.NamedBarrier(barrier_id=3, num_threads=self._num_threads)
             if warp_idx == 0:
-                q_empty = acc_producer.acquire_and_advance()
                 cute.copy(
                     tma_atom_q,
                     tQgQ[(None, 0)],
                     tQsQ[(None, 0)],
-                    tma_bar_ptr=q_empty.barrier,
+                    tma_bar_ptr=q_load_barrier,
                 )
-                q_empty.commit()
-
-            # Wait for Q load to finish
-            acc_consumer.wait_and_advance()
+            q_load_barrier.wait()
             cute.arch.barrier()
 
             # ---- MMA fragments from SMEM --------------------------------
@@ -572,8 +560,8 @@ if HAS_CUTE:
 
                 # -- Load S from TMEM to RMEM --
                 tmem_load_atom = cute.make_copy_atom(
-                    tcgen05.copy.Ld32x32bOp(
-                        tcgen05.copy.Repetition(self._n_block_size // 2)
+                    tcgen05.Ld32x32bOp(
+                        tcgen05.Repetition(self._n_block_size // 2)
                     ),
                     cutlass.Float32,
                 )
@@ -618,8 +606,8 @@ if HAS_CUTE:
                 )
                 tP_store = cute.make_tensor(tCtS.iterator, tP_store_layout)
                 tmem_store_atom = cute.make_copy_atom(
-                    tcgen05.copy.St32x32bOp(
-                        tcgen05.copy.Repetition(self._n_block_size // 8)
+                    tcgen05.St32x32bOp(
+                        tcgen05.Repetition(self._n_block_size // 8)
                     ),
                     cutlass.Float32,
                 )
@@ -664,8 +652,8 @@ if HAS_CUTE:
 
                 # -- Load O from TMEM, accumulate into rmem O --
                 tmem_load_o_atom = cute.make_copy_atom(
-                    tcgen05.copy.Ld32x32bOp(
-                        tcgen05.copy.Repetition(self._head_dim // 2)
+                    tcgen05.Ld32x32bOp(
+                        tcgen05.Repetition(self._head_dim // 2)
                     ),
                     cutlass.Float32,
                 )
@@ -750,6 +738,7 @@ if HAS_CUTE:
             cute.copy(gmem_tiled_copy_O, tOrO_out, tOgO)
 
             # Deallocate TMEM
+            tmem_allocator.relinquish_alloc_permit()
             pipeline.sync(barrier_id=2)
             tmem_allocator.free(tmem_ptr_f32)
 
