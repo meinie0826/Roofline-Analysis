@@ -189,7 +189,7 @@ STAGES: dict[str, StageDefinition] = {
     ),
     "stage22": StageDefinition(
         name="stage22",
-        description="Our own CuTe stage: minimal standalone causal-attention rewrite used as a clean stage22 baseline.",
+        description="Our own CuTe stage: single-file Blackwell tcgen05+TMA backend under active bring-up.",
         implementation=stage22_forward,
         backend="own-cute-dsl",
     ),

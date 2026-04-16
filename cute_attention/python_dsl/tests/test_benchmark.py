@@ -60,10 +60,10 @@ def test_stage_metadata_marks_autotune_and_multistage_coverage():
     assert rows["stage21"]["autotune"] == "True"
     assert rows["stage21"]["tuning_axes"] == "block_m,block_n,num_stages_kv"
     assert "state-machine" in rows["stage21"]["notes"]
-    assert rows["stage22"]["autotune"] == "False"
-    assert rows["stage22"]["multistage"] == "False"
-    assert rows["stage22"]["tuning_axes"] == "none"
-    assert "minimal standalone" in rows["stage22"]["notes"]
+    assert rows["stage22"]["autotune"] == "True"
+    assert rows["stage22"]["multistage"] == "True"
+    assert rows["stage22"]["tuning_axes"] == "block_m,block_n,num_stages_kv"
+    assert "tcgen05+TMA" in rows["stage22"]["notes"]
 
 
 def test_stage17_benchmark_uses_safe_warpspec_seed_config():
@@ -106,9 +106,9 @@ def test_stage21_benchmark_uses_safe_state_machine_seed_config():
     assert config.num_stages_kv == 3
 
 
-def test_stage22_benchmark_uses_safe_seed_config():
+def test_stage22_benchmark_uses_safe_tma_seed_config():
     config = _make_config_for_stage("stage22", AttentionConfig(block_m=64, block_n=128, num_threads=128))
-    assert config.block_m == 64
+    assert config.block_m == 128
     assert config.block_n == 128
     assert config.num_threads == 256
-    assert config.num_stages_kv == 0
+    assert config.num_stages_kv == 3
