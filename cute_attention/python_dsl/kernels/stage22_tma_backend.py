@@ -445,14 +445,14 @@ class Stage22FlashAttentionTma:
         tP = cute.make_tensor(acc_S_tmem.iterator, p_tmem_layout_staged.outer)
         tOrP = thr_mma_pv.make_fragment_A(tP)[None, None, None, 0]
 
-        p_tile_like_fp32 = self._n_block_size // 32 * self._dtype.width
+        p_tile_like_fp32 = self._n_block_size // cutlass.Float32.width * self._dtype.width
         tP_store_layout = cute.composition(
             acc_S_tmem.layout,
             cute.make_layout((self._m_block_size, p_tile_like_fp32)),
         )
         tP_store = cute.make_tensor(acc_S_tmem.iterator, tP_store_layout)
         tmem_store_atom = cute.make_copy_atom(
-            tcgen05.copy.St32x32bOp(tcgen05.copy.Repetition(self._n_block_size // 4)),
+            tcgen05.copy.St32x32bOp(tcgen05.copy.Repetition(self._n_block_size // 8)),
             cutlass.Float32,
         )
         thr_tmem_store = tcgen05.make_tmem_copy(tmem_store_atom, tP_store).get_slice(
