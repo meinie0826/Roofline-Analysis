@@ -12,7 +12,6 @@ from .common import (
     torch,
     validate_qkv,
 )
-from .reference import causal_attention_reference
 
 import cutlass.pipeline as pipeline
 import cutlass.utils.blackwell_helpers as sm100_utils
@@ -373,28 +372,22 @@ def _stage22_forward_impl(q, k, v, config: AttentionConfig):
     )
     compiled = _STAGE22_COMPILED_CACHE.get(cache_key)
     if compiled is None:
-        try:
-            compiled = cute.compile(
-                Stage22FlashAttentionTma(
-                    head_dim,
-                    normalized.block_m,
-                    normalized.block_n,
-                ),
-                q_cute,
-                k_cute,
-                v_cute,
-                o_cute,
-                scale,
-                current_stream,
-            )
-            _STAGE22_COMPILED_CACHE[cache_key] = compiled
-        except Exception:
-            return causal_attention_reference(q, k, v, normalized)
+        compiled = cute.compile(
+            Stage22FlashAttentionTma(
+                head_dim,
+                normalized.block_m,
+                normalized.block_n,
+            ),
+            q_cute,
+            k_cute,
+            v_cute,
+            o_cute,
+            scale,
+            current_stream,
+        )
+        _STAGE22_COMPILED_CACHE[cache_key] = compiled
 
-    try:
-        compiled(q_cute, k_cute, v_cute, o_cute, scale, current_stream)
-    except Exception:
-        return causal_attention_reference(q, k, v, normalized)
+    compiled(q_cute, k_cute, v_cute, o_cute, scale, current_stream)
     return o_flat.reshape(batch, heads, seq_len, head_dim)
 
 
