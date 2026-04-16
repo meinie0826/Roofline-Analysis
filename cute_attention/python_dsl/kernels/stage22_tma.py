@@ -1,129 +1,29 @@
 from __future__ import annotations
 
-import json
 from dataclasses import replace
-from pathlib import Path
-
-import cuda.bindings.driver as cuda
 
 from .common import (
     AttentionConfig,
     HAS_CUTE,
-    cutlass,
     cute,
     from_dlpack,
     require_torch,
     torch,
     validate_qkv,
 )
-from .stage22_tma_backend import Stage22FlashAttentionTma
+from .stage22_tma_backend import make_stage22_host
 
 
 MAX_SEQ_LEN_FOR_STAGE22_CUTE = 4096
 _STAGE22_COMPILED_CACHE = {}
-_STAGE22_AUTOTUNE_CACHE = {}
-_STAGE22_AUTOTUNE_CACHE_PATH = Path(__file__).resolve().parents[1] / ".cache" / "stage22_autotune.json"
 
 
-def _make_stage22_config(config: AttentionConfig, *, block_m: int, block_n: int, num_stages_kv: int) -> AttentionConfig:
-    return AttentionConfig(
-        softmax_scale=config.softmax_scale,
-        causal=config.causal,
-        block_m=block_m,
-        block_n=block_n,
-        num_threads=256,
-        num_stages_kv=num_stages_kv,
-        autotune=False,
-    )
-
-
-def _stage22_autotune_cache_key(config: AttentionConfig, q) -> str:
-    device_name = torch.cuda.get_device_name(q.device)
-    return "|".join(
-        [
-            device_name,
-            str(tuple(q.shape)),
-            str(q.dtype),
-            str(config.block_m),
-            str(config.block_n),
-            str(config.num_stages_kv),
-        ]
-    )
-
-
-def _load_stage22_autotune_cache_from_disk() -> dict[str, dict[str, int]]:
-    if not _STAGE22_AUTOTUNE_CACHE_PATH.exists():
-        return {}
-    try:
-        return json.loads(_STAGE22_AUTOTUNE_CACHE_PATH.read_text())
-    except Exception:
-        return {}
-
-
-def _save_stage22_autotune_cache_to_disk(entries: dict[str, dict[str, int]]) -> None:
-    _STAGE22_AUTOTUNE_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _STAGE22_AUTOTUNE_CACHE_PATH.write_text(json.dumps(entries, indent=2, sort_keys=True))
-
-
-def _stage22_candidate_values(preferred: int, values: list[int], *, limit: int) -> list[int]:
-    ordered = []
-    for value in [preferred, *values]:
-        if value <= 0 or value > limit or value in ordered:
-            continue
-        ordered.append(value)
-    return ordered
-
-
-def _stage22_can_implement(head_dim: int, config: AttentionConfig) -> bool:
-    return Stage22FlashAttentionTma.can_implement(
-        cutlass.Float16,
-        head_dim,
-        config.block_m,
-        config.block_n,
-        config.num_threads,
-        config.num_stages_kv,
-        True,
-    )
-
-
-def _stage22_safe_runtime_config(head_dim: int, config: AttentionConfig) -> AttentionConfig:
-    normalized = replace(
-        config,
-        num_threads=256,
-        num_stages_kv=(config.num_stages_kv or 3),
-        autotune=False,
-    )
-    if _stage22_can_implement(head_dim, normalized):
-        return normalized
-
-    stage_values = []
-    for value in (normalized.num_stages_kv, 3, 2):
-        if value in {2, 3} and value not in stage_values:
-            stage_values.append(value)
-
-    block_m_values = []
-    for value in (normalized.block_m, 128):
-        if value > 0 and value not in block_m_values:
-            block_m_values.append(value)
-
-    block_n_values = []
-    for value in (normalized.block_n, 128):
-        if value > 0 and value not in block_n_values:
-            block_n_values.append(value)
-
-    for num_stages_kv in stage_values:
-        for block_m in block_m_values:
-            for block_n in block_n_values:
-                trial = replace(
-                    normalized,
-                    block_m=block_m,
-                    block_n=block_n,
-                    num_stages_kv=num_stages_kv,
-                )
-                if _stage22_can_implement(head_dim, trial):
-                    return trial
-
-    return normalized
+def _normalize_stage22_config(config: AttentionConfig | None) -> AttentionConfig:
+    cfg = replace(config or AttentionConfig(), autotune=False)
+    num_threads = cfg.num_threads if cfg.num_threads > 0 else 256
+    if num_threads % 32 != 0:
+        raise ValueError("stage22 requires num_threads to be divisible by 32.")
+    return replace(cfg, num_threads=num_threads)
 
 
 def autotune_stage22_config(
@@ -135,183 +35,61 @@ def autotune_stage22_config(
     warmup: int = 2,
     repeat: int = 5,
 ) -> AttentionConfig:
-    require_torch()
-    config = replace(config or AttentionConfig(), num_threads=256)
-    validate_qkv(q, k, v)
-    if not config.causal:
-        raise ValueError("stage22 autotune only supports causal attention.")
-    if not HAS_CUTE:
-        raise RuntimeError("stage22 autotune requires cutlass.cute.")
-    if q.dtype != torch.float16:
-        raise ValueError(f"stage22 autotune currently only supports fp16 inputs, got {q.dtype}.")
-
-    batch, heads, seq_len, head_dim = q.shape
-    config = _stage22_safe_runtime_config(head_dim, config)
-    cache_key = (
-        tuple(q.shape),
-        str(q.dtype),
-        config.block_m,
-        config.block_n,
-        config.num_stages_kv,
-    )
-    cached = _STAGE22_AUTOTUNE_CACHE.get(cache_key)
-    if cached is not None:
-        if _stage22_can_implement(head_dim, cached):
-            return cached
-        _STAGE22_AUTOTUNE_CACHE.pop(cache_key, None)
-
-    cache_key_disk = _stage22_autotune_cache_key(config, q)
-    disk_cache = _load_stage22_autotune_cache_from_disk()
-    cached_disk = disk_cache.get(cache_key_disk)
-    if cached_disk is not None:
-        tuned = _make_stage22_config(
-            config,
-            block_m=int(cached_disk["block_m"]),
-            block_n=int(cached_disk["block_n"]),
-            num_stages_kv=int(cached_disk["num_stages_kv"]),
-        )
-        if _stage22_can_implement(head_dim, tuned):
-            _STAGE22_AUTOTUNE_CACHE[cache_key] = tuned
-            return tuned
-        disk_cache.pop(cache_key_disk, None)
-        _save_stage22_autotune_cache_to_disk(disk_cache)
-
-    block_m_values = _stage22_candidate_values(config.block_m, [128], limit=seq_len)
-    block_n_values = _stage22_candidate_values(config.block_n, [128], limit=seq_len)
-    stage_values = _stage22_candidate_values(config.num_stages_kv or 3, [3, 2], limit=3)
-
-    start_event = torch.cuda.Event(enable_timing=True)
-    end_event = torch.cuda.Event(enable_timing=True)
-    best_config = None
-    best_ms = None
-
-    for num_stages_kv in stage_values:
-        for block_m in block_m_values:
-            for block_n in block_n_values:
-                tuned = _make_stage22_config(
-                    config,
-                    block_m=block_m,
-                    block_n=block_n,
-                    num_stages_kv=num_stages_kv,
-                )
-                if not _stage22_can_implement(head_dim, tuned):
-                    continue
-                try:
-                    for _ in range(warmup):
-                        _stage22_forward_impl(q, k, v, tuned)
-
-                    torch.cuda.synchronize()
-                    elapsed = 0.0
-                    for _ in range(repeat):
-                        start_event.record()
-                        _stage22_forward_impl(q, k, v, tuned)
-                        end_event.record()
-                        torch.cuda.synchronize()
-                        elapsed += start_event.elapsed_time(end_event)
-                    elapsed /= repeat
-                except Exception:
-                    continue
-
-                if best_ms is None or elapsed < best_ms:
-                    best_ms = elapsed
-                    best_config = tuned
-
-    if best_config is None:
-        raise ValueError(
-            f"stage22 autotune failed to find a valid config for shape={(batch, heads, seq_len, head_dim)}."
-        )
-
-    _STAGE22_AUTOTUNE_CACHE[cache_key] = best_config
-    disk_cache[cache_key_disk] = {
-        "block_m": best_config.block_m,
-        "block_n": best_config.block_n,
-        "num_stages_kv": best_config.num_stages_kv,
-    }
-    _save_stage22_autotune_cache_to_disk(disk_cache)
-    return best_config
-
-
-def _stage22_forward_impl(q, k, v, config: AttentionConfig):
+    _ = warmup
+    _ = repeat
     require_torch()
     validate_qkv(q, k, v)
-    if not config.causal:
-        raise ValueError("stage22 only supports causal attention.")
-    if not HAS_CUTE:
-        raise RuntimeError("stage22 requires cutlass.cute.")
-    if q.dtype != torch.float16:
-        raise ValueError(f"stage22 currently only supports fp16 inputs, got {q.dtype}.")
-
-    _, _, seq_len, head_dim = q.shape
-    if seq_len > MAX_SEQ_LEN_FOR_STAGE22_CUTE:
-        raise ValueError(f"stage22 currently supports seq_len <= {MAX_SEQ_LEN_FOR_STAGE22_CUTE}, got {seq_len}.")
-    if config.num_stages_kv not in {0, 2, 3}:
-        raise ValueError(f"stage22 currently supports num_stages_kv in {{2, 3}}, got {config.num_stages_kv}.")
-
-    normalized = _stage22_safe_runtime_config(head_dim, config)
-    if not _stage22_can_implement(head_dim, normalized):
-        raise ValueError("stage22 config is not supported by the SM100 TMA backend constraints.")
-
-    q_perm = q.permute(0, 2, 1, 3).contiguous()
-    k_perm = k.permute(0, 2, 1, 3).contiguous()
-    v_perm = v.permute(0, 2, 1, 3).contiguous()
-    o_perm = torch.empty_like(q_perm)
-
-    q_cute = from_dlpack(q_perm, assumed_align=16)
-    k_cute = from_dlpack(k_perm, assumed_align=16)
-    v_cute = from_dlpack(v_perm, assumed_align=16)
-    o_cute = from_dlpack(o_perm, assumed_align=16)
-    scale = normalized.resolve_scale(head_dim)
-    torch_stream = torch.cuda.current_stream()
-    current_stream = cuda.CUstream(torch_stream.cuda_stream)
-
-    cache_key = (
-        tuple(q_perm.shape),
-        str(q_perm.dtype),
-        normalized.block_m,
-        normalized.block_n,
-        normalized.num_threads,
-        normalized.num_stages_kv,
-    )
-    compiled = _stage22_compile(
-        cache_key,
-        q_cute,
-        k_cute,
-        v_cute,
-        o_cute,
-        scale,
-        current_stream,
-        head_dim,
-        normalized.block_m,
-        normalized.block_n,
-        normalized.num_threads,
-        normalized.num_stages_kv,
-    )
-    compiled(q_cute, k_cute, v_cute, o_cute, scale, current_stream)
-    return o_perm.permute(0, 2, 1, 3).contiguous()
+    if not (q.dtype in [torch.float16, torch.bfloat16]):
+        raise ValueError(f"stage22 currently only supports fp16/bf16 inputs, got {q.dtype}.")
+    return _normalize_stage22_config(config)
 
 
 def stage22_forward(q, k, v, config: AttentionConfig | None = None):
-    config = config or AttentionConfig(block_m=128, block_n=128, num_threads=256, num_stages_kv=3)
-    tuned = replace(config, num_threads=256)
-    if config.autotune:
-        tuned = autotune_stage22_config(q, k, v, tuned)
-    elif tuned.num_stages_kv == 0:
-        tuned = replace(tuned, num_stages_kv=3)
+    require_torch()
+    validate_qkv(q, k, v)
+    if not HAS_CUTE:
+        raise RuntimeError("stage22 requires cutlass.cute.")
 
-    return _stage22_forward_impl(q, k, v, replace(tuned, autotune=False, num_threads=256))
+    cfg = _normalize_stage22_config(config)
+    if not cfg.causal:
+        raise ValueError("stage22 only supports causal attention.")
+    if q.dtype not in [torch.float16, torch.bfloat16]:
+        raise ValueError(f"stage22 currently only supports fp16/bf16 inputs, got {q.dtype}.")
+
+    batch, heads, seq_len, head_dim = q.shape
+    if seq_len > MAX_SEQ_LEN_FOR_STAGE22_CUTE:
+        raise ValueError(f"stage22 currently supports seq_len <= {MAX_SEQ_LEN_FOR_STAGE22_CUTE}, got {seq_len}.")
+
+    scale = cfg.resolve_scale(head_dim)
+    q_flat = q.reshape(batch * heads, seq_len, head_dim).contiguous()
+    k_flat = k.reshape(batch * heads, seq_len, head_dim).contiguous()
+    v_flat = v.reshape(batch * heads, seq_len, head_dim).contiguous()
+    o_flat = q_flat.new_zeros(q_flat.shape)
+
+    q_cute = from_dlpack(q_flat, assumed_align=16).mark_layout_dynamic()
+    k_cute = from_dlpack(k_flat, assumed_align=16).mark_layout_dynamic()
+    v_cute = from_dlpack(v_flat, assumed_align=16).mark_layout_dynamic()
+    o_cute = from_dlpack(o_flat, assumed_align=16).mark_layout_dynamic()
+
+    cache_key = (tuple(q_flat.shape), str(q_flat.dtype), cfg.num_threads)
+    compiled = _stage22_compile(cache_key, q_cute, k_cute, v_cute, o_cute, scale, cfg.num_threads)
+    compiled(q_cute, k_cute, v_cute, o_cute, scale)
+    return o_flat.reshape(batch, heads, seq_len, head_dim)
 
 
-def _stage22_compile(cache_key, q_cute, k_cute, v_cute, o_cute, scale, current_stream, head_dim, block_m, block_n, num_threads, num_stages_kv):
+def _stage22_compile(cache_key, q_cute, k_cute, v_cute, o_cute, scale, num_threads):
     compiled = _STAGE22_COMPILED_CACHE.get(cache_key)
     if compiled is None:
-        kernel = Stage22FlashAttentionTma(
-            head_dim=head_dim,
-            m_block_size=block_m,
-            n_block_size=block_n,
-            num_threads=num_threads,
-            num_stages_kv=num_stages_kv,
-            is_causal=True,
+        seq_len = cache_key[0][1]
+        head_dim = cache_key[0][2]
+        stage22_host = make_stage22_host(seq_len=seq_len, head_dim=head_dim, num_threads=num_threads)
+        compiled = cute.compile(
+            stage22_host,
+            q_cute,
+            k_cute,
+            v_cute,
+            o_cute,
+            scale,
         )
-        compiled = cute.compile(kernel, q_cute, k_cute, v_cute, o_cute, scale, current_stream)
         _STAGE22_COMPILED_CACHE[cache_key] = compiled
     return compiled

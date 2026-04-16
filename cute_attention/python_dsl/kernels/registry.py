@@ -189,7 +189,7 @@ STAGES: dict[str, StageDefinition] = {
     ),
     "stage22": StageDefinition(
         name="stage22",
-        description="Our own CuTe stage: first TMA-based experimental backend with staged K/V pipeline and stage21-derived consumer math.",
+        description="Our own CuTe stage: minimal standalone causal-attention rewrite used as a clean stage22 baseline.",
         implementation=stage22_forward,
         backend="own-cute-dsl",
     ),
