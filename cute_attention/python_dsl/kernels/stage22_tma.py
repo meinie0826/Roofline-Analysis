@@ -273,7 +273,7 @@ class Stage22FlashAttentionTma:
                 while col < tile_cols:
                     score = cutlass.Float32(0.0)
                     for d in cutlass.range_constexpr(self.head_dim):
-                        score += sQ[row, d, 0].to(cutlass.Float32) * sK[col, d, 0].to(cutlass.Float32)
+                        score += sQ[(row, d), 0].to(cutlass.Float32) * sK[(col, d), 0].to(cutlass.Float32)
                     score *= softmax_scale
                     block_max = cute.arch.fmax(block_max, score)
                     col += 1
@@ -288,12 +288,12 @@ class Stage22FlashAttentionTma:
                 while col < tile_cols:
                     score = cutlass.Float32(0.0)
                     for d in cutlass.range_constexpr(self.head_dim):
-                        score += sQ[row, d, 0].to(cutlass.Float32) * sK[col, d, 0].to(cutlass.Float32)
+                        score += sQ[(row, d), 0].to(cutlass.Float32) * sK[(col, d), 0].to(cutlass.Float32)
                     score *= softmax_scale
                     p = cute.math.exp(score - new_max)
                     block_sum += p
                     for d in cutlass.range_constexpr(self.head_dim):
-                        acc_o[d] = acc_o[d] + p * sV[col, d, 0].to(cutlass.Float32)
+                        acc_o[d] = acc_o[d] + p * sV[(col, d), 0].to(cutlass.Float32)
                     col += 1
 
                 row_sum = row_sum * old_scale + block_sum
