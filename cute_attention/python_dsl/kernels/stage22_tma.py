@@ -217,8 +217,8 @@ class Stage22FlashAttentionTma:
             q_pipe.producer_acquire(q_prod)
             cute.copy(
                 q_tma_atom,
-                tQgQ[(None, 0)],
-                tQsQ[(None, 0)],
+                tQgQ[None, 0],
+                tQsQ[None, 0],
                 tma_bar_ptr=q_pipe.producer_get_barrier(q_prod),
             )
             q_pipe.producer_commit(q_prod)
@@ -246,8 +246,8 @@ class Stage22FlashAttentionTma:
                 k_pipe.producer_acquire(k_prod)
                 cute.copy(
                     k_tma_atom,
-                    tKgK[(None, n_tile)],
-                    tKsK[(None, 0)],
+                    tKgK[None, n_tile],
+                    tKsK[None, 0],
                     tma_bar_ptr=k_pipe.producer_get_barrier(k_prod),
                 )
                 k_pipe.producer_commit(k_prod)
@@ -256,8 +256,8 @@ class Stage22FlashAttentionTma:
                 v_pipe.producer_acquire(v_prod)
                 cute.copy(
                     v_tma_atom,
-                    tVgV[(None, n_tile)],
-                    tVsV[(None, 0)],
+                    tVgV[None, n_tile],
+                    tVsV[None, 0],
                     tma_bar_ptr=v_pipe.producer_get_barrier(v_prod),
                 )
                 v_pipe.producer_commit(v_prod)
