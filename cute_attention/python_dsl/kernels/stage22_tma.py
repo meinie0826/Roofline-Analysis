@@ -367,7 +367,7 @@ if HAS_CUTE:
                 barrier_id=2, num_threads=self._num_threads
             )
             tmem_allocator = utils.TmemAllocator(
-                tmem_holding_buf.data_ptr(),
+                tmem_holding_buf,
                 barrier_for_retrieve=tmem_alloc_barrier,
             )
             num_tmem_cols = 512  # max TMEM columns for SM100
