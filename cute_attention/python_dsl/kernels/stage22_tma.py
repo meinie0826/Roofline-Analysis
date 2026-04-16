@@ -231,16 +231,17 @@ class Stage22FlashAttentionTma:
 
         seq_len = o.shape[0]
         q_row = m_block * self.block_m + row
-        if row >= self.block_m or q_row >= seq_len:
-            return
+        row_in_bounds = q_row < seq_len
+        block_row_limit = cute.min((m_block + 1) * self.block_m, seq_len)
+        n_tiles = cute.ceil_div(block_row_limit, self.block_n)
 
         acc_o = cute.make_rmem_tensor((self.head_dim,), cutlass.Float32)
         acc_o.fill(0.0)
         row_max = -cutlass.Float32.inf
         row_sum = cutlass.Float32(0.0)
 
-        n_tiles = cute.ceil_div(q_row + 1, self.block_n)
-        for n_tile in cutlass.range(n_tiles, unroll=1):
+        n_tile = 0
+        while n_tile < n_tiles:
             if warp_idx == 0:
                 k_pipe.producer_acquire(k_prod)
                 cute.copy(
@@ -266,44 +267,51 @@ class Stage22FlashAttentionTma:
             v_pipe.consumer_wait(v_cons)
             cute.arch.barrier()
 
-            tile_start = n_tile * self.block_n
-            tile_stop = cute.min(tile_start + self.block_n, q_row + 1)
-            tile_cols = tile_stop - tile_start
+            if row_in_bounds:
+                tile_start = n_tile * self.block_n
+                tile_stop = cute.min(tile_start + self.block_n, q_row + 1)
+                tile_cols = tile_stop - tile_start
 
-            block_max = -cutlass.Float32.inf
-            for col in cutlass.range(tile_cols, unroll=1):
-                score = cutlass.Float32(0.0)
+                block_max = -cutlass.Float32.inf
+                col = 0
+                while col < tile_cols:
+                    score = cutlass.Float32(0.0)
+                    for d in cutlass.range_constexpr(self.head_dim):
+                        score += sQ[row, d, 0].to(cutlass.Float32) * sK[col, d, 0].to(cutlass.Float32)
+                    score *= softmax_scale
+                    block_max = cute.arch.fmax(block_max, score)
+                    col += 1
+
+                new_max = cute.arch.fmax(row_max, block_max)
+                old_scale = cute.math.exp(row_max - new_max)
                 for d in cutlass.range_constexpr(self.head_dim):
-                    score += sQ[row, d, 0].to(cutlass.Float32) * sK[col, d, 0].to(cutlass.Float32)
-                score *= softmax_scale
-                block_max = cute.arch.fmax(block_max, score)
+                    acc_o[d] = acc_o[d] * old_scale
 
-            new_max = cute.arch.fmax(row_max, block_max)
-            old_scale = cute.math.exp(row_max - new_max)
-            for d in cutlass.range_constexpr(self.head_dim):
-                acc_o[d] = acc_o[d] * old_scale
+                block_sum = cutlass.Float32(0.0)
+                col = 0
+                while col < tile_cols:
+                    score = cutlass.Float32(0.0)
+                    for d in cutlass.range_constexpr(self.head_dim):
+                        score += sQ[row, d, 0].to(cutlass.Float32) * sK[col, d, 0].to(cutlass.Float32)
+                    score *= softmax_scale
+                    p = cute.math.exp(score - new_max)
+                    block_sum += p
+                    for d in cutlass.range_constexpr(self.head_dim):
+                        acc_o[d] = acc_o[d] + p * sV[col, d, 0].to(cutlass.Float32)
+                    col += 1
 
-            block_sum = cutlass.Float32(0.0)
-            for col in cutlass.range(tile_cols, unroll=1):
-                score = cutlass.Float32(0.0)
-                for d in cutlass.range_constexpr(self.head_dim):
-                    score += sQ[row, d, 0].to(cutlass.Float32) * sK[col, d, 0].to(cutlass.Float32)
-                score *= softmax_scale
-                p = cute.math.exp(score - new_max)
-                block_sum += p
-                for d in cutlass.range_constexpr(self.head_dim):
-                    acc_o[d] = acc_o[d] + p * sV[col, d, 0].to(cutlass.Float32)
-
-            row_sum = row_sum * old_scale + block_sum
-            row_max = new_max
+                row_sum = row_sum * old_scale + block_sum
+                row_max = new_max
 
             k_pipe.consumer_release(k_cons)
             v_pipe.consumer_release(v_cons)
             k_cons.advance()
             v_cons.advance()
+            n_tile += 1
 
-        for d in cutlass.range_constexpr(self.head_dim):
-            gO[row, d] = (acc_o[d] / row_sum).to(cutlass.Float16)
+        if row_in_bounds:
+            for d in cutlass.range_constexpr(self.head_dim):
+                gO[row, d] = (acc_o[d] / row_sum).to(cutlass.Float16)
 
 
 def _normalize_stage22_config(config: AttentionConfig | None) -> AttentionConfig:
