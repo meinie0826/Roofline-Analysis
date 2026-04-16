@@ -109,7 +109,7 @@ _STAGE_NOTES = {
     "stage19": "warpgroup-layout experimental backend; independent multistage path that swaps to Hopper-style warpgroup shared-memory layout atoms",
     "stage20": "aggressive warpspec experimental backend; circular-buffer steady-state mainloop with full-slot prefetch and dedicated multistage autotune",
     "stage21": "explicit producer/consumer state-machine backend; stage18-derived mainline with dedicated prefetch, advance, and wait helpers",
-    "stage22": "single-file Blackwell tcgen05+TMA backend under bring-up; fixed safe defaults and no stage fallback",
+    "stage22": "ported wrapper around CUTLASS CuTeDSL Blackwell FMHA example; fixed Blackwell-friendly stage22 defaults",
 }
 
 
