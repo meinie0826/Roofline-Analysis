@@ -99,6 +99,7 @@ class Stage22FlashAttentionTma:
             cutlass.Float32,
             cta_group,
             pv_mma_tiler[:2],
+            tcgen05.OperandSource.TMEM,
         )
         cluster_shape_mnk = (1, 1, 1)
         cluster_layout_vmnk = cute.tiled_divide(
@@ -174,6 +175,12 @@ class Stage22FlashAttentionTma:
             self._dtype,
             self._num_stages_kv,
         )
+        tP_layout_staged = sm100_utils.make_smem_layout_a(
+            pv_tiled_mma,
+            pv_mma_tiler,
+            self._dtype,
+            1,
+        )
         sV_layout_staged = sm100_utils.make_smem_layout_b(
             pv_tiled_mma,
             pv_mma_tiler,
@@ -184,6 +191,7 @@ class Stage22FlashAttentionTma:
             sQ_layout_staged,
             sQ_load_layout,
             sK_layout_staged,
+            tP_layout_staged,
             sV_layout_staged,
             qk_tiled_mma,
             pv_tiled_mma,
@@ -424,6 +432,48 @@ class Stage22FlashAttentionTma:
         for r in cutlass.range_constexpr(cute.size(acc_O_mn.shape[0])):
             acc_O_mn[r, None] = acc_O_mn[r, None].load() + acc_O_partial_mn[r, None].load()
 
+    @cute.jit
+    def _store_rmem_prob_to_tmem(
+        self,
+        consumer_slice_idx,
+        thr_mma_qk,
+        thr_mma_pv,
+        acc_S: cute.Tensor,
+        acc_S_tmem: cute.Tensor,
+        p_tmem_layout_staged,
+    ):
+        tP = cute.make_tensor(acc_S_tmem.iterator, p_tmem_layout_staged.outer)
+        tOrP = thr_mma_pv.make_fragment_A(tP)[None, None, None, 0]
+
+        p_tile_like_fp32 = self._n_block_size // 32 * self._dtype.width
+        tP_store_layout = cute.composition(
+            acc_S_tmem.layout,
+            cute.make_layout((self._m_block_size, p_tile_like_fp32)),
+        )
+        tP_store = cute.make_tensor(acc_S_tmem.iterator, tP_store_layout)
+        tmem_store_atom = cute.make_copy_atom(
+            tcgen05.copy.St32x32bOp(tcgen05.copy.Repetition(self._n_block_size // 4)),
+            cutlass.Float32,
+        )
+        thr_tmem_store = tcgen05.make_tmem_copy(tmem_store_atom, tP_store).get_slice(
+            consumer_slice_idx
+        )
+        tPrP_f32 = cute.make_fragment(
+            thr_tmem_store.partition_S(
+                cute.make_identity_tensor((self._m_block_size, self._n_block_size))
+            ).shape,
+            cutlass.Float32,
+        )
+        tPrP = cute.make_tensor(
+            cute.recast_ptr(tPrP_f32.iterator, dtype=self._dtype),
+            acc_S.layout,
+        )
+        tPrP.store(acc_S.load().to(self._dtype))
+        tPtP = thr_tmem_store.partition_D(tP_store)
+        cute.copy(thr_tmem_store, tPrP_f32, tPtP)
+        cute.arch.fence_view_async_tmem_store()
+        return tOrP
+
     def _make_tma_kv_atoms_and_tensors(
         self,
         mK: cute.Tensor,
@@ -481,6 +531,7 @@ class Stage22FlashAttentionTma:
         tSrQ,
         tSrK,
         tOrVt,
+        p_tmem_layout_staged,
         acc_O,
         row_max,
         row_sum,
@@ -530,34 +581,28 @@ class Stage22FlashAttentionTma:
             thr_mma=thr_mma_qk,
         )
 
-        rP = cute.make_fragment_like(acc_S, self._dtype)
-        rP.store(acc_S.load().to(self._dtype))
-        rP_layout_divided = cute.logical_divide(rP.layout, (None, None, 2))
-        rP_mma_view = cute.make_layout(
-            (
-                (rP_layout_divided.shape[0], rP_layout_divided.shape[2][0]),
-                rP_layout_divided.shape[1],
-                rP_layout_divided.shape[2][1],
-            ),
-            stride=(
-                (rP_layout_divided.stride[0], rP_layout_divided.stride[2][0]),
-                rP_layout_divided.stride[1],
-                rP_layout_divided.stride[2][1],
-            ),
+        tOrP = self._store_rmem_prob_to_tmem(
+            consumer_slice_idx,
+            thr_mma_qk,
+            thr_mma_pv,
+            acc_S,
+            acc_S_load,
+            p_tmem_layout_staged,
         )
-        tOrS = cute.make_tensor(rP.iterator, rP_mma_view)
         acc_shape_O = thr_mma_pv.partition_shape_C((self._m_block_size, self._head_dim_padded))
         acc_O_tmem = thr_mma_pv.make_fragment_C(cute.append(acc_shape_O, 2))
         acc_O_stage = acc_O_tmem[None, None, None, 0]
         acc_O_load = acc_O_tmem[(None, None), 0, 0, 0]
-        pv_tiled_mma.set(tcgen05.Field.ACCUMULATE, False)
-        cute.gemm(
-            pv_tiled_mma,
-            acc_O_stage,
-            tOrS,
-            tOrVt,
-            acc_O_stage,
-        )
+        for kphase_idx in cutlass.range(cute.size(tOrP, mode=[2]), unroll_full=True):
+            kphase_coord = (None, None, kphase_idx)
+            pv_tiled_mma.set(tcgen05.Field.ACCUMULATE, kphase_idx != 0)
+            cute.gemm(
+                pv_tiled_mma,
+                acc_O_stage,
+                tOrP[kphase_coord],
+                tOrVt[kphase_coord],
+                acc_O_stage,
+            )
         acc_O_partial = self._load_tmem_fragment_to_rmem(
             consumer_slice_idx,
             thr_mma_pv,
@@ -773,6 +818,7 @@ class Stage22FlashAttentionTma:
             sQ_layout,
             sQ_load_layout,
             sK_layout_staged,
+            p_tmem_layout_staged,
             sV_layout_staged,
             qk_tiled_mma,
             pv_tiled_mma,
@@ -953,6 +999,7 @@ class Stage22FlashAttentionTma:
                         stage0_views[2],
                         stage0_views[3],
                         stage0_views[4],
+                        p_tmem_layout_staged,
                         acc_O,
                         row_max,
                         row_sum,
@@ -976,6 +1023,7 @@ class Stage22FlashAttentionTma:
                         stage1_views[2],
                         stage1_views[3],
                         stage1_views[4],
+                        p_tmem_layout_staged,
                         acc_O,
                         row_max,
                         row_sum,
@@ -1000,6 +1048,7 @@ class Stage22FlashAttentionTma:
                             stage2_views[2],
                             stage2_views[3],
                             stage2_views[4],
+                            p_tmem_layout_staged,
                             acc_O,
                             row_max,
                             row_sum,
