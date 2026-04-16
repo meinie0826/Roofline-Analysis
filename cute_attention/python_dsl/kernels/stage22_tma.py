@@ -188,8 +188,8 @@ class Stage22FlashAttentionTma:
             q_tma_atom,
             0,
             cute.make_layout(1),
-            cute.group_modes(sQ, 0, 3),
-            cute.group_modes(gQ, 0, 2),
+            cute.group_modes(sQ, 0, cute.rank(sQ)),
+            cute.group_modes(gQ, 0, cute.rank(gQ)),
         )
         tKsK, tKgK = cpasync.tma_partition(
             k_tma_atom,
