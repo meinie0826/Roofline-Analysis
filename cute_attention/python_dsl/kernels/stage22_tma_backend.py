@@ -301,15 +301,17 @@ class Stage22FlashAttentionTma:
             cutlass.Float32,
         )
         tCcC = thr_mma.partition_C(cute.make_identity_tensor(tile_shape))
-        thr_tmem_load = tcgen05.make_tmem_copy(tmem_load_atom, acc_tmem).get_slice(
+        tiled_tmem_load = tcgen05.make_tmem_copy(tmem_load_atom, acc_tmem)
+        thr_tmem_load = tiled_tmem_load.get_slice(
             consumer_slice_idx
         )
         tCtC = thr_tmem_load.partition_S(acc_tmem)
-        acc_rmem = cute.make_fragment(
-            thr_tmem_load.partition_D(tCcC).shape,
+        tCrC = thr_tmem_load.partition_D(tCcC)
+        acc_rmem = cute.make_rmem_tensor(
+            tCrC.shape,
             cutlass.Float32,
         )
-        cute.copy(thr_tmem_load, tCtC, acc_rmem)
+        cute.copy(tiled_tmem_load, tCtC, acc_rmem)
         return acc_rmem
 
     def _threadquad_reduce(self, val: cutlass.Float32, op):
