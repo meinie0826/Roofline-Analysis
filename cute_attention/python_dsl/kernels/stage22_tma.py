@@ -86,6 +86,46 @@ def _stage22_can_implement(head_dim: int, config: AttentionConfig) -> bool:
     )
 
 
+def _stage22_safe_runtime_config(head_dim: int, config: AttentionConfig) -> AttentionConfig:
+    normalized = replace(
+        config,
+        num_threads=256,
+        num_stages_kv=(config.num_stages_kv or 3),
+        autotune=False,
+    )
+    if _stage22_can_implement(head_dim, normalized):
+        return normalized
+
+    stage_values = []
+    for value in (normalized.num_stages_kv, 3, 2):
+        if value in {2, 3} and value not in stage_values:
+            stage_values.append(value)
+
+    block_m_values = []
+    for value in (normalized.block_m, 128):
+        if value > 0 and value not in block_m_values:
+            block_m_values.append(value)
+
+    block_n_values = []
+    for value in (normalized.block_n, 128):
+        if value > 0 and value not in block_n_values:
+            block_n_values.append(value)
+
+    for num_stages_kv in stage_values:
+        for block_m in block_m_values:
+            for block_n in block_n_values:
+                trial = replace(
+                    normalized,
+                    block_m=block_m,
+                    block_n=block_n,
+                    num_stages_kv=num_stages_kv,
+                )
+                if _stage22_can_implement(head_dim, trial):
+                    return trial
+
+    return normalized
+
+
 def autotune_stage22_config(
     q,
     k,
@@ -106,6 +146,7 @@ def autotune_stage22_config(
         raise ValueError(f"stage22 autotune currently only supports fp16 inputs, got {q.dtype}.")
 
     batch, heads, seq_len, head_dim = q.shape
+    config = _stage22_safe_runtime_config(head_dim, config)
     cache_key = (
         tuple(q.shape),
         str(q.dtype),
@@ -206,7 +247,7 @@ def _stage22_forward_impl(q, k, v, config: AttentionConfig):
     if config.num_stages_kv not in {0, 2, 3}:
         raise ValueError(f"stage22 currently supports num_stages_kv in {{2, 3}}, got {config.num_stages_kv}.")
 
-    normalized = replace(config, num_threads=256, num_stages_kv=(config.num_stages_kv or 3), autotune=False)
+    normalized = _stage22_safe_runtime_config(head_dim, config)
     if not _stage22_can_implement(head_dim, normalized):
         raise ValueError("stage22 config is not supported by the SM100 TMA backend constraints.")
 
