@@ -104,7 +104,7 @@ class Stage22FlashAttentionTma:
     @cute.kernel
     def kernel(
         self,
-        tiled_mma: cute.TiledMma,
+        _tiled_mma: cute.TiledMma,
         q_tma_atom: cute.CopyAtom,
         q_tma_tensor: cute.Tensor,
         k_tma_atom: cute.CopyAtom,
@@ -179,35 +179,31 @@ class Stage22FlashAttentionTma:
         v_prod = pipeline.make_pipeline_state(pipeline.PipelineUserType.Producer, 1)
         v_cons = pipeline.make_pipeline_state(pipeline.PipelineUserType.Consumer, 1)
 
-        thr_mma = tiled_mma.get_slice(0)
         gQ = cute.local_tile(q_tma_tensor[None, None, batch_head], (self.block_m, self.head_dim), (m_block, 0))
         gK = cute.local_tile(k_tma_tensor[None, None, batch_head], (self.block_n, self.head_dim), (None, 0))
         gV = cute.local_tile(v_tma_tensor[None, None, batch_head], (self.block_n, self.head_dim), (None, 0))
         gO = cute.local_tile(o[None, None, batch_head], (self.block_m, self.head_dim), (m_block, 0))
 
-        tQgQ = thr_mma.partition_A(gQ)
-        tKgK = thr_mma.partition_B(gK)
-        tVgV = thr_mma.partition_B(gV)
         tQsQ, tQgQ = cpasync.tma_partition(
             q_tma_atom,
             0,
-            cute.make_layout((1,)),
+            cute.make_layout(1),
             cute.group_modes(sQ, 0, 3),
-            cute.group_modes(tQgQ, 0, 3),
+            cute.group_modes(gQ, 0, 2),
         )
         tKsK, tKgK = cpasync.tma_partition(
             k_tma_atom,
             0,
-            cute.make_layout((1,)),
+            cute.make_layout(1),
             cute.group_modes(sK, 0, 3),
-            cute.group_modes(tKgK, 0, 3),
+            cute.group_modes(gK, 0, 2),
         )
         tVsV, tVgV = cpasync.tma_partition(
             v_tma_atom,
             0,
-            cute.make_layout((1,)),
+            cute.make_layout(1),
             cute.group_modes(sV, 0, 3),
-            cute.group_modes(tVgV, 0, 3),
+            cute.group_modes(gV, 0, 2),
         )
 
         if warp_idx == 0:
@@ -217,8 +213,8 @@ class Stage22FlashAttentionTma:
             q_pipe.producer_acquire(q_prod)
             cute.copy(
                 q_tma_atom,
-                tQgQ[None, 0],
-                tQsQ[None, 0],
+                tQgQ,
+                tQsQ,
                 tma_bar_ptr=q_pipe.producer_get_barrier(q_prod),
             )
             q_pipe.producer_commit(q_prod)

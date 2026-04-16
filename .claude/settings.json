@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"/Users/meiziyuan/Roofline-Analysis\" rev-parse --abbrev-ref --symbolic-full-name @{u})"
+    ]
+  }
+}
