@@ -1,52 +1,27 @@
 from dataclasses import replace
-import importlib
 import math
-import sys
 
 import cuda.bindings.driver as cuda
 
 from .common import (
     AttentionConfig,
     HAS_CUTE,
-    PROJECT_ROOT,
     require_torch,
     torch,
     validate_qkv,
+)
+from .stage22_blackwell_backend import (
+    BlackwellFusedMultiHeadAttentionForward,
+    Int32,
+    cutlass,
+    from_dlpack,
+    cute,
+    fmha_utils,
 )
 
 MAX_SEQ_LEN_FOR_STAGE22_CUTE = 4096
 _STAGE22_COMPILED_CACHE = {}
 _LOG2_E = math.log2(math.e)
-
-
-def _load_blackwell_fmha_symbols():
-    cutlass_root = PROJECT_ROOT / "cutlass" / "examples" / "python" / "CuTeDSL"
-    blackwell_root = cutlass_root / "blackwell"
-    for path in (cutlass_root, blackwell_root):
-        path_str = str(path)
-        if path_str not in sys.path:
-            sys.path.insert(0, path_str)
-
-    fmha_module = importlib.import_module("fmha")
-    fmha_utils = importlib.import_module("helpers.fmha_helpers")
-    return (
-        fmha_module.BlackwellFusedMultiHeadAttentionForward,
-        fmha_utils.MaskEnum,
-        fmha_module.cutlass,
-        fmha_module.cute,
-        fmha_module.Int32,
-        fmha_module.from_dlpack,
-    )
-
-
-(
-    BlackwellFusedMultiHeadAttentionForward,
-    _MaskEnum,
-    cutlass,
-    cute,
-    Int32,
-    from_dlpack,
-) = _load_blackwell_fmha_symbols()
 
 
 def _stage22_cache_key(q, config: AttentionConfig):
@@ -125,7 +100,7 @@ def _stage22_forward_impl(q, k, v, config: AttentionConfig):
             cutlass.Float32,
             (normalized.block_m, normalized.block_n, head_dim),
             False,
-            _MaskEnum.WINDOW_MASK,
+            fmha_utils.MaskEnum.WINDOW_MASK,
         )
         compiled = cute.compile(
             fmha,
