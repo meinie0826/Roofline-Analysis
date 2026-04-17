@@ -164,7 +164,7 @@ class BlackwellFusedMultiHeadAttentionForward:
         self.load_warp_id = 13
         self.epilogue_warp_id = 14
         self.empty_warp_id = 15
-        self.tmem_alloc_cols = cute.arch.get_max_tmem_alloc_cols("sm_100")
+        self.tmem_alloc_cols = getattr(cute.arch, "get_max_tmem_alloc_cols", lambda _arch: 512)("sm_100")
 
         self.threads_per_warp = 32
         self.threads_per_cta = self.threads_per_warp * len(
