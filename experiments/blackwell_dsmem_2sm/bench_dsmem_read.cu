@@ -88,6 +88,8 @@ __global__ void dsmem_read_kernel(StreamResult* out, int iters, int buffer_bytes
   }
 
   __syncthreads();
+  // Keep the producer CTA alive until all remote readers finish.
+  cluster.sync();
   if (threadIdx.x == 0 && timed_block) {
     stop = clock64();
     out->cycles = stop - start;

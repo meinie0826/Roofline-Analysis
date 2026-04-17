@@ -136,6 +136,8 @@ __global__ void dsmem_write_kernel(StreamResult* out, int iters, int buffer_byte
     checksum ^= checksum_vec<VecBytes>(verify_ptr[idx]) + static_cast<unsigned long long>(idx);
   }
   __syncthreads();
+  // Ensure all remote verification is complete before any CTA exits.
+  cluster.sync();
 
   if (threadIdx.x == 0 && timed_block) {
     stop = clock64();
