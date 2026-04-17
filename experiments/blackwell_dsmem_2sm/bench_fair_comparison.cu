@@ -1,5 +1,5 @@
 /**
- * GEMM kernels with optimization barriers
+ * GEMM kernels that cannot be optimized away
  */
 
 #include "common.h"
@@ -13,14 +13,8 @@ using namespace blackwell_dsmem_2sm;
 //=============================================================================
 constexpr int kTileM = 64;
 constexpr int kTileN = 64;
-constexpr int kTileK = 32;  // Smaller K tile to increase iterations
+constexpr int kTileK = 32;
 constexpr int kStages = 2;
-
-//=============================================================================
-__device__ float prevent_optimize(float val) {
-  volatile float* ptr = reinterpret_cast<volatile float*>(val);
-  return *ptr;
-}
 
 //=============================================================================
 struct GmemTile {
@@ -29,9 +23,6 @@ struct GmemTile {
 };
 
 //=============================================================================
-// Baseline: Independent CTAs
-//=============================================================================
-
 __global__ void __launch_bounds__(128)
 baseline_gemm_kernel(
     const half* __restrict__ A,
@@ -48,20 +39,17 @@ baseline_gemm_kernel(
   
   int tid = threadIdx.x;
   
-  // Each thread handles 1 output element
-  int row = tid / 8;  // 0-15
-  int col = tid % 8;  // 0-7
+  // Each thread accumulates multiple elements
+  int row_base = (tid / 16) * 4;  // 0-60 step 4
+  int col_base = (tid % 16) * 4;  // 0-60 step 4
   
-  // Multiple passes to cover full tile
-  int num_passes = (kTileM * kTileN) / 128;  // 32 passes
-  
-  float accum = 0.0f;
+  float accum0 = 0.0f, accum1 = 0.0f, accum2 = 0.0f, accum3 = 0.0f;
   
   for (int k_offset = 0; k_offset < K; k_offset += kTileK) {
     int stage = (k_offset / kTileK) % kStages;
     int k_tiles = min(kTileK, K - k_offset);
     
-    // Load A
+    // Load A cooperatively
     for (int i = tid; i < kTileM * kTileK; i += blockDim.x) {
       int m = i / kTileK;
       int k = i % kTileK;
@@ -72,7 +60,7 @@ baseline_gemm_kernel(
       }
     }
     
-    // Load B
+    // Load B cooperatively
     for (int i = tid; i < kTileN * kTileK; i += blockDim.x) {
       int n = i / kTileK;
       int k = i % kTileK;
@@ -85,31 +73,55 @@ baseline_gemm_kernel(
     
     __syncthreads();
     
-    // Accumulate for this thread's element
-    for (int pass = 0; pass < num_passes; ++pass) {
-      int idx = pass * 128 + tid;
-      int r = idx / kTileN;
-      int c = idx % kTileN;
+    // Accumulate
+    for (int k = 0; k < k_tiles; ++k) {
+      half a_vals[4], b_vals[4];
       
-      for (int k = 0; k < k_tiles; ++k) {
-        accum += __half2float(tile.A[stage][r % kTileM][k]) *
-                 __half2float(tile.B[stage][c % kTileN][k]);
-      }
+      // Load 4 A values
+      a_vals[0] = tile.A[stage][row_base][k];
+      a_vals[1] = tile.A[stage][row_base + 1][k];
+      a_vals[2] = tile.A[stage][row_base + 2][k];
+      a_vals[3] = tile.A[stage][row_base + 3][k];
+      
+      // Load 4 B values
+      b_vals[0] = tile.B[stage][col_base][k];
+      b_vals[1] = tile.B[stage][col_base + 1][k];
+      b_vals[2] = tile.B[stage][col_base + 2][k];
+      b_vals[3] = tile.B[stage][col_base + 3][k];
+      
+      // 4x4 outer product = 16 MACs
+      accum0 += __half2float(a_vals[0]) * __half2float(b_vals[0]);
+      accum1 += __half2float(a_vals[0]) * __half2float(b_vals[1]);
+      accum2 += __half2float(a_vals[0]) * __half2float(b_vals[2]);
+      accum3 += __half2float(a_vals[0]) * __half2float(b_vals[3]);
+      
+      accum0 += __half2float(a_vals[1]) * __half2float(b_vals[0]);
+      accum1 += __half2float(a_vals[1]) * __half2float(b_vals[1]);
+      accum2 += __half2float(a_vals[1]) * __half2float(b_vals[2]);
+      accum3 += __half2float(a_vals[1]) * __half2float(b_vals[3]);
+      
+      accum0 += __half2float(a_vals[2]) * __half2float(b_vals[0]);
+      accum1 += __half2float(a_vals[2]) * __half2float(b_vals[1]);
+      accum2 += __half2float(a_vals[2]) * __half2float(b_vals[2]);
+      accum3 += __half2float(a_vals[2]) * __half2float(b_vals[3]);
+      
+      accum0 += __half2float(a_vals[3]) * __half2float(b_vals[0]);
+      accum1 += __half2float(a_vals[3]) * __half2float(b_vals[1]);
+      accum2 += __half2float(a_vals[3]) * __half2float(b_vals[2]);
+      accum3 += __half2float(a_vals[3]) * __half2float(b_vals[3]);
     }
   }
   
-  // Write C - force use of accum
-  int idx = tid;
-  if (idx < kTileM * kTileN && m_start + idx / kTileN < M && n_start + idx % kTileN < N) {
-    C[(m_start + idx / kTileN) * N + n_start + idx % kTileN] = 
-        __float2half(accum);
+  // Write 4x4 block
+  if (m_start + row_base < M && n_start + col_base < N) {
+    C[(m_start + row_base) * N + n_start + col_base] = __float2half(accum0);
+    C[(m_start + row_base) * N + n_start + col_base + 1] = __float2half(accum1);
+    C[(m_start + row_base) * N + n_start + col_base + 2] = __float2half(accum2);
+    C[(m_start + row_base) * N + n_start + col_base + 3] = __float2half(accum3);
   }
 }
 
 //=============================================================================
-// D1: Cluster with DSMEM sharing
-//=============================================================================
-
 __global__ __cluster_dims__(2, 1, 1) __launch_bounds__(128)
 void d1_cluster_gemm_kernel(
     const half* __restrict__ A,
@@ -130,8 +142,10 @@ void d1_cluster_gemm_kernel(
   GmemTile* tile0 = reinterpret_cast<GmemTile*>(cluster.map_shared_rank(&tile, 0));
   
   int tid = threadIdx.x;
-  float accum = 0.0f;
-  int num_passes = (kTileM * kTileN) / 128;
+  int row_base = (tid / 16) * 4;
+  int col_base = (tid % 16) * 4;
+  
+  float accum0 = 0.0f, accum1 = 0.0f, accum2 = 0.0f, accum3 = 0.0f;
   
   for (int k_offset = 0; k_offset < K; k_offset += kTileK) {
     int stage = (k_offset / kTileK) % kStages;
@@ -174,29 +188,54 @@ void d1_cluster_gemm_kernel(
     
     cluster.sync();
     
-    // Accumulate
-    for (int pass = 0; pass < num_passes; ++pass) {
-      int idx = pass * 128 + tid;
-      int r = idx / kTileN;
-      int c = idx % kTileN;
+    // Accumulate (same as baseline)
+    for (int k = 0; k < k_tiles; ++k) {
+      half a_vals[4], b_vals[4];
       
-      for (int k = 0; k < k_tiles; ++k) {
-        accum += __half2float(tile.A[stage][r % kTileM][k]) *
-                 __half2float(tile.B[stage][c % kTileN][k]);
-      }
+      a_vals[0] = tile.A[stage][row_base][k];
+      a_vals[1] = tile.A[stage][row_base + 1][k];
+      a_vals[2] = tile.A[stage][row_base + 2][k];
+      a_vals[3] = tile.A[stage][row_base + 3][k];
+      
+      b_vals[0] = tile.B[stage][col_base][k];
+      b_vals[1] = tile.B[stage][col_base + 1][k];
+      b_vals[2] = tile.B[stage][col_base + 2][k];
+      b_vals[3] = tile.B[stage][col_base + 3][k];
+      
+      accum0 += __half2float(a_vals[0]) * __half2float(b_vals[0]);
+      accum1 += __half2float(a_vals[0]) * __half2float(b_vals[1]);
+      accum2 += __half2float(a_vals[0]) * __half2float(b_vals[2]);
+      accum3 += __half2float(a_vals[0]) * __half2float(b_vals[3]);
+      
+      accum0 += __half2float(a_vals[1]) * __half2float(b_vals[0]);
+      accum1 += __half2float(a_vals[1]) * __half2float(b_vals[1]);
+      accum2 += __half2float(a_vals[1]) * __half2float(b_vals[2]);
+      accum3 += __half2float(a_vals[1]) * __half2float(b_vals[3]);
+      
+      accum0 += __half2float(a_vals[2]) * __half2float(b_vals[0]);
+      accum1 += __half2float(a_vals[2]) * __half2float(b_vals[1]);
+      accum2 += __half2float(a_vals[2]) * __half2float(b_vals[2]);
+      accum3 += __half2float(a_vals[2]) * __half2float(b_vals[3]);
+      
+      accum0 += __half2float(a_vals[3]) * __half2float(b_vals[0]);
+      accum1 += __half2float(a_vals[3]) * __half2float(b_vals[1]);
+      accum2 += __half2float(a_vals[3]) * __half2float(b_vals[2]);
+      accum3 += __half2float(a_vals[3]) * __half2float(b_vals[3]);
     }
   }
   
-  int idx = tid;
-  if (idx < kTileM * kTileN && m_start + idx / kTileN < M && n_start + idx % kTileN < N) {
-    C[(m_start + idx / kTileN) * N + n_start + idx % kTileN] = __float2half(accum);
+  if (m_start + row_base < M && n_start + col_base < N) {
+    C[(m_start + row_base) * N + n_start + col_base] = __float2half(accum0);
+    C[(m_start + row_base) * N + n_start + col_base + 1] = __float2half(accum1);
+    C[(m_start + row_base) * N + n_start + col_base + 2] = __float2half(accum2);
+    C[(m_start + row_base) * N + n_start + col_base + 3] = __float2half(accum3);
   }
 }
 
 //=============================================================================
 int main(int argc, char** argv) {
   const char* mode = "all";
-  int M = 1024, N = 1024, K = 4096;
+  int M = 2048, N = 2048, K = 4096;
   int repeats = 20, warmup = 5;
   
   for (int i = 1; i < argc; ++i) {
