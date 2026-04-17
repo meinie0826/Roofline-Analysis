@@ -78,28 +78,28 @@ for api in bf16_apis:
 # Get the function signature
 print("\n" + "-" * 70)
 print("FP8 GEMM Function Signature")
-print("-" + 70)
+print("-" * 70)
 
 # Find any FP8 gemm function
 fp8_func = None
+fp8_func_name = None
 for api in fp8_apis:
     if hasattr(deep_gemm, api):
         fp8_func = getattr(deep_gemm, api)
+        fp8_func_name = api
         print(f"\n{api} signature:")
-        # Try to get function signature
         try:
             import inspect
             sig = inspect.signature(fp8_func)
             print(f"  {sig}")
         except:
-            # Fallback: just print what we know
             print(f"  Function type: {type(fp8_func)}")
         break
 
 # Run simple FP8 test with correct API
 print("\n" + "-" * 70)
 print("FP8 GEMM Test (New API)")
-print("-" + 70)
+print("-" * 70)
 
 if fp8_func is not None:
     try:
@@ -159,12 +159,19 @@ if fp8_func is not None:
         import traceback
         traceback.print_exc()
         
-        # Try alternative: maybe it's block-wise scaling
+        # Try alternative: block-wise scaling
         print("\n  Trying block-wise scaling format...")
         try:
+            M, N, K = 1024, 1024, 1024
+            
             # Block size (common: 128)
             block_m = 128
             block_n = 128
+            
+            # Create tensors
+            A_fp8 = torch.randn(M, K, dtype=torch.float32, device='cuda').to(torch.float8_e4m3fn)
+            B_fp8 = torch.randn(K, N, dtype=torch.float32, device='cuda').to(torch.float8_e4m3fn)
+            D = torch.empty(M, N, dtype=torch.bfloat16, device='cuda')
             
             # Block-wise scales
             num_blocks_m = (M + block_m - 1) // block_m
@@ -176,12 +183,29 @@ if fp8_func is not None:
             a_tuple = (A_fp8, scale_a_block)
             b_tuple = (B_fp8, scale_b_block)
             
-            D = torch.empty(M, N, dtype=torch.bfloat16, device='cuda')
-            
             fp8_func(a_tuple, b_tuple, D)
             torch.cuda.synchronize()
             
             print("  ✓ Block-wise scaling works!")
+            
+            # Benchmark
+            iters = 20
+            times = []
+            for _ in range(iters):
+                start = torch.cuda.Event(enable_timing=True)
+                end = torch.cuda.Event(enable_timing=True)
+                start.record()
+                fp8_func(a_tuple, b_tuple, D)
+                end.record()
+                torch.cuda.synchronize()
+                times.append(start.elapsed_time(end))
+            
+            avg_time = sum(times) / len(times)
+            flops = 2 * M * N * K
+            tflops = flops / avg_time / 1e9
+            
+            print(f"  Time: {avg_time:.3f} ms")
+            print(f"  Performance: {tflops:.1f} TFLOPS")
             
         except Exception as e2:
             print(f"  ✗ Block-wise scaling also failed: {e2}")
@@ -191,7 +215,7 @@ else:
 # BF16 test with DeepGEMM
 print("\n" + "-" * 70)
 print("DeepGEMM BF16 GEMM Test")
-print("-" + 70)
+print("-" * 70)
 
 if hasattr(deep_gemm, 'bf16_gemm_nt'):
     try:
@@ -234,7 +258,7 @@ else:
 # cuBLAS BF16 reference
 print("\n" + "-" * 70)
 print("cuBLAS BF16 GEMM Test (for comparison)")
-print("-" + 70)
+print("-" * 70)
 
 try:
     M, N, K = 1024, 1024, 1024
