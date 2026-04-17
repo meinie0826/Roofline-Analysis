@@ -1,0 +1,19 @@
+===============================================
+Compiling bench_dsmem_read.cu
+===============================================
+===============================================
+Compiling bench_dsmem_write.cu
+===============================================
+===============================================
+Compiling bench_dsmem_pingpong.cu
+===============================================
+===============================================
+Compiling bench_software_dsmem_gemm.cu
+===============================================
+===============================================
+Compiling bench_cutlass_2sm_gemm.cu
+===============================================
+bench_cutlass_2sm_gemm.cu:5:10: fatal error: cute/tensor.hpp: No such file or directory
+    5 | #include "cute/tensor.hpp"
+      |          ^~~~~~~~~~~~~~~~~
+compilation terminated.

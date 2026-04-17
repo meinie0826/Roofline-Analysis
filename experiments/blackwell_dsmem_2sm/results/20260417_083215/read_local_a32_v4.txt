@@ -1,0 +1,1 @@
+CONFIG benchmark=bench_dsmem_read mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cluster_dim_x=2

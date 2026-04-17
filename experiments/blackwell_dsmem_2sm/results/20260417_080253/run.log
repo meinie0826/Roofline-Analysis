@@ -1,0 +1,14 @@
+===============================================
+Compiling bench_dsmem_read.cu
+===============================================
+common.h(227): error: class "cudaDeviceProp" has no member "clockRate"
+    return static_cast<double>(prop.clockRate) * 1.0e-6;
+                                    ^
+
+bench_dsmem_read.cu(112): warning #349-D: no operator "=" matches these operands
+    attr.val.clusterDim = dim3(options.cluster_dim_x, 1, 1);
+                        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+1 error detected in the compilation of "bench_dsmem_read.cu".

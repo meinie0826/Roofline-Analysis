@@ -1,0 +1,20 @@
+{
+  "timestamp": "2026-04-17T08:10:46+00:00",
+  "root_dir": "/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm",
+  "git_commit": "1bf4af9b6f13deb085fcac015229592f5f4c0e2c",
+  "arch": "sm_100a",
+  "nvcc": "nvcc",
+  "gpu_info": "NVIDIA B300 SXM6 AC, 10.3, 590.44.01\nunknown",
+  "repeats": 10,
+  "warmup_repeats": 3,
+  "iters": 2048,
+  "buffer_bytes": 65536,
+  "align_list": "32,64,128",
+  "vec_list": "4,8,16",
+  "soft_tile_n_list": "64,128,256",
+  "cutlass_tile_n_list": "64,128,256",
+  "stages_list": "1,2,4",
+  "gemm_m": 4096,
+  "gemm_k": 4096,
+  "pingpong_iters": 10000
+}

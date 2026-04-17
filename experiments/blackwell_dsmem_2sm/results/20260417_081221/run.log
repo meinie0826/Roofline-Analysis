@@ -1,0 +1,14 @@
+===============================================
+Compiling bench_dsmem_read.cu
+===============================================
+===============================================
+Compiling bench_dsmem_write.cu
+===============================================
+===============================================
+Compiling bench_dsmem_pingpong.cu
+===============================================
+===============================================
+Compiling bench_software_dsmem_gemm.cu
+===============================================
+nvcc error   : '"$CICC_PATH/cicc"' died due to signal 4 (Illegal Instruction)
+nvcc error   : '"$CICC_PATH/cicc"' core dumped

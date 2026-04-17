@@ -1,0 +1,16 @@
+===============================================
+Compiling bench_dsmem_read.cu
+===============================================
+/usr/local/cuda/bin/../targets/x86_64-linux/include/cuda_runtime.h(286): error: function "lambda [](blackwell_dsmem_2sm::StreamResult *, int, int, int)->cudaError_t" cannot be called with the given argument list
+            argument types are: (void *[4])
+            object type is: lambda [](blackwell_dsmem_2sm::StreamResult *, int, int, int)->cudaError_t
+      return [&](ExpTypes... coercedArgs){
+             ^
+/usr/local/cuda/bin/../targets/x86_64-linux/include/cuda_runtime.h(286): note #3322-D: number of parameters of function "lambda [](blackwell_dsmem_2sm::StreamResult *, int, int, int)->cudaError_t" does not match the call
+      return [&](ExpTypes... coercedArgs){
+                ^
+          detected during:
+            instantiation of "cudaError_t cudaLaunchKernelEx(const cudaLaunchConfig_t *, void (*)(ExpTypes...), ActTypes &&...) [with ExpTypes=<blackwell_dsmem_2sm::StreamResult *, int, int, int>, ActTypes=<void *(&)[4]>]" at line 120 of bench_dsmem_read.cu
+            instantiation of "void run_for_vec_bytes<Remote>(blackwell_dsmem_2sm::StreamResult *, const blackwell_dsmem_2sm::StreamOptions &) [with Remote=true]" at line 153 of bench_dsmem_read.cu
+
+1 error detected in the compilation of "bench_dsmem_read.cu".

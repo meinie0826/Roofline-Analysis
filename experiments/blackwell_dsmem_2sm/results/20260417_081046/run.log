@@ -1,0 +1,39 @@
+===============================================
+Compiling bench_dsmem_read.cu
+===============================================
+===============================================
+Compiling bench_dsmem_write.cu
+===============================================
+bench_dsmem_write.cu(104): error: no operator "=" matches these operands
+            operand types are: volatile Vec = uint2
+        vec_ptr[idx] = make_vec<VecBytes>(static_cast<unsigned>(iter * 131u + idx + rank * 1021u));
+                     ^
+          detected during:
+            instantiation of "void dsmem_write_kernel<Remote,VecBytes>(blackwell_dsmem_2sm::StreamResult *, int, int, int) [with Remote=true, VecBytes=8]" at line 148
+            instantiation of "void run_for_vec_bytes<Remote>(blackwell_dsmem_2sm::StreamResult *, const blackwell_dsmem_2sm::StreamOptions &) [with Remote=true]" at line 177
+
+bench_dsmem_write.cu(104): error: no operator "=" matches these operands
+            operand types are: volatile Vec = uint4
+        vec_ptr[idx] = make_vec<VecBytes>(static_cast<unsigned>(iter * 131u + idx + rank * 1021u));
+                     ^
+          detected during:
+            instantiation of "void dsmem_write_kernel<Remote,VecBytes>(blackwell_dsmem_2sm::StreamResult *, int, int, int) [with Remote=true, VecBytes=16]" at line 150
+            instantiation of "void run_for_vec_bytes<Remote>(blackwell_dsmem_2sm::StreamResult *, const blackwell_dsmem_2sm::StreamOptions &) [with Remote=true]" at line 177
+
+bench_dsmem_write.cu(104): error: no operator "=" matches these operands
+            operand types are: volatile Vec = uint2
+        vec_ptr[idx] = make_vec<VecBytes>(static_cast<unsigned>(iter * 131u + idx + rank * 1021u));
+                     ^
+          detected during:
+            instantiation of "void dsmem_write_kernel<Remote,VecBytes>(blackwell_dsmem_2sm::StreamResult *, int, int, int) [with Remote=false, VecBytes=8]" at line 148
+            instantiation of "void run_for_vec_bytes<Remote>(blackwell_dsmem_2sm::StreamResult *, const blackwell_dsmem_2sm::StreamOptions &) [with Remote=false]" at line 179
+
+bench_dsmem_write.cu(104): error: no operator "=" matches these operands
+            operand types are: volatile Vec = uint4
+        vec_ptr[idx] = make_vec<VecBytes>(static_cast<unsigned>(iter * 131u + idx + rank * 1021u));
+                     ^
+          detected during:
+            instantiation of "void dsmem_write_kernel<Remote,VecBytes>(blackwell_dsmem_2sm::StreamResult *, int, int, int) [with Remote=false, VecBytes=16]" at line 150
+            instantiation of "void run_for_vec_bytes<Remote>(blackwell_dsmem_2sm::StreamResult *, const blackwell_dsmem_2sm::StreamOptions &) [with Remote=false]" at line 179
+
+4 errors detected in the compilation of "bench_dsmem_write.cu".
