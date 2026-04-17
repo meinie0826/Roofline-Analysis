@@ -1,14 +1,5 @@
-/**
- * Benchmarks for comparing three B-sharing strategies in 2-CTA GEMM:
- *
- * - Baseline: Two independent 1SM kernels, each loads B from HBM
- * - D1: Cluster-internal software DSMEM sharing (CTA1 copies B from CTA0's smem)
- * - D2: CUTLASS mma.2sm hardware sharing
- */
-
 #include "common.h"
 #include <cooperative_groups.h>
-#include <cooperative_groups/memcpy.h>
 #include <cutlass/cutlass.h>
 #include <cutlass/gemm/device/gemm_universal_adapter.h>
 #include <cutlass/gemm/kernel/default_gemm_universal.h>

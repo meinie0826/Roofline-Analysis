@@ -163,7 +163,12 @@ if [[ "$ONLY_CUTLASS" != "1" ]]; then
 fi
 if [[ "$HAVE_CUTLASS" == "1" ]]; then
   SYNCLOG_PATCH="$ROOT_DIR/synclog_host_device.patch"
-  patch -p1 -d "$CUTLASS_DIR" < "$SYNCLOG_PATCH"
+  # Check if patch is already applied
+  if patch -p1 -d "$CUTLASS_DIR" --dry-run < "$SYNCLOG_PATCH" &>/dev/null; then
+    patch -p1 -d "$CUTLASS_DIR" < "$SYNCLOG_PATCH"
+  else
+    echo "Patch already applied, skipping..."
+  fi
   COMPILE_ARCH="--generate-code arch=compute_103a,code=sm_103a" \
   compile bench_cutlass_2sm_gemm.cu bench_cutlass_2sm_gemm \
     --expt-relaxed-constexpr \
@@ -172,7 +177,10 @@ if [[ "$HAVE_CUTLASS" == "1" ]]; then
     -DCUTLASS_ARCH_MMA_SM100A_ENABLED \
     -DCUTLASS_ARCH_MMA_SM100_ENABLED \
     -DCUTLASS_ARCH_MMA_SM103A_ENABLED
-  patch -p1 -R -d "$CUTLASS_DIR" < "$SYNCLOG_PATCH"
+  # Reverse patch if it was applied
+  if patch -p1 -d "$CUTLASS_DIR" --dry-run -R < "$SYNCLOG_PATCH" &>/dev/null; then
+    patch -p1 -R -d "$CUTLASS_DIR" < "$SYNCLOG_PATCH"
+  fi
 else
   echo "WARNING: CUTLASS not found at $CUTLASS_DIR"
   echo "Skipping bench_cutlass_2sm_gemm compilation and runtime sweep."
