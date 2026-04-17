@@ -159,7 +159,6 @@ if [[ "$ONLY_CUTLASS" != "1" ]]; then
   compile bench_dsmem_pingpong.cu bench_dsmem_pingpong
   compile bench_software_dsmem_gemm.cu bench_software_dsmem_gemm
   compile bench_smem_interconnect.cu bench_smem_interconnect
-  compile bench_2sm_comparison.cu bench_2sm_comparison
 fi
 if [[ "$HAVE_CUTLASS" == "1" ]]; then
   SYNCLOG_PATCH="$ROOT_DIR/synclog_host_device.patch"
@@ -171,6 +170,13 @@ if [[ "$HAVE_CUTLASS" == "1" ]]; then
   fi
   COMPILE_ARCH="--generate-code arch=compute_103a,code=sm_103a" \
   compile bench_cutlass_2sm_gemm.cu bench_cutlass_2sm_gemm \
+    --expt-relaxed-constexpr \
+    -I"$CUTLASS_DIR/include" \
+    -I"$CUTLASS_DIR/tools/util/include" \
+    -DCUTLASS_ARCH_MMA_SM100A_ENABLED \
+    -DCUTLASS_ARCH_MMA_SM100_ENABLED \
+    -DCUTLASS_ARCH_MMA_SM103A_ENABLED
+  compile bench_2sm_comparison.cu bench_2sm_comparison \
     --expt-relaxed-constexpr \
     -I"$CUTLASS_DIR/include" \
     -I"$CUTLASS_DIR/tools/util/include" \
