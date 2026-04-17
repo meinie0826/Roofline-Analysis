@@ -41,6 +41,28 @@ __device__ __forceinline__ uint4 make_vec<16>(unsigned seed) {
 }
 
 template <int VecBytes>
+__device__ __forceinline__ void store_vec(volatile typename VecType<VecBytes>::Type* ptr, typename VecType<VecBytes>::Type value);
+
+template <>
+__device__ __forceinline__ void store_vec<4>(volatile uint32_t* ptr, uint32_t value) {
+  *ptr = value;
+}
+
+template <>
+__device__ __forceinline__ void store_vec<8>(volatile uint2* ptr, uint2 value) {
+  ptr->x = value.x;
+  ptr->y = value.y;
+}
+
+template <>
+__device__ __forceinline__ void store_vec<16>(volatile uint4* ptr, uint4 value) {
+  ptr->x = value.x;
+  ptr->y = value.y;
+  ptr->z = value.z;
+  ptr->w = value.w;
+}
+
+template <int VecBytes>
 __device__ __forceinline__ unsigned long long checksum_vec(typename VecType<VecBytes>::Type v);
 
 template <>
@@ -101,7 +123,7 @@ __global__ void dsmem_write_kernel(StreamResult* out, int iters, int buffer_byte
 
   for (int iter = 0; iter < iters; ++iter) {
     for (int idx = threadIdx.x; idx < vec_count; idx += blockDim.x) {
-      vec_ptr[idx] = make_vec<VecBytes>(static_cast<unsigned>(iter * 131u + idx + rank * 1021u));
+      store_vec<VecBytes>(&vec_ptr[idx], make_vec<VecBytes>(static_cast<unsigned>(iter * 131u + idx + rank * 1021u)));
     }
   }
   __syncthreads();
