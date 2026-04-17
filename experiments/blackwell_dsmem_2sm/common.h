@@ -120,6 +120,18 @@ inline bool is_valid_tile_n(int tile_n) {
   return tile_n == 64 || tile_n == 128 || tile_n == 256;
 }
 
+template <typename Kernel>
+inline void prepare_cluster_kernel(Kernel kernel, int dynamic_smem_bytes) {
+  if (dynamic_smem_bytes > 48 * 1024) {
+    check_cuda(
+        cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, dynamic_smem_bytes),
+        "cudaFuncSetAttribute MaxDynamicSharedMemorySize");
+  }
+  check_cuda(
+      cudaFuncSetAttribute(kernel, cudaFuncAttributeNonPortableClusterSizeAllowed, 1),
+      "cudaFuncSetAttribute NonPortableClusterSizeAllowed");
+}
+
 inline int div_up(int x, int y) {
   return (x + y - 1) / y;
 }

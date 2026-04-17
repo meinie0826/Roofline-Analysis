@@ -133,6 +133,7 @@ void launch_software_gemm(const half* dA, const half* dB, float* dD, const GemmO
   int ldb = options.n;
   int ldd = options.n;
   int k_total = options.k;
+  prepare_cluster_kernel(software_dsmem_gemm_kernel<TileN, Stages, RemoteB>, config.dynamicSmemBytes);
   check_cuda(
       cudaLaunchKernelEx(
           &config,

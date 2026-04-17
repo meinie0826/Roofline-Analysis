@@ -59,6 +59,7 @@ void launch_pingpong(PingPongResult* d_result, const PingPongOptions& options) {
   config.attrs = &attr;
   config.numAttrs = 1;
 
+  prepare_cluster_kernel(dsmem_pingpong_kernel, config.dynamicSmemBytes);
   check_cuda(cudaLaunchKernelEx(&config, dsmem_pingpong_kernel, d_result, options.iters), "cudaLaunchKernelEx pingpong");
 }
 

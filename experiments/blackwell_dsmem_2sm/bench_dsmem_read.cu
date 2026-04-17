@@ -116,10 +116,13 @@ void run_for_vec_bytes(StreamResult* d_result, const StreamOptions& options) {
   config.numAttrs = 1;
 
   if (options.vec_bytes == 4) {
+    prepare_cluster_kernel(dsmem_read_kernel<Remote, 4>, config.dynamicSmemBytes);
     check_cuda(cudaLaunchKernelEx(&config, dsmem_read_kernel<Remote, 4>, d_result, options.iters, options.buffer_bytes, options.align_bytes), "cudaLaunchKernelEx read 4");
   } else if (options.vec_bytes == 8) {
+    prepare_cluster_kernel(dsmem_read_kernel<Remote, 8>, config.dynamicSmemBytes);
     check_cuda(cudaLaunchKernelEx(&config, dsmem_read_kernel<Remote, 8>, d_result, options.iters, options.buffer_bytes, options.align_bytes), "cudaLaunchKernelEx read 8");
   } else {
+    prepare_cluster_kernel(dsmem_read_kernel<Remote, 16>, config.dynamicSmemBytes);
     check_cuda(cudaLaunchKernelEx(&config, dsmem_read_kernel<Remote, 16>, d_result, options.iters, options.buffer_bytes, options.align_bytes), "cudaLaunchKernelEx read 16");
   }
 }
