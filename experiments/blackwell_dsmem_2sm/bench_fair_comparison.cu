@@ -1,11 +1,13 @@
 /**
- * Fair comparison: 1SM vs 2SM with identical tile shape
- * Uses CUDA built-in half type
+ * Complete GEMM kernels for fair comparison
+ * Each thread accumulates a full tile over K dimension
  */
 
 #include "common.h"
 #include <cooperative_groups.h>
 #include <cuda_fp16.h>
+#include <cstdio>
+#include <cmath>
 
 namespace cg = cooperative_groups;
 using namespace blackwell_dsmem_2sm;
@@ -19,7 +21,7 @@ constexpr int kTileK = 64;
 constexpr int kStages = 2;
 
 //=============================================================================
-// Shared memory layout
+// Shared memory
 //=============================================================================
 struct GmemTile {
   alignas(128) half A[kStages][kTileM][kTileK];
@@ -27,7 +29,7 @@ struct GmemTile {
 };
 
 //=============================================================================
-// Baseline: Each CTA loads B independently from HBM
+// Baseline: Each CTA loads B independently, computes full tile
 //=============================================================================
 
 __global__ void baseline_gemm_kernel(
@@ -43,56 +45,95 @@ __global__ void baseline_gemm_kernel(
   int pair_id = cta_id / 2;
   int rank = cta_id % 2;
   
-  // Each CTA handles kTileM rows
   int m_start = pair_id * (2 * kTileM) + rank * kTileM;
   int n_start = blockIdx.y * kTileN;
+  
+  if (m_start >= M || n_start >= N) return;
   
   const half* gA = A + m_start * lda;
   const half* gB = B + n_start * ldb;
   half* gC = C + m_start * ldc + n_start;
   
   int tid = threadIdx.x;
+  int tidx = tid % 32;
+  int tidy = tid / 32;
   
-  float acc[16] = {0};
+  // Each thread accumulates 4x4 elements of C
+  int c_m = (tidy % 4) * 4 + (tidx % 4);
+  int c_n = (tidy / 4) * 4 + (tidx % 16) / 4;
+  
+  float accum[16] = {0.0f};
   
   for (int k_offset = 0; k_offset < K; k_offset += kTileK) {
     int stage = (k_offset / kTileK) % kStages;
+    int k_tiles = min(kTileK, K - k_offset);
     
-    // === Load A ===
+    // Load A tile
     for (int i = tid; i < kTileM * kTileK; i += blockDim.x) {
       int m = i / kTileK;
       int k = i % kTileK;
       if (m_start + m < M && k_offset + k < K) {
         tile.A[stage][m][k] = gA[m * lda + k_offset + k];
+      } else {
+        tile.A[stage][m][k] = __float2half(0.0f);
       }
     }
     
-    // === Load B (each CTA loads independently) ===
+    // Load B tile (each CTA loads independently)
     for (int i = tid; i < kTileN * kTileK; i += blockDim.x) {
       int n = i / kTileK;
       int k = i % kTileK;
       if (n_start + n < N && k_offset + k < K) {
         tile.B[stage][n][k] = gB[n * ldb + k_offset + k];
+      } else {
+        tile.B[stage][n][k] = __float2half(0.0f);
       }
     }
     
     __syncthreads();
     
-    // === Minimal MMA placeholder ===
-    for (int i = 0; i < 4; ++i) {
-      float sum = 0.0f;
-      for (int k = 0; k < 4; ++k) {
-        sum += __half2float(tile.A[stage][(tid + i) % kTileM][k]) *
-               __half2float(tile.B[stage][(tid + i) % kTileN][k]);
+    // Compute MMA for this K tile
+    for (int k = 0; k < k_tiles; ++k) {
+      half a_val[4], b_val[4];
+      
+      // Load 4 A values (along M)
+      for (int m = 0; m < 4; ++m) {
+        int row = c_m * 4 + m;
+        if (row < kTileM) {
+          a_val[m] = tile.A[stage][row][k];
+        } else {
+          a_val[m] = __float2half(0.0f);
+        }
       }
-      acc[i] += sum;
+      
+      // Load 4 B values (along N)
+      for (int n = 0; n < 4; ++n) {
+        int col = c_n * 4 + n;
+        if (col < kTileN) {
+          b_val[n] = tile.B[stage][col][k];
+        } else {
+          b_val[n] = __float2half(0.0f);
+        }
+      }
+      
+      // Accumulate outer product
+      for (int m = 0; m < 4; ++m) {
+        for (int n = 0; n < 4; ++n) {
+          accum[m * 4 + n] += __half2float(a_val[m]) * __half2float(b_val[n]);
+        }
+      }
     }
   }
   
-  // Write result (minimal)
-  if (m_start < M && n_start < N && tid < 128) {
-    gC[tid % kTileM * ldc + (tid / kTileM) % kTileN] = 
-        __float2half(acc[0]);
+  // Write C
+  for (int m = 0; m < 4; ++m) {
+    for (int n = 0; n < 4; ++n) {
+      int row = c_m * 4 + m;
+      int col = c_n * 4 + n;
+      if (m_start + row < M && n_start + col < N) {
+        gC[row * ldc + col] = __float2half(accum[m * 4 + n]);
+      }
+    }
   }
 }
 
@@ -117,6 +158,8 @@ void d1_cluster_gemm_kernel(
   int m_start = pair_id * (2 * kTileM) + rank * kTileM;
   int n_start = blockIdx.y * kTileN;
   
+  if (m_start >= M || n_start >= N) return;
+  
   const half* gA = A + m_start * lda;
   const half* gB = B + n_start * ldb;
   half* gC = C + m_start * ldc + n_start;
@@ -125,35 +168,45 @@ void d1_cluster_gemm_kernel(
   GmemTile* remote_tile0 = reinterpret_cast<GmemTile*>(cluster.map_shared_rank(&tile, 0));
   
   int tid = threadIdx.x;
+  int tidx = tid % 32;
+  int tidy = tid / 32;
   
-  float acc[16] = {0};
+  int c_m = (tidy % 4) * 4 + (tidx % 4);
+  int c_n = (tidy / 4) * 4 + (tidx % 16) / 4;
+  
+  float accum[16] = {0.0f};
   
   for (int k_offset = 0; k_offset < K; k_offset += kTileK) {
     int stage = (k_offset / kTileK) % kStages;
+    int k_tiles = min(kTileK, K - k_offset);
     
-    // === Load A (each CTA loads its own) ===
+    // Load A (each CTA loads its own)
     for (int i = tid; i < kTileM * kTileK; i += blockDim.x) {
       int m = i / kTileK;
       int k = i % kTileK;
       if (m_start + m < M && k_offset + k < K) {
         tile.A[stage][m][k] = gA[m * lda + k_offset + k];
+      } else {
+        tile.A[stage][m][k] = __float2half(0.0f);
       }
     }
     
-    // === Load B (CTA0 only from HBM) ===
+    // Load B (CTA0 only from HBM)
     if (rank == 0) {
       for (int i = tid; i < kTileN * kTileK; i += blockDim.x) {
         int n = i / kTileK;
         int k = i % kTileK;
         if (n_start + n < N && k_offset + k < K) {
           tile.B[stage][n][k] = gB[n * ldb + k_offset + k];
+        } else {
+          tile.B[stage][n][k] = __float2half(0.0f);
         }
       }
     }
     
-    cluster.sync();  // Ensure CTA0's B is ready
+    cluster.sync();
     
-    // === CTA1 copies B from CTA0's DSMEM ===
+    // CTA1 copies B from CTA0's DSMEM
     if (rank == 1) {
       for (int i = tid; i < kTileN * kTileK; i += blockDim.x) {
         int n = i / kTileK;
@@ -164,40 +217,68 @@ void d1_cluster_gemm_kernel(
     
     cluster.sync();
     
-    // === MMA (same as baseline) ===
-    for (int i = 0; i < 4; ++i) {
-      float sum = 0.0f;
-      for (int k = 0; k < 4; ++k) {
-        sum += __half2float(tile.A[stage][(tid + i) % kTileM][k]) *
-               __half2float(tile.B[stage][(tid + i) % kTileN][k]);
+    // Compute MMA
+    for (int k = 0; k < k_tiles; ++k) {
+      half a_val[4], b_val[4];
+      
+      for (int m = 0; m < 4; ++m) {
+        int row = c_m * 4 + m;
+        if (row < kTileM) {
+          a_val[m] = tile.A[stage][row][k];
+        } else {
+          a_val[m] = __float2half(0.0f);
+        }
       }
-      acc[i] += sum;
+      
+      for (int n = 0; n < 4; ++n) {
+        int col = c_n * 4 + n;
+        if (col < kTileN) {
+          b_val[n] = tile.B[stage][col][k];
+        } else {
+          b_val[n] = __float2half(0.0f);
+        }
+      }
+      
+      for (int m = 0; m < 4; ++m) {
+        for (int n = 0; n < 4; ++n) {
+          accum[m * 4 + n] += __half2float(a_val[m]) * __half2float(b_val[n]);
+        }
+      }
     }
   }
   
-  if (m_start < M && n_start < N && tid < 128) {
-    gC[tid % kTileM * ldc + (tid / kTileM) % kTileN] = 
-        __float2half(acc[0]);
+  // Write C
+  for (int m = 0; m < 4; ++m) {
+    for (int n = 0; n < 4; ++n) {
+      int row = c_m * 4 + m;
+      int col = c_n * 4 + n;
+      if (m_start + row < M && n_start + col < N) {
+        gC[row * ldc + col] = __float2half(accum[m * 4 + n]);
+      }
+    }
   }
 }
 
 //=============================================================================
-// Benchmark harness
+// Benchmark
 //=============================================================================
 
 template <typename Kernel>
 double measure_kernel(Kernel kernel,
-                       const half* d_A, const half* d_B, half* d_C,
-                       int M, int N, int K, int repeats, int warmup) {
+                     const half* d_A, const half* d_B, half* d_C,
+                     int M, int N, int K, int repeats, int warmup) {
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
   
   int lda = K, ldb = K, ldc = N;
   
+  dim3 grid((M + 2 * kTileM - 1) / (2 * kTileM), (N + kTileN - 1) / kTileN);
+  dim3 block(128);
+  
   // Warmup
   for (int w = 0; w < warmup; ++w) {
-    kernel<<<dim3(1, 1), 128>>>(d_A, d_B, d_C, M, N, K, lda, ldb, ldc);
+    kernel<<<grid, block>>>(d_A, d_B, d_C, M, N, K, lda, ldb, ldc);
   }
   cudaDeviceSynchronize();
   
@@ -205,7 +286,7 @@ double measure_kernel(Kernel kernel,
   float total_ms = 0.0f;
   for (int r = 0; r < repeats; ++r) {
     cudaEventRecord(start);
-    kernel<<<dim3(1, 1), 128>>>(d_A, d_B, d_C, M, N, K, lda, ldb, ldc);
+    kernel<<<grid, block>>>(d_A, d_B, d_C, M, N, K, lda, ldb, ldc);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     float ms = 0.0f;
@@ -229,9 +310,12 @@ double measure_cluster_kernel(Kernel kernel,
   
   int lda = K, ldb = K, ldc = N;
   
+  dim3 grid((M + 2 * kTileM - 1) / (2 * kTileM), (N + kTileN - 1) / kTileN);
+  dim3 block(128);
+  
   cudaLaunchConfig_t config{};
-  config.gridDim = dim3(1, 1);
-  config.blockDim = 128;
+  config.gridDim = grid;
+  config.blockDim = block;
   config.dynamicSmemBytes = sizeof(GmemTile);
   
   cudaLaunchAttribute attrs[1];
@@ -267,8 +351,8 @@ double measure_cluster_kernel(Kernel kernel,
 //=============================================================================
 int main(int argc, char** argv) {
   const char* mode = "all";
-  int M = 256, N = 64, K = 1024;
-  int repeats = 10, warmup = 3;
+  int M = 2048, N = 1024, K = 4096;
+  int repeats = 20, warmup = 5;
   
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
@@ -283,7 +367,6 @@ int main(int argc, char** argv) {
   std::fprintf(stdout, "CONFIG mode=%s m=%d n=%d k=%d repeats=%d warmup=%d gpu=\"%s\"\n",
                mode, M, N, K, repeats, warmup, gpu_name().c_str());
   
-  // Allocate (minimal, single tile)
   size_t A_size = M * K * sizeof(half);
   size_t B_size = K * N * sizeof(half);
   size_t C_size = M * N * sizeof(half);
