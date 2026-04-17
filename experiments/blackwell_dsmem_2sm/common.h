@@ -222,9 +222,9 @@ inline void print_pingpong_result(
 }
 
 inline double query_sm_clock_ghz() {
-  cudaDeviceProp prop{};
-  check_cuda(cudaGetDeviceProperties(&prop, 0), "cudaGetDeviceProperties");
-  return static_cast<double>(prop.clockRate) * 1.0e-6;
+  int khz = 0;
+  check_cuda(cudaDeviceGetAttribute(&khz, cudaDevAttrClockRate, 0), "cudaDeviceGetAttribute clockRate");
+  return static_cast<double>(khz) * 1.0e-6;
 }
 
 inline std::string gpu_name() {

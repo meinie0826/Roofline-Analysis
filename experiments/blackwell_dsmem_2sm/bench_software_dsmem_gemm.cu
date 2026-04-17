@@ -114,7 +114,9 @@ void launch_software_gemm(const half* dA, const half* dB, float* dD, const GemmO
 
   cudaLaunchAttribute attr{};
   attr.id = cudaLaunchAttributeClusterDimension;
-  attr.val.clusterDim = dim3(2, 1, 1);
+  attr.val.clusterDim.x = 2;
+  attr.val.clusterDim.y = 1;
+  attr.val.clusterDim.z = 1;
   config.attrs = &attr;
   config.numAttrs = 1;
 

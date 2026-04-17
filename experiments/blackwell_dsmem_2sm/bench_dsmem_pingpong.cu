@@ -53,7 +53,9 @@ void launch_pingpong(PingPongResult* d_result, const PingPongOptions& options) {
 
   cudaLaunchAttribute attr{};
   attr.id = cudaLaunchAttributeClusterDimension;
-  attr.val.clusterDim = dim3(options.cluster_dim_x, 1, 1);
+  attr.val.clusterDim.x = options.cluster_dim_x;
+  attr.val.clusterDim.y = 1;
+  attr.val.clusterDim.z = 1;
   config.attrs = &attr;
   config.numAttrs = 1;
 

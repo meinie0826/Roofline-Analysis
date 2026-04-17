@@ -136,7 +136,9 @@ void run_for_vec_bytes(StreamResult* d_result, const StreamOptions& options) {
 
   cudaLaunchAttribute attr{};
   attr.id = cudaLaunchAttributeClusterDimension;
-  attr.val.clusterDim = dim3(options.cluster_dim_x, 1, 1);
+  attr.val.clusterDim.x = options.cluster_dim_x;
+  attr.val.clusterDim.y = 1;
+  attr.val.clusterDim.z = 1;
   config.attrs = &attr;
   config.numAttrs = 1;
 
