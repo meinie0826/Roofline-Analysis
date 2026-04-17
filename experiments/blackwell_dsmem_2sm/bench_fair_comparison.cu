@@ -252,7 +252,7 @@ void d2_mma2sm_gemm_kernel(
     // Here we simulate by having CTA1 read from CTA0's smem directly
     // (Real implementation would use tcgen05.mma.2sm instruction)
     
-    half (*b_ptr)[64][32] = (rank == 0) ? sB : reinterpret_cast<half(*)[64][32]>(
+    half* b_base = (rank == 0) ? &sB[0][0][0] : reinterpret_cast<half*>(
         cluster.map_shared_rank(&sB[0][0][0], 0));
     
     // Compute
@@ -260,8 +260,10 @@ void d2_mma2sm_gemm_kernel(
       for (int r = 0; r < 4; ++r) {
         for (int c = 0; c < 4; ++c) {
           // Simulated mma.2sm: both CTAs read from CTA0's B buffer
+          // Index: [stage][n][k] -> stage*64*32 + n*32 + k
+          int b_idx = stage * 64 * 32 + ((col_base + c) % kTileN) * 32 + k;
           accum[r * 4 + c] += __half2float(sA[stage][(row_base + r) % kTileM][k]) *
-                              __half2float((*b_ptr)[stage][(col_base + c) % kTileN][k]);
+                              __half2float(b_base[b_idx]);
         }
       }
     }
