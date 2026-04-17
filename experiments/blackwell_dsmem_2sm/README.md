@@ -14,30 +14,19 @@ This experiment investigates whether Distributed Shared Memory (DSMEM) can provi
 
 **Discovery**: 2SM mode is NOT faster than 1SM for these matrix sizes on B300.
 
-### 2. Software DSMEM Sharing (bench_3way)
-| Mode | Time (ms) | GFLOPS | Improvement |
-|------|-----------|--------|--------------|
-| baseline (independent load) | 4.76 | 14,444 | 1.0x |
-| D1 (DSMEM copy) | 3.59 | 19,150 | **1.33x** |
-
-**Note**: This kernel does NOT use Tensor Core. GFLOPS ~19 indicates FP32 compute.
-
-### 3. Hardware Analysis
-- B300 Tensor Core peak: ~1000+ TFLOPS (BF16)
-- Our TC kernels should achieve 500+ TFLOPS
-- Current bench_3way uses only 0.003% of TC capacity
+### 2. Current Focus
+- B200/B300 CUTLASS Blackwell GEMM bring-up
+- `mma.1sm` vs `mma.2sm` controlled comparison
+- isolating the cost/benefit of B-operand sharing in CTA-pair execution
 
 ## Implementation Status
 
 ### Completed
 - ✅ CUTLASS 1SM/2SM comparison
 - ✅ CUTLASS `mma.2sm` cost benchmark with normalized summary output
-- ✅ Software DSMEM sharing verification
-- ✅ TC kernel skeleton (bench_tc_simple)
-- ✅ Full TC kernel implementation (bench_tc_full)
 
 ### In Progress
-- ⏳ Testing bench_tc_full on server
+- ⏳ Validating CUTLASS configs across B200 (`sm_100a`) and B300 (`sm_103a`)
 - ⏳ Comparing TC kernel with/without DSMEM
 
 ### Pending
@@ -50,9 +39,7 @@ This experiment investigates whether Distributed Shared Memory (DSMEM) can provi
 |------|-------------|
 | `bench_cutlass_2sm_gemm.cu` | CUTLASS 1SM/2SM comparison |
 | `bench_cutlass_mma2sm_cost.cu` | Controlled 1SM vs 2SM benchmark with summary ratios |
-| `bench_3way.cu` | Software DSMEM sharing (no TC) |
-| `bench_tc_simple.cu` | Simple MMA kernel skeleton |
-| `bench_tc_full.cu` | Complete tcgen05.mma implementation |
+| `bench_d1_only.cu` | CUTLASS-based baseline around D1 / DSMEM-related flow |
 | `common.h` | Shared utilities |
 
 ## Usage
@@ -62,8 +49,8 @@ This experiment investigates whether Distributed Shared Memory (DSMEM) can provi
 make all
 
 # Build specific targets
-make hand-written  # bench_3way, bench_tc_*
 make cutlass      # CUTLASS benchmarks
+make bench_cutlass_2sm_gemm
 make bench_cutlass_mma2sm_cost
 
 # Override architecture when needed
@@ -71,10 +58,8 @@ make ARCH=sm_100a bench_cutlass_2sm_gemm      # B200
 make ARCH=sm_103a bench_cutlass_2sm_gemm      # B300
 
 # Run benchmarks
-./bench_3way --mode=all --m=2048 --n=2048 --k=8192
 ./bench_cutlass_2sm_gemm --mode=1sm --m=8192 --n=8192 --k=8192
 ./bench_cutlass_mma2sm_cost --mode=compare --m=8192 --n=8192 --k=8192 --tile-n=128 --stages=2
-./bench_tc_full --m=2048 --n=2048 --k=8192
 ```
 
 ## `bench_cutlass_mma2sm_cost`
