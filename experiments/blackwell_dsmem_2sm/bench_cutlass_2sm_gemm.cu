@@ -162,7 +162,8 @@ struct CutlassRunner {
     }
   }
 
-  bool run_once(const GemmOptions& options, const cutlass::KernelHardwareInfo& hw_info) {
+  // Setup: call once before timing loop.
+  bool setup(const GemmOptions& options, const cutlass::KernelHardwareInfo& hw_info) {
     ProblemShape problem = ProblemShape{options.m, options.n, options.k, 1};
     typename Gemm::Arguments arguments{
         cutlass::gemm::GemmUniversalMode::kGemm,
@@ -170,22 +171,27 @@ struct CutlassRunner {
         {A.get(), strideA, B.get(), strideB},
         {{1.0f, 0.0f}, C.get(), strideC, D.get(), strideD},
         hw_info};
-
-    Gemm gemm_op;
+    gemm_op_ = Gemm{};
     std::size_t workspace_size = Gemm::get_workspace_size(arguments);
-    cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
-
-    cutlass::Status status = gemm_op.can_implement(arguments);
+    workspace_ = cutlass::device_memory::allocation<uint8_t>(workspace_size);
+    cutlass::Status status = gemm_op_.can_implement(arguments);
     if (status != cutlass::Status::kSuccess) {
       std::fprintf(stderr, "can_implement failed: %s\n", cutlass::cutlassGetStatusString(status));
       return false;
     }
-    status = gemm_op.initialize(arguments, workspace.get());
+    status = gemm_op_.initialize(arguments, workspace_.get());
     if (status != cutlass::Status::kSuccess) {
-      std::fprintf(stderr, "initialize failed: %s\n", cutlass::cutlassGetStatusString(status));
+      cudaError_t cuda_err = cudaGetLastError();
+      std::fprintf(stderr, "initialize failed: %s (cuda: %s)\n",
+                   cutlass::cutlassGetStatusString(status), cudaGetErrorString(cuda_err));
       return false;
     }
-    status = gemm_op.run();
+    return true;
+  }
+
+  // Only launch kernel; call after setup().
+  bool run_kernel() {
+    cutlass::Status status = gemm_op_.run();
     if (status != cutlass::Status::kSuccess) {
       std::fprintf(stderr, "run failed: %s\n", cutlass::cutlassGetStatusString(status));
       return false;
@@ -197,6 +203,10 @@ struct CutlassRunner {
     }
     return true;
   }
+
+ private:
+  Gemm gemm_op_;
+  cutlass::device_memory::allocation<uint8_t> workspace_;
 };
 
 template <typename Runner>
@@ -207,12 +217,13 @@ double measure_runner(Runner& runner, const GemmOptions& options, const cutlass:
 
   double total_ms = 0.0;
   runner.initialize(options.m, options.n, options.k);
+  if (!runner.setup(options, hw_info)) return -1.0;
   for (int i = 0; i < options.warmup_repeats; ++i) {
-    if (!runner.run_once(options, hw_info)) return -1.0;
+    if (!runner.run_kernel()) return -1.0;
   }
   for (int i = 0; i < options.repeats; ++i) {
     check_cuda(cudaEventRecord(start), "cudaEventRecord start");
-    if (!runner.run_once(options, hw_info)) return -1.0;
+    if (!runner.run_kernel()) return -1.0;
     check_cuda(cudaEventRecord(stop), "cudaEventRecord stop");
     check_cuda(cudaEventSynchronize(stop), "cudaEventSynchronize");
     total_ms += elapsed_ms(start, stop);

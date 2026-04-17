@@ -1,0 +1,49 @@
+diff --git a/include/cutlass/arch/synclog.hpp b/include/cutlass/arch/synclog.hpp
+index ffa7baee..9b80930c 100644
+--- a/include/cutlass/arch/synclog.hpp
++++ b/include/cutlass/arch/synclog.hpp
+@@ -628,7 +628,7 @@ void synclog_emit_fence_barrier_init(uint32_t line) {
+   #endif // defined(CUTLASS_ENABLE_SYNCLOG)
+ }
+ 
+-CUTLASS_DEVICE
++CUTLASS_HOST_DEVICE
+ void synclog_emit_fence_view_async_shared(uint32_t line) {
+   #if defined(CUTLASS_ENABLE_SYNCLOG)
+   if constexpr (!synclog_enable_fence_view_async_shared) return;
+@@ -775,7 +775,7 @@ void synclog_emit_cp_async(
+   #endif // defined(CUTLASS_ENABLE_SYNCLOG)
+ }
+ 
+-CUTLASS_DEVICE
++CUTLASS_HOST_DEVICE
+ void synclog_emit_tma_load(
+   uint32_t line,
+   uint64_t gmem_int_desc,
+@@ -799,7 +799,7 @@ void synclog_emit_tma_load(
+   #endif // defined(CUTLASS_ENABLE_SYNCLOG)
+ }
+ 
+-CUTLASS_DEVICE
++CUTLASS_HOST_DEVICE
+ void synclog_emit_tma_store(
+   uint32_t line,
+   uint64_t gmem_int_desc,
+@@ -820,7 +820,7 @@ void synclog_emit_tma_store(
+   #endif // defined(CUTLASS_ENABLE_SYNCLOG)
+ }
+ 
+-CUTLASS_DEVICE
++CUTLASS_HOST_DEVICE
+ void synclog_emit_tma_store_arrive(uint32_t line) {
+   #if defined(CUTLASS_ENABLE_SYNCLOG)
+   if constexpr (!synclog_enable_tma_store_arrive) return;
+@@ -833,7 +833,7 @@ void synclog_emit_tma_store_arrive(uint32_t line) {
+   #endif // defined(CUTLASS_ENABLE_SYNCLOG)
+ }
+ 
+-CUTLASS_DEVICE
++CUTLASS_HOST_DEVICE
+ void synclog_emit_tma_store_wait(
+   uint32_t line,
+   uint32_t count) {

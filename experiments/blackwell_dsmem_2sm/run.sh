@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
 NVCC=${NVCC:-nvcc}
-ARCH=${ARCH:-sm_100a}
+ARCH=${ARCH:-sm_103a}
 CUTLASS_DIR=${CUTLASS_DIR:-$ROOT_DIR/../../cutlass}
 REPEATS=${REPEATS:-10}
 WARMUP_REPEATS=${WARMUP_REPEATS:-3}
@@ -151,11 +151,17 @@ for line in text:
 PY
 }
 
-compile bench_dsmem_read.cu bench_dsmem_read
-compile bench_dsmem_write.cu bench_dsmem_write
-compile bench_dsmem_pingpong.cu bench_dsmem_pingpong
-compile bench_software_dsmem_gemm.cu bench_software_dsmem_gemm
+ONLY_CUTLASS=${ONLY_CUTLASS:-0}
+
+if [[ "$ONLY_CUTLASS" != "1" ]]; then
+  compile bench_dsmem_read.cu bench_dsmem_read
+  compile bench_dsmem_write.cu bench_dsmem_write
+  compile bench_dsmem_pingpong.cu bench_dsmem_pingpong
+  compile bench_software_dsmem_gemm.cu bench_software_dsmem_gemm
+fi
 if [[ "$HAVE_CUTLASS" == "1" ]]; then
+  SYNCLOG_PATCH="$ROOT_DIR/synclog_host_device.patch"
+  patch -p1 -d "$CUTLASS_DIR" < "$SYNCLOG_PATCH"
   COMPILE_ARCH="--generate-code arch=compute_100a,code=sm_100a" \
   compile bench_cutlass_2sm_gemm.cu bench_cutlass_2sm_gemm \
     --expt-relaxed-constexpr \
@@ -163,6 +169,7 @@ if [[ "$HAVE_CUTLASS" == "1" ]]; then
     -I"$CUTLASS_DIR/tools/util/include" \
     -DCUTLASS_ARCH_MMA_SM100A_ENABLED \
     -DCUTLASS_ARCH_MMA_SM100_ENABLED
+  patch -p1 -R -d "$CUTLASS_DIR" < "$SYNCLOG_PATCH"
 else
   echo "WARNING: CUTLASS not found at $CUTLASS_DIR"
   echo "Skipping bench_cutlass_2sm_gemm compilation and runtime sweep."
