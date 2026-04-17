@@ -153,9 +153,6 @@ void pure_dsmem_bandwidth_kernel(
   
   cluster.sync();
   
-  // Pointer to CTA0's smem (for CTA1 to read from)
-  char* remote_src = reinterpret_cast<char*>(cluster.map_shared_rank(smem_src, 0));
-  
   unsigned long long start = 0, stop = 0;
   
   // Measure pure DSMEM copy bandwidth
