@@ -14,14 +14,17 @@
 namespace cg = cooperative_groups;
 using namespace blackwell_dsmem_2sm;
 
+// Use char for byte-level access
+using byte_t = char;
+
 //=============================================================================
 // Baseline: Each CTA loads tile from HBM independently
 //=============================================================================
 
 template <int TileBytes>
 __global__ void baseline_load_kernel(
-    const half_t* __restrict__ src,
-    half_t* __restrict__ dst,
+    const byte_t* __restrict__ src,
+    byte_t* __restrict__ dst,
     int* __restrict__ cycles_out,
     int iters)
 {
@@ -62,8 +65,8 @@ __global__ void baseline_load_kernel(
 template <int TileBytes, int kStages>
 __global__ __cluster_dims__(2, 1, 1)
 void dsmem_copy_kernel(
-    const half_t* __restrict__ src,
-    half_t* __restrict__ dst,
+    const byte_t* __restrict__ src,
+    byte_t* __restrict__ dst,
     int* __restrict__ cycles_out,
     int iters)
 {
@@ -181,7 +184,7 @@ struct BenchResult {
   double bytes_transferred;
 };
 
-double measure_baseline(const half_t* d_src, half_t* d_dst, int tile_bytes, int iters, int warmup) {
+double measure_baseline(const byte_t* d_src, byte_t* d_dst, int tile_bytes, int iters, int warmup) {
   int* d_cycles;
   cudaMalloc(&d_cycles, sizeof(int));
   cudaMemset(d_cycles, 0, sizeof(int));
@@ -212,7 +215,7 @@ double measure_baseline(const half_t* d_src, half_t* d_dst, int tile_bytes, int 
   return double(h_cycles) / clock_ghz / 1e6;  // ms
 }
 
-double measure_dsmem(const half_t* d_src, half_t* d_dst, int tile_bytes, int iters, int warmup) {
+double measure_dsmem(const byte_t* d_src, byte_t* d_dst, int tile_bytes, int iters, int warmup) {
   int* d_cycles;
   cudaMalloc(&d_cycles, sizeof(int));
   cudaMemset(d_cycles, 0, sizeof(int));
@@ -314,7 +317,7 @@ int main(int argc, char** argv) {
                mode, tile_bytes, iters, warmup, gpu_name().c_str());
   
   // Allocate
-  half_t *d_src, *d_dst;
+  byte_t *d_src, *d_dst;
   cudaMalloc(&d_src, 2 * tile_bytes);
   cudaMalloc(&d_dst, 2 * tile_bytes);
   cudaMemset(d_src, 1, 2 * tile_bytes);
