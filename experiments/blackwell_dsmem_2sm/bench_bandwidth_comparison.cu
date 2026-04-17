@@ -70,7 +70,8 @@ void dsmem_copy_kernel(
     int* __restrict__ cycles_out,
     int iters)
 {
-  __shared__ char smem[2][TileBytes];  // [stage][byte]
+  extern __shared__ char smem_raw[];
+  char (*smem)[TileBytes] = reinterpret_cast<char (*)[TileBytes]>(smem_raw);
   
   cg::cluster_group cluster = cg::this_cluster();
   int rank = cluster.block_rank();
@@ -82,7 +83,6 @@ void dsmem_copy_kernel(
   char* gmem_out = reinterpret_cast<char*>(dst);
   
   int tid = threadIdx.x;
-  int stage = 0;
   
   unsigned long long start = 0, stop = 0;
   
@@ -92,7 +92,7 @@ void dsmem_copy_kernel(
       for (int j = tid; j < TileBytes; j += blockDim.x) {
         unsigned int val;
         asm volatile("ld.global.cg.b8 %0, [%1];" : "=r"(val) : "l"(reinterpret_cast<unsigned long long>(gmem_in + j)));
-        smem[stage][j] = static_cast<char>(val);
+        smem[0][j] = static_cast<char>(val);
       }
     }
     
@@ -103,7 +103,7 @@ void dsmem_copy_kernel(
       if (i == 0) start = clock64();  // Start timing after warmup
       
       for (int j = tid; j < TileBytes; j += blockDim.x) {
-        smem[stage][j] = remote_smem[stage * TileBytes + j];
+        smem[0][j] = remote_smem[j];
       }
     }
     
@@ -111,11 +111,10 @@ void dsmem_copy_kernel(
     
     // === Phase 3: Both CTAs write to HBM ===
     for (int j = tid; j < TileBytes; j += blockDim.x) {
-      gmem_out[rank * TileBytes + j] = smem[stage][j];
+      gmem_out[rank * TileBytes + j] = smem[0][j];
     }
     
     cluster.sync();
-    stage = (stage + 1) % kStages;
   }
   
   if (rank == 1 && tid == 0) {
@@ -134,11 +133,15 @@ void pure_dsmem_bandwidth_kernel(
     int* __restrict__ cycles_out,
     int iters)
 {
-  __shared__ char smem_src[TileBytes];
-  __shared__ char smem_dst[TileBytes];
+  extern __shared__ char smem_raw[];
+  char* smem_src = smem_raw;
+  char* smem_dst = smem_raw + TileBytes;
   
   cg::cluster_group cluster = cg::this_cluster();
   int rank = cluster.block_rank();
+  
+  // Pointer to CTA0's smem
+  char* remote_src = reinterpret_cast<char*>(cluster.map_shared_rank(smem_src, 0));
   
   // CTA0: producer, CTA1: consumer
   if (rank == 0) {
@@ -150,6 +153,7 @@ void pure_dsmem_bandwidth_kernel(
   
   cluster.sync();
   
+  // Pointer to CTA0's smem (for CTA1 to read from)
   char* remote_src = reinterpret_cast<char*>(cluster.map_shared_rank(smem_src, 0));
   
   unsigned long long start = 0, stop = 0;
@@ -201,7 +205,6 @@ double measure_baseline(const byte_t* d_src, byte_t* d_dst, int tile_bytes, int 
   if (tile_bytes == 16384) baseline_load_kernel<16384><<<grid, block>>>(d_src, d_dst, d_cycles, iters);
   else if (tile_bytes == 32768) baseline_load_kernel<32768><<<grid, block>>>(d_src, d_dst, d_cycles, iters);
   else if (tile_bytes == 65536) baseline_load_kernel<65536><<<grid, block>>>(d_src, d_dst, d_cycles, iters);
-  else if (tile_bytes == 131072) baseline_load_kernel<131072><<<grid, block>>>(d_src, d_dst, d_cycles, iters);
   cudaDeviceSynchronize();
   
   int h_cycles;
@@ -223,7 +226,7 @@ double measure_dsmem(const byte_t* d_src, byte_t* d_dst, int tile_bytes, int ite
   dim3 grid(1);
   dim3 block(128);
   
-  size_t smem_bytes = 2 * tile_bytes;
+  size_t smem_bytes = tile_bytes;  // Only need one buffer per CTA
   
   cudaLaunchConfig_t config{};
   config.gridDim = grid;
@@ -240,7 +243,6 @@ double measure_dsmem(const byte_t* d_src, byte_t* d_dst, int tile_bytes, int ite
   if (tile_bytes == 16384) cudaLaunchKernelEx(&config, dsmem_copy_kernel<16384, 2>, d_src, d_dst, d_cycles, warmup);
   else if (tile_bytes == 32768) cudaLaunchKernelEx(&config, dsmem_copy_kernel<32768, 2>, d_src, d_dst, d_cycles, warmup);
   else if (tile_bytes == 65536) cudaLaunchKernelEx(&config, dsmem_copy_kernel<65536, 2>, d_src, d_dst, d_cycles, warmup);
-  else if (tile_bytes == 131072) cudaLaunchKernelEx(&config, dsmem_copy_kernel<131072, 2>, d_src, d_dst, d_cycles, warmup);
   cudaDeviceSynchronize();
   cudaMemset(d_cycles, 0, sizeof(int));
   
@@ -248,7 +250,6 @@ double measure_dsmem(const byte_t* d_src, byte_t* d_dst, int tile_bytes, int ite
   if (tile_bytes == 16384) cudaLaunchKernelEx(&config, dsmem_copy_kernel<16384, 2>, d_src, d_dst, d_cycles, iters);
   else if (tile_bytes == 32768) cudaLaunchKernelEx(&config, dsmem_copy_kernel<32768, 2>, d_src, d_dst, d_cycles, iters);
   else if (tile_bytes == 65536) cudaLaunchKernelEx(&config, dsmem_copy_kernel<65536, 2>, d_src, d_dst, d_cycles, iters);
-  else if (tile_bytes == 131072) cudaLaunchKernelEx(&config, dsmem_copy_kernel<131072, 2>, d_src, d_dst, d_cycles, iters);
   cudaDeviceSynchronize();
   
   int h_cycles;
@@ -284,7 +285,6 @@ double measure_pure_dsmem(int tile_bytes, int iters) {
   if (tile_bytes == 16384) cudaLaunchKernelEx(&config, pure_dsmem_bandwidth_kernel<16384>, d_cycles, iters);
   else if (tile_bytes == 32768) cudaLaunchKernelEx(&config, pure_dsmem_bandwidth_kernel<32768>, d_cycles, iters);
   else if (tile_bytes == 65536) cudaLaunchKernelEx(&config, pure_dsmem_bandwidth_kernel<65536>, d_cycles, iters);
-  else if (tile_bytes == 131072) cudaLaunchKernelEx(&config, pure_dsmem_bandwidth_kernel<131072>, d_cycles, iters);
   cudaDeviceSynchronize();
   
   int h_cycles;
