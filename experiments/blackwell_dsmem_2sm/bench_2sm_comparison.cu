@@ -1,21 +1,36 @@
 /**
- * Simplified 2SM comparison benchmark - reuses existing CUTLASS runners
+ * Simplified 2SM comparison benchmark - reuses CUTLASS infrastructure
  */
 
 #include "common.h"
 #include <iostream>
-#include <cutlass/cutlass.h>
-#include <cutlass/gemm/device/gemm_universal_adapter.h>
-#include <cutlass/gemm/kernel/default_gemm_universal.h>
-#include <cutlass/epilogue/collective/collective_builder.hpp>
-#include <cutlass/gemm/collective/collective_builder.hpp>
-#include <cutlass/gemm/dispatch_policy.hpp>
+
+#define CUTLASS_BLOCKFILL_GRID  256
+#define CUTLASS_BLOCKFILL_BLOCK 128
+
+#include "cute/tensor.hpp"
+
+#include "cutlass/cutlass.h"
+#include "cutlass/epilogue/collective/collective_builder.hpp"
+#include "cutlass/epilogue/dispatch_policy.hpp"
+#include "cutlass/epilogue/fusion/operations.hpp"
+#include "cutlass/gemm/collective/collective_builder.hpp"
+#include "cutlass/gemm/device/gemm_universal_adapter.h"
+#include "cutlass/gemm/dispatch_policy.hpp"
+#include "cutlass/gemm/kernel/gemm_universal.hpp"
+#include "cutlass/tensor_ref.h"
+#include "cutlass/util/device_memory.h"
+#include "cutlass/util/distribution.h"
+#include "cutlass/util/host_tensor.h"
+#include "cutlass/util/packed_stride.hpp"
+#include "cutlass/util/reference/device/tensor_compare.h"
+#include "cutlass/util/reference/device/tensor_fill.h"
 
 using namespace cute;
 using namespace blackwell_dsmem_2sm;
 
 //=============================================================================
-// Copy definitions from bench_cutlass_2sm_gemm.cu
+// Tile shapes
 //=============================================================================
 
 template <int TileN>
@@ -31,6 +46,10 @@ struct TileShape2SmForN;
 template <> struct TileShape2SmForN<64> { using Type = Shape<_256, _64, _64>; };
 template <> struct TileShape2SmForN<128> { using Type = Shape<_256, _128, _64>; };
 template <> struct TileShape2SmForN<256> { using Type = Shape<_256, _256, _64>; };
+
+//=============================================================================
+// CUTLASS Runner (same as bench_cutlass_2sm_gemm.cu)
+//=============================================================================
 
 template <int TileN, class MainloopSchedule, class EpilogueSchedule, class StageCountTag>
 struct CutlassRunner {
@@ -123,14 +142,14 @@ struct CutlassRunner {
     D.reset(static_cast<std::size_t>(m) * n);
   }
 
-  bool setup(int m, int n, int k) {
-    ProblemShape problem = ProblemShape{m, n, k, 1};
+  bool setup(const GemmOptions& options, const cutlass::KernelHardwareInfo& hw_info) {
+    ProblemShape problem = ProblemShape{options.m, options.n, options.k, 1};
     typename Gemm::Arguments arguments{
         cutlass::gemm::GemmUniversalMode::kGemm,
         problem,
         {A.get(), strideA, B.get(), strideB},
         {{1.0f, 0.0f}, C.get(), strideC, D.get(), strideD},
-        {}};
+        hw_info};
     gemm_op_ = Gemm{};
     std::size_t workspace_size = Gemm::get_workspace_size(arguments);
     workspace_ = cutlass::device_memory::allocation<uint8_t>(workspace_size);
@@ -140,7 +159,7 @@ struct CutlassRunner {
     return status == cutlass::Status::kSuccess;
   }
 
-  bool run() {
+  bool run_kernel() {
     cutlass::Status status = gemm_op_.run();
     if (status != cutlass::Status::kSuccess) return false;
     return cudaDeviceSynchronize() == cudaSuccess;
@@ -148,98 +167,72 @@ struct CutlassRunner {
 };
 
 //=============================================================================
-// Benchmark wrappers
+// Measurement
 //=============================================================================
 
-double measure_gemm(int M, int N, int K, int repeats, int warmup, const char* mode) {
+template <typename Runner>
+double measure_runner(Runner& runner, const GemmOptions& options, const cutlass::KernelHardwareInfo& hw_info) {
+  cudaEvent_t start, stop;
+  check_cuda(cudaEventCreate(&start), "cudaEventCreate start");
+  check_cuda(cudaEventCreate(&stop), "cudaEventCreate stop");
+
+  double total_ms = 0.0;
+  runner.initialize(options.m, options.n, options.k);
+
+  for (int i = 0; i < options.warmup_repeats; ++i) {
+    if (!runner.setup(options, hw_info)) return -1.0;
+    if (!runner.run_kernel()) return -1.0;
+  }
+
+  for (int i = 0; i < options.repeats; ++i) {
+    if (!runner.setup(options, hw_info)) return -1.0;
+    check_cuda(cudaEventRecord(start), "cudaEventRecord start");
+    if (!runner.run_kernel()) return -1.0;
+    check_cuda(cudaEventRecord(stop), "cudaEventRecord stop");
+    check_cuda(cudaEventSynchronize(stop), "cudaEventSynchronize");
+    total_ms += elapsed_ms(start, stop);
+  }
+
+  check_cuda(cudaEventDestroy(start), "cudaEventDestroy start");
+  check_cuda(cudaEventDestroy(stop), "cudaEventDestroy stop");
+  return total_ms / static_cast<double>(options.repeats);
+}
+
+//=============================================================================
+// Dispatch
+//=============================================================================
+
+double run_mode(const char* mode, int M, int N, int K, int repeats, int warmup) {
+  GemmOptions opts;
+  opts.m = M;
+  opts.n = N;
+  opts.k = K;
+  opts.repeats = 1;
+  opts.warmup_repeats = 0;
+
   cutlass::KernelHardwareInfo hw_info;
   hw_info.sm_count = 148;
 
-  cudaEvent_t start, stop;
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
-
-  double total_ms = 0.0;
-
-  // Dispatch based on mode
   if (std::strcmp(mode, "baseline") == 0) {
-    // Baseline: 1SM kernel (each CTA would load B independently)
     using Runner = CutlassRunner<64, cutlass::gemm::KernelTmaWarpSpecialized1SmSm100,
                                  cutlass::epilogue::TmaWarpSpecialized1Sm, cute::_2>;
     Runner runner;
-    runner.initialize(M, N, K);
-
-    for (int w = 0; w < warmup; ++w) {
-      runner.setup(M, N, K);
-      runner.run();
-    }
-
-    for (int r = 0; r < repeats; ++r) {
-      runner.setup(M, N, K);
-      cudaEventRecord(start);
-      runner.run();
-      cudaEventRecord(stop);
-      cudaEventSynchronize(stop);
-
-      float ms = 0.0f;
-      cudaEventElapsedTime(&ms, start, stop);
-      total_ms += ms;
-    }
+    return measure_runner(runner, opts, hw_info) * 2.0;  // Baseline: 2x time
   } else if (std::strcmp(mode, "d1") == 0) {
-    // D1: Same as baseline for now - would need custom kernel for DSMEM sharing
+    // D1: Same as baseline for now (would need custom kernel for DSMEM sharing)
     using Runner = CutlassRunner<64, cutlass::gemm::KernelTmaWarpSpecialized1SmSm100,
                                  cutlass::epilogue::TmaWarpSpecialized1Sm, cute::_2>;
     Runner runner;
-    runner.initialize(M, N, K);
-
-    for (int w = 0; w < warmup; ++w) {
-      runner.setup(M, N, K);
-      runner.run();
-    }
-
-    for (int r = 0; r < repeats; ++r) {
-      runner.setup(M, N, K);
-      cudaEventRecord(start);
-      runner.run();
-      cudaEventRecord(stop);
-      cudaEventSynchronize(stop);
-
-      float ms = 0.0f;
-      cudaEventElapsedTime(&ms, start, stop);
-      total_ms += ms;
-    }
+    return measure_runner(runner, opts, hw_info);
   } else if (std::strcmp(mode, "d2") == 0) {
-    // D2: 2SM hardware shared B
     using Runner = CutlassRunner<64, cutlass::gemm::KernelTmaWarpSpecialized2SmSm100,
                                  cutlass::epilogue::TmaWarpSpecialized2Sm, cute::_2>;
     Runner runner;
-    runner.initialize(M, N, K);
-
-    for (int w = 0; w < warmup; ++w) {
-      runner.setup(M, N, K);
-      runner.run();
-    }
-
-    for (int r = 0; r < repeats; ++r) {
-      runner.setup(M, N, K);
-      cudaEventRecord(start);
-      runner.run();
-      cudaEventRecord(stop);
-      cudaEventSynchronize(stop);
-
-      float ms = 0.0f;
-      cudaEventElapsedTime(&ms, start, stop);
-      total_ms += ms;
-    }
-  } else {
-    std::fprintf(stderr, "Unknown mode: %s\n", mode);
-    return -1.0;
+    return measure_runner(runner, opts, hw_info);
   }
 
-  cudaEventDestroy(start);
-  cudaEventDestroy(stop);
-
-  return total_ms / repeats;
+  std::fprintf(stderr, "Unknown mode: %s\n", mode);
+  return -1.0;
 }
 
 //=============================================================================
@@ -256,18 +249,15 @@ int main(int argc, char** argv) {
     else if (arg.find("--k=") == 0) K = std::atoi(argv[i] + 4);
     else if (arg.find("--repeats=") == 0) repeats = std::atoi(argv[i] + 10);
     else if (arg.find("--warmup=") == 0) warmup = std::atoi(argv[i] + 9);
-    else if (arg == "--help" || arg == "-h") {
-      std::cerr << "Usage: " << argv[0] << " --mode=baseline|d1|d2 --m=N --n=N --k=N\n";
-      return 0;
-    }
   }
 
   std::fprintf(stdout, "CONFIG mode=%s m=%d n=%d k=%d repeats=%d warmup=%d gpu=\"%s\"\n",
                mode, M, N, K, repeats, warmup, gpu_name().c_str());
 
-  double avg_ms = measure_gemm(M, N, K, repeats, warmup, mode);
-  double gflops = 2.0 * M * N * K / avg_ms / 1.0e6;
+  double avg_ms = run_mode(mode, M, N, K, repeats, warmup);
+  if (avg_ms < 0) return 1;
 
+  double gflops = 2.0 * M * N * K / avg_ms / 1.0e6;
   std::fprintf(stdout, "RESULT elapsed_ms=%.6f gflops=%.2f\n", avg_ms, gflops);
 
   return 0;
