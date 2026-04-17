@@ -242,6 +242,17 @@ if [[ "$HAVE_CUTLASS" == "1" ]]; then
       done
     done
   done
+  
+  # Run 2SM comparison benchmarks
+  for mode in baseline d1 d2; do
+    log="$OUTDIR/comparison_${mode}.txt"
+    ./bench_2sm_comparison --mode="$mode" --m="$GEMM_M" --n=64 --k="$GEMM_K" \
+      --repeats="$REPEATS" --warmup="$WARMUP_REPEATS" | tee "$log"
+  done
+fi
+      done
+    done
+  done
 fi
 fi  # ONLY_CUTLASS guard
 
