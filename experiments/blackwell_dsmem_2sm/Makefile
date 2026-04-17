@@ -8,7 +8,7 @@ CUTLASS_PATH ?= ../../cutlass
 CUTLASS_INCLUDES = -I$(CUTLASS_PATH)/include -I$(CUTLASS_PATH)/tools/util/include
 
 # Hand-written benchmarks (no CUTLASS)
-HAND_WRITTEN = bench_3way
+HAND_WRITTEN = bench_3way bench_tc_simple
 
 # CUTLASS benchmarks
 CUTLASS_BENCHMARKS = bench_cutlass_2sm_gemm bench_d1_only
@@ -24,6 +24,9 @@ cutlass: $(CUTLASS_BENCHMARKS)
 
 # Hand-written benchmarks: no CUTLASS includes needed
 bench_3way: bench_3way.cu common.h
+	$(NVCC) $(NVCC_FLAGS) $< -o $@
+
+bench_tc_simple: bench_tc_simple.cu common.h
 	$(NVCC) $(NVCC_FLAGS) $< -o $@
 
 # CUTLASS benchmarks
