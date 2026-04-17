@@ -176,6 +176,7 @@ if [[ "$HAVE_CUTLASS" == "1" ]]; then
     -DCUTLASS_ARCH_MMA_SM100A_ENABLED \
     -DCUTLASS_ARCH_MMA_SM100_ENABLED \
     -DCUTLASS_ARCH_MMA_SM103A_ENABLED
+  COMPILE_ARCH="--generate-code arch=compute_103a,code=sm_103a" \
   compile bench_2sm_comparison.cu bench_2sm_comparison \
     --expt-relaxed-constexpr \
     -I"$CUTLASS_DIR/include" \
