@@ -1,18 +1,15 @@
 """
-Roofline Plotting Script
+Roofline Plot Generator
 
-This script generates roofline plots from benchmark results to visualize
-the performance characteristics of GEMM operations across different shapes.
+Generates roofline plots from benchmark results, showing the transition
+from memory-bound to compute-bound regions.
 """
-
-from __future__ import annotations
 
 import argparse
 import json
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import numpy as np
 
@@ -22,157 +19,165 @@ try:
     HAS_MPL = True
 except ImportError:
     HAS_MPL = False
-    print("Warning: matplotlib not available. Install with: pip install matplotlib")
+    print("Error: matplotlib required")
+    sys.exit(1)
 
 
-@dataclass
-class BenchmarkPoint:
-    """A single benchmark data point."""
-    M: int
-    N: int
-    K: int
-    time_ms: float
-    gflops: float
-    arithmetic_intensity: float
-    achieved_bandwidth_gbps: float
-    compute_efficiency: float
-    memory_efficiency: float
+def load_results(filepath: str) -> dict:
+    """Load results from JSON file."""
+    with open(filepath, 'r') as f:
+        return json.load(f)
 
 
-def load_results(filepath: str) -> List[BenchmarkPoint]:
-    """Load benchmark results from JSON file."""
-    with open(filepath, "r") as f:
-        data = json.load(f)
-    
-    points = []
-    for r in data["results"]:
-        points.append(BenchmarkPoint(
-            M=r["M"], N=r["N"], K=r["K"],
-            time_ms=r["time_ms"],
-            gflops=r["gflops"],
-            arithmetic_intensity=r["arithmetic_intensity"],
-            achieved_bandwidth_gbps=r["achieved_bandwidth_gbps"],
-            compute_efficiency=r["compute_efficiency"],
-            memory_efficiency=r["memory_efficiency"],
-        ))
-    
-    return points
-
-
-def compute_roofline(ai: np.ndarray, peak_tflops: float, peak_bandwidth_gbps: float) -> np.ndarray:
+def compute_roofline(ai: np.ndarray,
+                     peak_tflops: float,
+                     peak_bandwidth_gbps: float) -> dict:
     """
-    Compute the roofline limit.
-    
-    The roofline is:
-    - Memory-bound region: AI < Ridge Point, performance = AI * peak_bandwidth
-    - Compute-bound region: AI >= Ridge Point, performance = peak_tflops
-    
-    Ridge Point = peak_tflops / peak_bandwidth
-    """
-    ridge_point = peak_tflops * 1000 / peak_bandwidth_gbps  # Convert TFLOPS to GFLOPS
-    
-    gflops = np.minimum(ai * peak_bandwidth_gbps, peak_tflops * 1000)
-    return gflops
-
-
-def plot_roofline(points: List[BenchmarkPoint],
-                  peak_tflops: float = 2500,
-                  peak_bandwidth_gbps: float = 8000,
-                  output_file: Optional[str] = None,
-                  title: str = "GEMM Roofline Analysis"):
-    """
-    Generate a roofline plot.
+    Compute roofline curve.
     
     Args:
-        points: List of benchmark data points
-        peak_tflops: Peak compute performance in TFLOPS
-        peak_bandwidth_gbps: Peak memory bandwidth in GB/s
-        output_file: Output file path for the plot
-        title: Plot title
-    """
-    if not HAS_MPL:
-        print("Error: matplotlib is required for plotting")
-        return
+        ai: Arithmetic intensity array (FLOPs/Byte)
+        peak_tflops: Peak compute throughput (TFLOPS)
+        peak_bandwidth_gbps: Peak memory bandwidth (GB/s)
     
-    # Set up the figure
+    Returns:
+        dict with roofline GFLOPS values and ridge point
+    """
+    # Ridge point: where AI * BW = Peak TFLOPS
+    ridge_point = peak_tflops * 1000 / peak_bandwidth_gbps
+    
+    # Roofline: min(AI * BW, Peak TFLOPS)
+    gflops = np.minimum(ai * peak_bandwidth_gbps, peak_tflops * 1000)
+    
+    return {
+        'gflops': gflops,
+        'ridge_point': ridge_point,
+    }
+
+
+def plot_roofline(results_file: str,
+                   output_file: Optional[str] = None,
+                   title: str = "GEMM Roofline Analysis"):
+    """Generate roofline plot from benchmark results."""
+    
+    data = load_results(results_file)
+    results = data['results']
+    gpu_specs = data.get('gpu_specs', {})
+    
+    # Get GPU specs
+    peak_bf16_tflops = gpu_specs.get('peak_bf16_tflops', 1250)
+    peak_bandwidth_gbps = gpu_specs.get('peak_bandwidth_gbps', 8000)
+    
+    # Create figure
     fig, ax = plt.subplots(1, 1, figsize=(14, 10))
     
-    # Roofline parameters
-    ridge_point = peak_tflops * 1000 / peak_bandwidth_gbps  # GFLOPS per Byte
-    
-    # Create roofline line
-    ai_values = np.logspace(-1, 4, 1000)  # Arithmetic intensity from 0.1 to 10000
-    roofline_gflops = compute_roofline(ai_values, peak_tflops, peak_bandwidth_gbps)
+    # Generate roofline curve
+    ai_range = np.logspace(-1, 4, 1000)
+    roofline = compute_roofline(ai_range, peak_bf16_tflops, peak_bandwidth_gbps)
     
     # Plot roofline
-    ax.loglog(ai_values, roofline_gflops, 'k-', linewidth=2.5, label='Roofline Limit')
+    ax.loglog(ai_range, roofline['gflops'], 'k-', linewidth=3, 
+              label=f'Peak BF16: {peak_bf16_tflops} TFLOPS')
     
-    # Shade the regions
-    ai_mem = np.logspace(-1, np.log10(ridge_point), 100)
-    mem_bound = ai_mem * peak_bandwidth_gbps
-    ax.fill_between(ai_mem, mem_bound * 0.01, mem_bound, alpha=0.15, color='blue', 
-                   label='Memory-Bound Region')
+    # Fill memory-bound region (light blue)
+    ai_mem = np.logspace(-1, np.log10(roofline['ridge_point']), 200)
+    ax.fill_between(ai_mem, 0, ai_mem * peak_bandwidth_gbps, 
+                   alpha=0.15, color='blue')
     
-    ai_comp = np.logspace(np.log10(ridge_point), 4, 100)
-    comp_bound = np.ones_like(ai_comp) * peak_tflops * 1000
-    ax.fill_between(ai_comp, comp_bound * 0.01, comp_bound, alpha=0.15, color='red',
-                   label='Compute-Bound Region')
+    # Fill compute-bound region (light red)
+    ai_comp = np.logspace(np.log10(roofline['ridge_point']), 4, 200)
+    ax.fill_between(ai_comp, 0, peak_bf16_tflops * 1000, 
+                   alpha=0.15, color='red')
     
-    # Extract data from points
-    ai_data = np.array([p.arithmetic_intensity for p in points])
-    gflops_data = np.array([p.gflops for p in points])
+    # Ridge point marker
+    ax.axvline(x=roofline['ridge_point'], color='gray', linestyle='--', 
+               alpha=0.7, linewidth=1.5)
+    ax.text(roofline['ridge_point'] * 1.3, peak_bf16_tflops * 500,
+           f'Ridge Point\nAI = {roofline["ridge_point"]:.0f}',
+           fontsize=11, color='gray')
     
-    # Color by K dimension (log scale) to show shape progression
-    k_values = np.array([p.K for p in points])
-    k_log = np.log2(k_values)
-    k_norm = (k_log - k_log.min()) / (k_log.max() - k_log.min() + 1e-6)
+    # Separate points by backend
+    backends = {}
+    for r in results:
+        key = r['backend']
+        if key not in backends:
+            backends[key] = {'ai': [], 'gflops': [], 'tflops': [], 'shape': []}
+        backends[key]['ai'].append(r['arithmetic_intensity'])
+        backends[key]['gflops'].append(r['gflops'])
+        backends[key]['tflops'].append(r['tflops'])
+        backends[key]['shape'].append(f"{r['M']}x{r['N']}x{r['K']}")
+    
+    # Color scheme for backends
+    colors = {
+        'cuBLAS': '#e74c3c',
+        'DeepGEMM': '#3498db',
+    }
+    markers = {
+        'cuBLAS': 'o',
+        'DeepGEMM': 's',
+    }
     
     # Plot benchmark points
-    scatter = ax.scatter(ai_data, gflops_data, c=k_values, cmap='viridis',
-                         s=150, alpha=0.8, edgecolors='black', linewidths=1,
-                         zorder=10, norm=plt.matplotlib.colors.LogNorm())
+    for backend, data_points in backends.items():
+        ai = np.array(data_points['ai'])
+        gflops = np.array(data_points['gflops'])
+        tflops = np.array(data_points['tflops'])
+        shapes = data_points['shape']
+        
+        color = colors.get(backend, 'gray')
+        marker = markers.get(backend, 'o')
+        
+        scatter = ax.scatter(ai, gflops, c=color, s=150, marker=marker,
+                            alpha=0.8, edgecolors='black', linewidths=1.5,
+                            label=backend, zorder=10)
+        
+        # Annotate points
+        # Sort by AI for better annotation placement
+        sorted_indices = np.argsort(ai)
+        n_annotate = min(10, len(sorted_indices))
+        step = max(1, len(sorted_indices) // n_annotate)
+        
+        for i in range(0, len(sorted_indices), step):
+            idx = sorted_indices[i]
+            label = shapes[idx].replace('x', '\n')
+            ax.annotate(label, (ai[idx], gflops[idx]),
+                       xytext=(5, 5), textcoords='offset points',
+                       fontsize=8, alpha=0.7,
+                       bbox=dict(boxstyle='round,pad=0.2', 
+                                facecolor='white', alpha=0.7))
     
-    # Add colorbar
-    cbar = plt.colorbar(scatter, ax=ax, pad=0.02)
-    cbar.set_label('K Dimension', fontsize=12)
+    # Add horizontal line for peak TFLOPS
+    ax.axhline(y=peak_bf16_tflops * 1000, color='red', linestyle=':', 
+               alpha=0.5, linewidth=1)
     
-    # Annotate some key points
-    # Find points at key transitions
-    sorted_points = sorted(points, key=lambda p: p.arithmetic_intensity)
-    n_annotate = min(10, len(sorted_points))
-    for i in range(0, len(sorted_points), max(1, len(sorted_points) // n_annotate)):
-        p = sorted_points[i]
-        label = f"M={p.M}\nN={p.N}\nK={p.K}"
-        ax.annotate(label, (p.arithmetic_intensity, p.gflops),
-                   xytext=(10, 10), textcoords='offset points',
-                   fontsize=8, alpha=0.7,
-                   bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7))
+    # Add diagonal line for memory bandwidth
+    ai_bw = np.logspace(-1, np.log10(roofline['ridge_point']), 100)
+    ax.plot(ai_bw, ai_bw * peak_bandwidth_gbps, 'b:', alpha=0.5, linewidth=1)
     
-    # Mark the ridge point
-    ax.axvline(x=ridge_point, color='purple', linestyle='--', linewidth=1.5, alpha=0.7)
-    ax.text(ridge_point * 1.1, peak_tflops * 1000 * 0.5, 
-           f'Ridge Point\nAI={ridge_point:.1f}',
-           fontsize=10, color='purple', rotation=90, va='center')
-    
-    # Set axis labels and limits
+    # Set axis properties
     ax.set_xlabel('Arithmetic Intensity (FLOPs/Byte)', fontsize=14)
     ax.set_ylabel('Performance (GFLOPS)', fontsize=14)
     ax.set_title(title, fontsize=16, fontweight='bold')
     
-    # Set reasonable axis limits
-    ax.set_xlim(0.5, max(ai_data) * 2)
-    ax.set_ylim(10, peak_tflops * 1500)  # Allow some headroom
+    ax.set_xlim(1, max(ai_range) * 1.5)
+    ax.set_ylim(100, peak_bf16_tflops * 1500)
     
-    # Add grid
     ax.grid(True, which='both', linestyle='--', alpha=0.3)
+    ax.legend(loc='lower right', fontsize=12)
     
-    # Add performance annotations
-    ax.text(0.02, 0.98, f'Peak Compute: {peak_tflops} TFLOPS\nPeak Bandwidth: {peak_bandwidth_gbps} GB/s',
-           transform=ax.transAxes, fontsize=10, va='top',
-           bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+    # Add info box
+    info_text = (f'Peak BF16: {peak_bf16_tflops} TFLOPS\n'
+                f'Peak BW: {peak_bandwidth_gbps} GB/s\n'
+                f'Ridge: {roofline["ridge_point"]:.0f} FLOP/B')
+    ax.text(0.02, 0.98, info_text, transform=ax.transAxes, fontsize=11,
+           verticalalignment='top',
+           bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
     
-    # Create legend
-    ax.legend(loc='lower right', fontsize=10)
+    # Add region labels
+    ax.text(0.15, 0.85, 'Memory\nBound', transform=ax.transAxes,
+           fontsize=14, ha='center', color='blue', alpha=0.6)
+    ax.text(0.75, 0.85, 'Compute\nBound', transform=ax.transAxes,
+           fontsize=14, ha='center', color='red', alpha=0.6)
     
     plt.tight_layout()
     
@@ -184,159 +189,78 @@ def plot_roofline(points: List[BenchmarkPoint],
     return fig
 
 
-def plot_performance_heatmap(points: List[BenchmarkPoint],
-                             output_file: Optional[str] = None):
-    """
-    Generate a heatmap of performance for fixed K values.
-    """
-    if not HAS_MPL:
-        print("Error: matplotlib is required for plotting")
-        return
+def plot_performance_vs_shape(results_file: str,
+                               output_file: Optional[str] = None):
+    """Plot performance vs matrix size."""
     
-    # Group by K
-    k_values = sorted(set(p.K for p in points))
+    data = load_results(results_file)
+    results = data['results']
     
-    fig, axes = plt.subplots(1, len(k_values), figsize=(5 * len(k_values), 5), 
-                            squeeze=False, sharey=True)
+    fig, ax = plt.subplots(1, 1, figsize=(14, 8))
     
-    for idx, k in enumerate(k_values):
-        ax = axes[0, idx]
-        k_points = [p for p in points if p.K == k]
+    # Separate by backend
+    backends = {}
+    for r in results:
+        key = r['backend']
+        if key not in backends:
+            backends[key] = {'sizes': [], 'tflops': []}
         
-        # Create M x N grid
-        m_values = sorted(set(p.M for p in k_points))
-        n_values = sorted(set(p.N for p in k_points))
+        # Calculate matrix size (total elements)
+        size = r['M'] * r['N'] * r['K']
+        backends[key]['sizes'].append(size)
+        backends[key]['tflops'].append(r['tflops'])
+    
+    colors = {'cuBLAS': '#e74c3c', 'DeepGEMM': '#3498db'}
+    
+    for backend, data_points in backends.items():
+        sizes = np.array(data_points['sizes'])
+        tflops = np.array(data_points['tflops'])
         
-        perf_grid = np.zeros((len(m_values), len(n_values)))
-        for p in k_points:
-            mi = m_values.index(p.M)
-            ni = n_values.index(p.N)
-            perf_grid[mi, ni] = p.gflops
+        # Sort by size
+        sorted_idx = np.argsort(sizes)
+        sizes = sizes[sorted_idx]
+        tflops = tflops[sorted_idx]
         
-        im = ax.imshow(perf_grid, aspect='auto', cmap='YlOrRd')
-        ax.set_xticks(range(len(n_values)))
-        ax.set_yticks(range(len(m_values)))
-        ax.set_xticklabels(n_values, rotation=45)
-        ax.set_yticklabels(m_values)
-        ax.set_xlabel('N')
-        ax.set_ylabel('M')
-        ax.set_title(f'K={k}')
-        
-        plt.colorbar(im, ax=ax, label='GFLOPS')
+        ax.semilogx(sizes, tflops, 'o-', color=colors.get(backend, 'gray'),
+                   markersize=10, linewidth=2, label=backend, alpha=0.8)
+    
+    ax.set_xlabel('Matrix Size (M×N×K)', fontsize=12)
+    ax.set_ylabel('Performance (TFLOPS)', fontsize=12)
+    ax.set_title('GEMM Performance vs Matrix Size', fontsize=14)
+    ax.legend()
+    ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
     
     if output_file:
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"Heatmap saved to {output_file}")
-    
-    plt.show()
-    return fig
-
-
-def plot_transition_analysis(points: List[BenchmarkPoint],
-                             peak_tflops: float = 2500,
-                             peak_bandwidth_gbps: float = 8000,
-                             output_file: Optional[str] = None):
-    """
-    Plot the transition from memory-bound to compute-bound.
-    
-    Shows efficiency vs arithmetic intensity.
-    """
-    if not HAS_MPL:
-        print("Error: matplotlib is required for plotting")
-        return
-    
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-    
-    # Sort by arithmetic intensity
-    sorted_points = sorted(points, key=lambda p: p.arithmetic_intensity)
-    ai_values = np.array([p.arithmetic_intensity for p in sorted_points])
-    
-    # Compute efficiency (how close to roofline)
-    ridge_point = peak_tflops * 1000 / peak_bandwidth_gbps
-    
-    # Theoretical max performance for each AI
-    theoretical_max = compute_roofline(ai_values, peak_tflops, peak_bandwidth_gbps)
-    achieved = np.array([p.gflops for p in sorted_points])
-    efficiency = achieved / theoretical_max
-    
-    # Plot 1: Performance vs AI with roofline
-    ax1 = axes[0]
-    ax1.loglog(ai_values, achieved, 'bo-', markersize=6, label='Achieved', alpha=0.7)
-    ax1.loglog(ai_values, theoretical_max, 'r--', linewidth=2, label='Roofline')
-    ax1.axvline(x=ridge_point, color='green', linestyle=':', linewidth=2, 
-               label=f'Ridge Point (AI={ridge_point:.1f})')
-    ax1.set_xlabel('Arithmetic Intensity (FLOPs/Byte)', fontsize=12)
-    ax1.set_ylabel('Performance (GFLOPS)', fontsize=12)
-    ax1.set_title('Performance vs Arithmetic Intensity', fontsize=14)
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
-    
-    # Plot 2: Efficiency vs AI
-    ax2 = axes[1]
-    ax2.semilogx(ai_values, efficiency * 100, 'go-', markersize=6, alpha=0.7)
-    ax2.axvline(x=ridge_point, color='red', linestyle=':', linewidth=2,
-               label=f'Ridge Point (AI={ridge_point:.1f})')
-    ax2.axhline(y=100, color='blue', linestyle='--', alpha=0.5, label='100% Efficiency')
-    ax2.set_xlabel('Arithmetic Intensity (FLOPs/Byte)', fontsize=12)
-    ax2.set_ylabel('Roofline Efficiency (%)', fontsize=12)
-    ax2.set_title('Efficiency vs Arithmetic Intensity', fontsize=14)
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
-    ax2.set_ylim(0, 120)
-    
-    plt.tight_layout()
-    
-    if output_file:
-        plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"Transition analysis saved to {output_file}")
+        print(f"Plot saved to {output_file}")
     
     plt.show()
     return fig
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate Roofline Plots")
-    parser.add_argument("results_file", type=str, help="Path to results JSON file")
-    parser.add_argument("--peak-tflops", type=float, default=2500,
-                       help="Peak TFLOPS for the GPU")
-    parser.add_argument("--peak-bandwidth", type=float, default=8000,
-                       help="Peak memory bandwidth in GB/s")
-    parser.add_argument("--output", type=str, default=None,
-                       help="Output file for the plot")
-    parser.add_argument("--title", type=str, default="GEMM Roofline Analysis",
-                       help="Plot title")
+    parser = argparse.ArgumentParser(description="Generate roofline plots")
+    parser.add_argument("results_file", type=str, help="Path to results JSON")
+    parser.add_argument("--output", type=str, default=None, help="Output file")
+    parser.add_argument("--title", type=str, default="GEMM Roofline Analysis")
     
     args = parser.parse_args()
     
-    # Load results
     if not Path(args.results_file).exists():
         print(f"Error: Results file not found: {args.results_file}")
         sys.exit(1)
     
-    points = load_results(args.results_file)
-    print(f"Loaded {len(points)} benchmark points")
+    print(f"Loading results from {args.results_file}")
     
-    # Generate plots
     output_base = args.output or Path(args.results_file).stem
     
-    # Main roofline plot
-    plot_roofline(
-        points,
-        peak_tflops=args.peak_tflops,
-        peak_bandwidth_gbps=args.peak_bandwidth,
-        output_file=f"{output_base}_roofline.png",
-        title=args.title
-    )
+    print("\nGenerating roofline plot...")
+    plot_roofline(args.results_file, f"{output_base}_roofline.png", args.title)
     
-    # Transition analysis
-    plot_transition_analysis(
-        points,
-        peak_tflops=args.peak_tflops,
-        peak_bandwidth_gbps=args.peak_bandwidth,
-        output_file=f"{output_base}_transition.png"
-    )
+    print("\nGenerating performance comparison plot...")
+    plot_performance_vs_shape(args.results_file, f"{output_base}_perf.png")
 
 
 if __name__ == "__main__":
