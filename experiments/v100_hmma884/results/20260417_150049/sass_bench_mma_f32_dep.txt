@@ -1,0 +1,352 @@
+
+Fatbin elf code:
+================
+arch = sm_70
+code version = [1,7]
+host = linux
+compile_size = 64bit
+
+	code for sm_70
+
+Fatbin elf code:
+================
+arch = sm_70
+code version = [1,7]
+host = linux
+compile_size = 64bit
+
+	code for sm_70
+		Function : _ZN49_GLOBAL__N__2faba744_20_bench_mma_f32_dep_cu_main24bench_mma_f32_dep_kernelEPN12v100_hmma88412DeviceResultEiii
+	.headerflags	@"EF_CUDA_TEXMODE_UNIFIED EF_CUDA_64BIT_ADDRESS EF_CUDA_SM70 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM70)"
+        /*0000*/                   IMAD.MOV.U32 R1, RZ, RZ, c[0x0][0x28] ;                             /* 0x00000a00ff017624 */
+                                                                                                       /* 0x000fe400078e00ff */
+        /*0010*/              @!PT SHFL.IDX PT, RZ, RZ, RZ, RZ ;                                       /* 0x000000fffffff389 */
+                                                                                                       /* 0x000fe200000e00ff */
+        /*0020*/                   S2R R0, SR_TID.X ;                                                  /* 0x0000000000007919 */
+                                                                                                       /* 0x000e240000002100 */
+        /*0030*/                   ISETP.GT.U32.AND P0, PT, R0, 0x1f, PT ;                             /* 0x0000001f0000780c */
+                                                                                                       /* 0x001fd80003f04070 */
+        /*0040*/               @P0 EXIT ;                                                              /* 0x000000000000094d */
+                                                                                                       /* 0x000fea0003800000 */
+        /*0050*/                   IMAD.MOV.U32 R0, RZ, RZ, c[0x0][0x168] ;                            /* 0x00005a00ff007624 */
+                                                                                                       /* 0x000fe200078e00ff */
+        /*0060*/                   CS2R R10, SRZ ;                                                     /* 0x00000000000a7805 */
+                                                                                                       /* 0x000fe2000001ff00 */
+        /*0070*/                   CS2R R8, SRZ ;                                                      /* 0x0000000000087805 */
+                                                                                                       /* 0x000fe2000001ff00 */
+        /*0080*/                   CS2R R14, SRZ ;                                                     /* 0x00000000000e7805 */
+                                                                                                       /* 0x000fe2000001ff00 */
+        /*0090*/                   CS2R R12, SRZ ;                                                     /* 0x00000000000c7805 */
+                                                                                                       /* 0x000fe2000001ff00 */
+        /*00a0*/                   ISETP.GE.AND P0, PT, R0, 0x1, PT ;                                  /* 0x000000010000780c */
+                                                                                                       /* 0x000fd80003f06270 */
+        /*00b0*/              @!P0 BRA 0x1b0 ;                                                         /* 0x000000f000008947 */
+                                                                                                       /* 0x000fea0003800000 */
+        /*00c0*/                   IMAD.MOV.U32 R0, RZ, RZ, RZ ;                                       /* 0x000000ffff007224 */
+                                                                                                       /* 0x000fe200078e00ff */
+        /*00d0*/                   MOV R2, 0x3c003c00 ;                                                /* 0x3c003c0000027802 */
+                                                                                                       /* 0x000fe20000000f00 */
+        /*00e0*/                   CS2R R12, SRZ ;                                                     /* 0x00000000000c7805 */
+                                                                                                       /* 0x000fe2000001ff00 */
+        /*00f0*/                   CS2R R14, SRZ ;                                                     /* 0x00000000000e7805 */
+                                                                                                       /* 0x000fe2000001ff00 */
+        /*0100*/                   CS2R R8, SRZ ;                                                      /* 0x0000000000087805 */
+                                                                                                       /* 0x000fe2000001ff00 */
+        /*0110*/                   CS2R R10, SRZ ;                                                     /* 0x00000000000a7805 */
+                                                                                                       /* 0x000fe4000001ff00 */
+        /*0120*/              @!PT SHFL.IDX PT, RZ, RZ, RZ, RZ ;                                       /* 0x000000fffffff389 */
+                                                                                                       /* 0x000fe200000e00ff */
+        /*0130*/                   IADD3 R0, R0, 0x1, RZ ;                                             /* 0x0000000100007810 */
+                                                                                                       /* 0x000fe20007ffe0ff */
+        /*0140*/                   IMAD.MOV.U32 R3, RZ, RZ, 0x3c003c00 ;                               /* 0x3c003c00ff037424 */
+                                                                                                       /* 0x000fc600078e00ff */
+        /*0150*/                   ISETP.GE.AND P0, PT, R0, c[0x0][0x168], PT ;                        /* 0x00005a0000007a0c */
+                                                                                                       /* 0x000fc60003f06270 */
+        /*0160*/                   HMMA.884.F32.F32.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R12 ;       /* 0x00000002020c7236 */
+                                                                                                       /* 0x0c0b64000000540c */
+        /*0170*/                   HMMA.884.F32.F32.STEP1 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;       /* 0x00000002020e7236 */
+                                                                                                       /* 0x0c0b64000000d40e */
+        /*0180*/                   HMMA.884.F32.F32.STEP2 R8, R2.reuse.ROW, R2.reuse.COL, R8 ;         /* 0x0000000202087236 */
+                                                                                                       /* 0x0c0b640000015408 */
+        /*0190*/                   HMMA.884.F32.F32.STEP3 R10, R2.ROW, R2.COL, R10 ;                   /* 0x00000002020a7236 */
+                                                                                                       /* 0x000b66000001d40a */
+        /*01a0*/              @!P0 BRA 0x120 ;                                                         /* 0xffffff7000008947 */
+                                                                                                       /* 0x020fea000383ffff */
+        /*01b0*/                   NOP ;                                                               /* 0x0000000000007918 */
+                                                                                                       /* 0x000fe20000000000 */
+        /*01c0*/                   BAR.SYNC 0x0 ;                                                      /* 0x0000000000007b1d */
+                                                                                                       /* 0x000fea0000000000 */
+        /*01d0*/                   CS2R R28, SR_CLOCKLO ;                                              /* 0x00000000001c7805 */
+                                                                                                       /* 0x000fe40000015000 */
+        /*01e0*/                   IMAD.MOV.U32 R0, RZ, RZ, c[0x0][0x16c] ;                            /* 0x00005b00ff007624 */
+                                                                                                       /* 0x000fca00078e00ff */
+        /*01f0*/                   ISETP.GE.AND P0, PT, R0, 0x1, PT ;                                  /* 0x000000010000780c */
+                                                                                                       /* 0x000fd80003f06270 */
+        /*0200*/              @!P0 BRA 0x880 ;                                                         /* 0x0000067000008947 */
+                                                                                                       /* 0x000fea0003800000 */
+        /*0210*/                   IMAD.MOV.U32 R0, RZ, RZ, 0x1 ;                                      /* 0x00000001ff007424 */
+                                                                                                       /* 0x000fe200078e00ff */
+        /*0220*/                   MOV R24, RZ ;                                                       /* 0x000000ff00187202 */
+                                                                                                       /* 0x000fc80000000f00 */
+        /*0230*/                   ISETP.LE.AND P0, PT, R0, c[0x0][0x170], PT ;                        /* 0x00005c0000007a0c */
+                                                                                                       /* 0x000fd40003f03270 */
+        /*0240*/              @!PT SHFL.IDX PT, RZ, RZ, RZ, RZ ;                                       /* 0x000000fffffff389 */
+                                                                                                       /* 0x000fe200000e00ff */
+        /*0250*/                   IMAD.MOV.U32 R0, RZ, RZ, c[0x0][0x170] ;                            /* 0x00005c00ff007624 */
+                                                                                                       /* 0x000fe200078e00ff */
+        /*0260*/                   IADD3 R24, R24, 0x1, RZ ;                                           /* 0x0000000118187810 */
+                                                                                                       /* 0x000fe20007ffe0ff */
+        /*0270*/               @P0 IMAD.MOV.U32 R2, RZ, RZ, 0x3c003c00 ;                               /* 0x3c003c00ff020424 */
+                                                                                                       /* 0x020fc600078e00ff */
+        /*0280*/                   ISETP.GE.AND P2, PT, R0.reuse, 0x2, PT ;                            /* 0x000000020000780c */
+                                                                                                       /* 0x040fe20003f46270 */
+        /*0290*/                   IMAD.MOV.U32 R3, RZ, RZ, R2.reuse ;                                 /* 0x000000ffff037224 */
+                                                                                                       /* 0x100fe200078e0002 */
+        /*02a0*/                   ISETP.GE.AND P3, PT, R0.reuse, 0x4, PT ;                            /* 0x000000040000780c */
+                                                                                                       /* 0x040fe20003f66270 */
+        /*02b0*/                   IMAD.MOV.U32 R6, RZ, RZ, R2.reuse ;                                 /* 0x000000ffff067224 */
+                                                                                                       /* 0x100fe200078e0002 */
+        /*02c0*/                   ISETP.GE.AND P1, PT, R0, 0x8, PT ;                                  /* 0x000000080000780c */
+                                                                                                       /* 0x000fe20003f26270 */
+        /*02d0*/                   IMAD.MOV.U32 R7, RZ, RZ, R2 ;                                       /* 0x000000ffff077224 */
+                                                                                                       /* 0x000fcc00078e0002 */
+        /*02e0*/               @P0 HMMA.884.F32.F32.STEP0 R12, R2.reuse.ROW, R6.reuse.COL, R12 ;       /* 0x00000006020c0236 */
+                                                                                                       /* 0x0c0fe2000000540c */
+        /*02f0*/               @P2 MOV R4, 0x3c003c00 ;                                                /* 0x3c003c0000042802 */
+                                                                                                       /* 0x000fe20000000f00 */
+        /*0300*/               @P0 HMMA.884.F32.F32.STEP1 R14, R2.reuse.ROW, R6.reuse.COL, R14 ;       /* 0x00000006020e0236 */
+                                                                                                       /* 0x0c0fe4000000d40e */
+        /*0310*/               @P0 HMMA.884.F32.F32.STEP2 R8, R2.reuse.ROW, R6.reuse.COL, R8 ;         /* 0x0000000602080236 */
+                                                                                                       /* 0x0c0fe20000015408 */
+        /*0320*/                   MOV R16, R4 ;                                                       /* 0x0000000400107202 */
+                                                                                                       /* 0x000fe20000000f00 */
+        /*0330*/               @P0 HMMA.884.F32.F32.STEP3 R10, R2.ROW, R6.COL, R10 ;                   /* 0x00000006020a0236 */
+                                                                                                       /* 0x000b62000001d40a */
+        /*0340*/                   IMAD.MOV.U32 R5, RZ, RZ, R4.reuse ;                                 /* 0x000000ffff057224 */
+                                                                                                       /* 0x100fe400078e0004 */
+        /*0350*/               @P3 IMAD.MOV.U32 R2, RZ, RZ, 0x3c003c00 ;                               /* 0x3c003c00ff023424 */
+                                                                                                       /* 0x020fe400078e00ff */
+        /*0360*/                   IMAD.MOV.U32 R17, RZ, RZ, R4 ;                                      /* 0x000000ffff117224 */
+                                                                                                       /* 0x000fc400078e0004 */
+        /*0370*/                   IMAD.MOV.U32 R18, RZ, RZ, R2.reuse ;                                /* 0x000000ffff127224 */
+                                                                                                       /* 0x100fe200078e0002 */
+        /*0380*/                   MOV R3, R2.reuse ;                                                  /* 0x0000000200037202 */
+                                                                                                       /* 0x080fe20000000f00 */
+        /*0390*/                   IMAD.MOV.U32 R19, RZ, RZ, R2.reuse ;                                /* 0x000000ffff137224 */
+                                                                                                       /* 0x100fe200078e0002 */
+        /*03a0*/                   MOV R20, R2.reuse ;                                                 /* 0x0000000200147202 */
+                                                                                                       /* 0x080fe20000000f00 */
+        /*03b0*/               @P2 HMMA.884.F32.F32.STEP0 R12, R4.reuse.ROW, R16.reuse.COL, R12 ;      /* 0x00000010040c2236 */
+                                                                                                       /* 0x0c0fe2000000540c */
+        /*03c0*/                   IMAD.MOV.U32 R21, RZ, RZ, R2.reuse ;                                /* 0x000000ffff157224 */
+                                                                                                       /* 0x100fe200078e0002 */
+        /*03d0*/               @P2 HMMA.884.F32.F32.STEP1 R14, R4.reuse.ROW, R16.reuse.COL, R14 ;      /* 0x00000010040e2236 */
+                                                                                                       /* 0x0c0fe2000000d40e */
+        /*03e0*/                   IMAD.MOV.U32 R22, RZ, RZ, R2 ;                                      /* 0x000000ffff167224 */
+                                                                                                       /* 0x000fe200078e0002 */
+        /*03f0*/               @P2 HMMA.884.F32.F32.STEP2 R8, R4.reuse.ROW, R16.reuse.COL, R8 ;        /* 0x0000001004082236 */
+                                                                                                       /* 0x0c0fe20000015408 */
+        /*0400*/                   MOV R23, R2 ;                                                       /* 0x0000000200177202 */
+                                                                                                       /* 0x000fe20000000f00 */
+        /*0410*/               @P2 HMMA.884.F32.F32.STEP3 R10, R4.ROW, R16.COL, R10 ;                  /* 0x00000010040a2236 */
+                                                                                                       /* 0x000f62000001d40a */
+        /*0420*/                   ISETP.GE.AND P2, PT, R0, 0x10, PT ;                                 /* 0x000000100000780c */
+                                                                                                       /* 0x000fe20003f46270 */
+        /*0430*/               @P3 HMMA.884.F32.F32.STEP0 R4, R2.reuse.ROW, R18.reuse.COL, R12 ;       /* 0x0000001202043236 */
+                                                                                                       /* 0x0e0fe4000000540c */
+        /*0440*/               @P3 HMMA.884.F32.F32.STEP1 R6, R2.reuse.ROW, R18.reuse.COL, R14 ;       /* 0x0000001202063236 */
+                                                                                                       /* 0x0c0fe4000000d40e */
+        /*0450*/               @P3 HMMA.884.F32.F32.STEP2 R16, R2.reuse.ROW, R18.reuse.COL, R8 ;       /* 0x0000001202103236 */
+                                                                                                       /* 0x0c0fe40000015408 */
+        /*0460*/               @P3 HMMA.884.F32.F32.STEP3 R18, R2.ROW, R18.COL, R10 ;                  /* 0x0000001202123236 */
+                                                                                                       /* 0x000b64000001d40a */
+        /*0470*/               @P1 IMAD.MOV.U32 R2, RZ, RZ, 0x3c003c00 ;                               /* 0x3c003c00ff021424 */
+                                                                                                       /* 0x020fe200078e00ff */
+        /*0480*/               @P3 HMMA.884.F32.F32.STEP0 R12, R20.reuse.ROW, R22.reuse.COL, R4 ;      /* 0x00000016140c3236 */
+                                                                                                       /* 0x0c0be40000005404 */
+        /*0490*/               @P3 HMMA.884.F32.F32.STEP1 R14, R20.reuse.ROW, R22.reuse.COL, R6 ;      /* 0x00000016140e3236 */
+                                                                                                       /* 0x0c0be2000000d406 */
+        /*04a0*/                   IMAD.MOV.U32 R3, RZ, RZ, R2.reuse ;                                 /* 0x000000ffff037224 */
+                                                                                                       /* 0x100fe200078e0002 */
+        /*04b0*/                   MOV R26, R2.reuse ;                                                 /* 0x00000002001a7202 */
+                                                                                                       /* 0x080fe20000000f00 */
+        /*04c0*/                   IMAD.MOV.U32 R27, RZ, RZ, R2.reuse ;                                /* 0x000000ffff1b7224 */
+                                                                                                       /* 0x100fe200078e0002 */
+        /*04d0*/               @P3 HMMA.884.F32.F32.STEP2 R8, R20.reuse.ROW, R22.reuse.COL, R16 ;      /* 0x0000001614083236 */
+                                                                                                       /* 0x0c0fe20000015410 */
+        /*04e0*/                   IMAD.MOV.U32 R4, RZ, RZ, R2.reuse ;                                 /* 0x000000ffff047224 */
+                                                                                                       /* 0x120fe200078e0002 */
+        /*04f0*/                   MOV R5, R2 ;                                                        /* 0x0000000200057202 */
+                                                                                                       /* 0x000fe20000000f00 */
+        /*0500*/                   IMAD.MOV.U32 R6, RZ, RZ, R2.reuse ;                                 /* 0x000000ffff067224 */
+                                                                                                       /* 0x100fe200078e0002 */
+        /*0510*/               @P3 HMMA.884.F32.F32.STEP3 R10, R20.ROW, R22.COL, R18 ;                 /* 0x00000016140a3236 */
+                                                                                                       /* 0x000f62000001d412 */
+        /*0520*/                   IMAD.MOV.U32 R7, RZ, RZ, R2 ;                                       /* 0x000000ffff077224 */
+                                                                                                       /* 0x000fe200078e0002 */
+        /*0530*/               @P1 HMMA.884.F32.F32.STEP0 R20, R2.reuse.ROW, R26.reuse.COL, R12 ;      /* 0x0000001a02141236 */
+                                                                                                       /* 0x0e0fe2000000540c */
+        /*0540*/                   ISETP.GE.AND P3, PT, R24, c[0x0][0x16c], PT ;                       /* 0x00005b0018007a0c */
+                                                                                                       /* 0x000fe20003f66270 */
+        /*0550*/               @P1 HMMA.884.F32.F32.STEP1 R22, R2.reuse.ROW, R26.reuse.COL, R14 ;      /* 0x0000001a02161236 */
+                                                                                                       /* 0x0c0fe4000000d40e */
+        /*0560*/               @P1 HMMA.884.F32.F32.STEP2 R16, R2.reuse.ROW, R26.reuse.COL, R8 ;       /* 0x0000001a02101236 */
+                                                                                                       /* 0x0c0fe40000015408 */
+        /*0570*/               @P1 HMMA.884.F32.F32.STEP3 R18, R2.ROW, R26.COL, R10 ;                  /* 0x0000001a02121236 */
+                                                                                                       /* 0x000f64000001d40a */
+        /*0580*/               @P1 HMMA.884.F32.F32.STEP0 R20, R4.reuse.ROW, R6.reuse.COL, R20 ;       /* 0x0000000604141236 */
+                                                                                                       /* 0x0e0fe40000005414 */
+        /*0590*/               @P1 HMMA.884.F32.F32.STEP1 R22, R4.reuse.ROW, R6.reuse.COL, R22 ;       /* 0x0000000604161236 */
+                                                                                                       /* 0x0c0fe4000000d416 */
+        /*05a0*/               @P1 HMMA.884.F32.F32.STEP2 R16, R4.reuse.ROW, R6.reuse.COL, R16 ;       /* 0x0000000604101236 */
+                                                                                                       /* 0x0c0fe40000015410 */
+        /*05b0*/               @P1 HMMA.884.F32.F32.STEP3 R18, R4.ROW, R6.COL, R18 ;                   /* 0x0000000604121236 */
+                                                                                                       /* 0x000f64000001d412 */
+        /*05c0*/               @P1 HMMA.884.F32.F32.STEP0 R20, R2.reuse.ROW, R4.reuse.COL, R20 ;       /* 0x0000000402141236 */
+                                                                                                       /* 0x0e0fe40000005414 */
+        /*05d0*/               @P1 HMMA.884.F32.F32.STEP1 R22, R2.reuse.ROW, R4.reuse.COL, R22 ;       /* 0x0000000402161236 */
+                                                                                                       /* 0x0c0fe4000000d416 */
+        /*05e0*/               @P1 HMMA.884.F32.F32.STEP2 R16, R2.reuse.ROW, R4.reuse.COL, R16 ;       /* 0x0000000402101236 */
+                                                                                                       /* 0x0c0fe40000015410 */
+        /*05f0*/               @P1 HMMA.884.F32.F32.STEP3 R18, R2.reuse.ROW, R4.reuse.COL, R18 ;       /* 0x0000000402121236 */
+                                                                                                       /* 0x0c0f64000001d412 */
+        /*0600*/               @P1 HMMA.884.F32.F32.STEP0 R12, R2.reuse.ROW, R4.reuse.COL, R20 ;       /* 0x00000004020c1236 */
+                                                                                                       /* 0x0e0b640000005414 */
+        /*0610*/               @P1 HMMA.884.F32.F32.STEP1 R14, R2.reuse.ROW, R4.reuse.COL, R22 ;       /* 0x00000004020e1236 */
+                                                                                                       /* 0x0c0b64000000d416 */
+        /*0620*/               @P1 HMMA.884.F32.F32.STEP2 R8, R2.reuse.ROW, R4.reuse.COL, R16 ;        /* 0x0000000402081236 */
+                                                                                                       /* 0x0c0b640000015410 */
+        /*0630*/               @P1 HMMA.884.F32.F32.STEP3 R10, R2.ROW, R4.COL, R18 ;                   /* 0x00000004020a1236 */
+                                                                                                       /* 0x000b62000001d412 */
+        /*0640*/              @!P2 BRA 0x870 ;                                                         /* 0x000002200000a947 */
+                                                                                                       /* 0x000fea0003800000 */
+        /*0650*/                   MOV R2, 0x3c003c00 ;                                                /* 0x3c003c0000027802 */
+                                                                                                       /* 0x020fe20000000f00 */
+        /*0660*/                   IMAD.MOV.U32 R3, RZ, RZ, 0x3c003c00 ;                               /* 0x3c003c00ff037424 */
+                                                                                                       /* 0x000fcc00078e00ff */
+        /*0670*/                   HMMA.884.F32.F32.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R12 ;       /* 0x00000002020c7236 */
+                                                                                                       /* 0x0c0fe4000000540c */
+        /*0680*/                   HMMA.884.F32.F32.STEP1 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;       /* 0x00000002020e7236 */
+                                                                                                       /* 0x0c0fe4000000d40e */
+        /*0690*/                   HMMA.884.F32.F32.STEP2 R8, R2.reuse.ROW, R2.reuse.COL, R8 ;         /* 0x0000000202087236 */
+                                                                                                       /* 0x0c0fe40000015408 */
+        /*06a0*/                   HMMA.884.F32.F32.STEP3 R10, R2.reuse.ROW, R2.reuse.COL, R10 ;       /* 0x00000002020a7236 */
+                                                                                                       /* 0x0c0f64000001d40a */
+        /*06b0*/                   HMMA.884.F32.F32.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R12 ;       /* 0x00000002020c7236 */
+                                                                                                       /* 0x0e0fe4000000540c */
+        /*06c0*/                   HMMA.884.F32.F32.STEP1 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;       /* 0x00000002020e7236 */
+                                                                                                       /* 0x0c0fe4000000d40e */
+        /*06d0*/                   HMMA.884.F32.F32.STEP2 R8, R2.reuse.ROW, R2.reuse.COL, R8 ;         /* 0x0000000202087236 */
+                                                                                                       /* 0x0c0fe40000015408 */
+        /*06e0*/                   HMMA.884.F32.F32.STEP3 R10, R2.reuse.ROW, R2.reuse.COL, R10 ;       /* 0x00000002020a7236 */
+                                                                                                       /* 0x0c0f64000001d40a */
+        /*06f0*/                   HMMA.884.F32.F32.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R12 ;       /* 0x00000002020c7236 */
+                                                                                                       /* 0x0e0fe4000000540c */
+        /*0700*/                   HMMA.884.F32.F32.STEP1 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;       /* 0x00000002020e7236 */
+                                                                                                       /* 0x0c0fe4000000d40e */
+        /*0710*/                   HMMA.884.F32.F32.STEP2 R8, R2.reuse.ROW, R2.reuse.COL, R8 ;         /* 0x0000000202087236 */
+                                                                                                       /* 0x0c0fe40000015408 */
+        /*0720*/                   HMMA.884.F32.F32.STEP3 R10, R2.reuse.ROW, R2.reuse.COL, R10 ;       /* 0x00000002020a7236 */
+                                                                                                       /* 0x0c0f64000001d40a */
+        /*0730*/                   HMMA.884.F32.F32.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R12 ;       /* 0x00000002020c7236 */
+                                                                                                       /* 0x0e0fe4000000540c */
+        /*0740*/                   HMMA.884.F32.F32.STEP1 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;       /* 0x00000002020e7236 */
+                                                                                                       /* 0x0c0fe4000000d40e */
+        /*0750*/                   HMMA.884.F32.F32.STEP2 R8, R2.reuse.ROW, R2.reuse.COL, R8 ;         /* 0x0000000202087236 */
+                                                                                                       /* 0x0c0fe40000015408 */
+        /*0760*/                   HMMA.884.F32.F32.STEP3 R10, R2.reuse.ROW, R2.reuse.COL, R10 ;       /* 0x00000002020a7236 */
+                                                                                                       /* 0x0c0f64000001d40a */
+        /*0770*/                   HMMA.884.F32.F32.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R12 ;       /* 0x00000002020c7236 */
+                                                                                                       /* 0x0e0fe4000000540c */
+        /*0780*/                   HMMA.884.F32.F32.STEP1 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;       /* 0x00000002020e7236 */
+                                                                                                       /* 0x0c0fe4000000d40e */
+        /*0790*/                   HMMA.884.F32.F32.STEP2 R8, R2.reuse.ROW, R2.reuse.COL, R8 ;         /* 0x0000000202087236 */
+                                                                                                       /* 0x0c0fe40000015408 */
+        /*07a0*/                   HMMA.884.F32.F32.STEP3 R10, R2.reuse.ROW, R2.reuse.COL, R10 ;       /* 0x00000002020a7236 */
+                                                                                                       /* 0x0c0f64000001d40a */
+        /*07b0*/                   HMMA.884.F32.F32.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R12 ;       /* 0x00000002020c7236 */
+                                                                                                       /* 0x0e0fe4000000540c */
+        /*07c0*/                   HMMA.884.F32.F32.STEP1 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;       /* 0x00000002020e7236 */
+                                                                                                       /* 0x0c0fe4000000d40e */
+        /*07d0*/                   HMMA.884.F32.F32.STEP2 R8, R2.reuse.ROW, R2.reuse.COL, R8 ;         /* 0x0000000202087236 */
+                                                                                                       /* 0x0c0fe40000015408 */
+        /*07e0*/                   HMMA.884.F32.F32.STEP3 R10, R2.reuse.ROW, R2.reuse.COL, R10 ;       /* 0x00000002020a7236 */
+                                                                                                       /* 0x0c0f64000001d40a */
+        /*07f0*/                   HMMA.884.F32.F32.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R12 ;       /* 0x00000002020c7236 */
+                                                                                                       /* 0x0e0fe4000000540c */
+        /*0800*/                   HMMA.884.F32.F32.STEP1 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;       /* 0x00000002020e7236 */
+                                                                                                       /* 0x0c0fe4000000d40e */
+        /*0810*/                   HMMA.884.F32.F32.STEP2 R8, R2.reuse.ROW, R2.reuse.COL, R8 ;         /* 0x0000000202087236 */
+                                                                                                       /* 0x0c0fe40000015408 */
+        /*0820*/                   HMMA.884.F32.F32.STEP3 R10, R2.reuse.ROW, R2.reuse.COL, R10 ;       /* 0x00000002020a7236 */
+                                                                                                       /* 0x0c0f64000001d40a */
+        /*0830*/                   HMMA.884.F32.F32.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R12 ;       /* 0x00000002020c7236 */
+                                                                                                       /* 0x0e0b64000000540c */
+        /*0840*/                   HMMA.884.F32.F32.STEP1 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;       /* 0x00000002020e7236 */
+                                                                                                       /* 0x0c0b64000000d40e */
+        /*0850*/                   HMMA.884.F32.F32.STEP2 R8, R2.reuse.ROW, R2.reuse.COL, R8 ;         /* 0x0000000202087236 */
+                                                                                                       /* 0x0c0b640000015408 */
+        /*0860*/                   HMMA.884.F32.F32.STEP3 R10, R2.ROW, R2.COL, R10 ;                   /* 0x00000002020a7236 */
+                                                                                                       /* 0x000b6a000001d40a */
+        /*0870*/              @!P3 BRA 0x240 ;                                                         /* 0xfffff9c00000b947 */
+                                                                                                       /* 0x000fea000383ffff */
+        /*0880*/                   S2R R0, SR_TID.X ;                                                  /* 0x0000000000007919 */
+                                                                                                       /* 0x000e240000002100 */
+        /*0890*/                   CS2R R4, SR_CLOCKLO ;                                               /* 0x0000000000047805 */
+                                                                                                       /* 0x020fe40000015000 */
+        /*08a0*/                   ISETP.NE.AND P0, PT, R0, RZ, PT ;                                   /* 0x000000ff0000720c */
+                                                                                                       /* 0x001fd80003f05270 */
+        /*08b0*/               @P0 EXIT ;                                                              /* 0x000000000000094d */
+                                                                                                       /* 0x000fea0003800000 */
+        /*08c0*/                   IADD3 R4, P0, -R28, R4, RZ ;                                        /* 0x000000041c047210 */
+                                                                                                       /* 0x000fe20007f1e1ff */
+        /*08d0*/                   IMAD.MOV.U32 R2, RZ, RZ, c[0x0][0x160] ;                            /* 0x00005800ff027624 */
+                                                                                                       /* 0x000fe200078e00ff */
+        /*08e0*/                   LOP3.LUT R8, R12, R8, RZ, 0x3c, !PT ;                               /* 0x000000080c087212 */
+                                                                                                       /* 0x000fe400078e3cff */
+        /*08f0*/                   LOP3.LUT R9, R13, R9, RZ, 0x3c, !PT ;                               /* 0x000000090d097212 */
+                                                                                                       /* 0x000fe200078e3cff */
+        /*0900*/                   IMAD.X R5, R5, 0x1, ~R29, P0 ;                                      /* 0x0000000105057824 */
+                                                                                                       /* 0x000fe200000e0e1d */
+        /*0910*/                   LOP3.LUT R10, R14, R10, RZ, 0x3c, !PT ;                             /* 0x0000000a0e0a7212 */
+                                                                                                       /* 0x000fe400078e3cff */
+        /*0920*/                   MOV R3, c[0x0][0x164] ;                                             /* 0x0000590000037a02 */
+                                                                                                       /* 0x000fe40000000f00 */
+        /*0930*/                   LOP3.LUT R11, R15, R11, RZ, 0x3c, !PT ;                             /* 0x0000000b0f0b7212 */
+                                                                                                       /* 0x000fcc00078e3cff */
+        /*0940*/                   STG.E.64.SYS [R2+0x8], R8 ;                                         /* 0x0000080802007386 */
+                                                                                                       /* 0x000fe8000010eb00 */
+        /*0950*/                   STG.E.64.SYS [R2+0x10], R10 ;                                       /* 0x0000100a02007386 */
+                                                                                                       /* 0x000fe8000010eb00 */
+        /*0960*/                   STG.E.64.SYS [R2], R4 ;                                             /* 0x0000000402007386 */
+                                                                                                       /* 0x000fe2000010eb00 */
+        /*0970*/                   EXIT ;                                                              /* 0x000000000000794d */
+                                                                                                       /* 0x000fea0003800000 */
+        /*0980*/                   BRA 0x980;                                                          /* 0xfffffff000007947 */
+                                                                                                       /* 0x000fc0000383ffff */
+        /*0990*/                   NOP;                                                                /* 0x0000000000007918 */
+                                                                                                       /* 0x000fc00000000000 */
+        /*09a0*/                   NOP;                                                                /* 0x0000000000007918 */
+                                                                                                       /* 0x000fc00000000000 */
+        /*09b0*/                   NOP;                                                                /* 0x0000000000007918 */
+                                                                                                       /* 0x000fc00000000000 */
+        /*09c0*/                   NOP;                                                                /* 0x0000000000007918 */
+                                                                                                       /* 0x000fc00000000000 */
+        /*09d0*/                   NOP;                                                                /* 0x0000000000007918 */
+                                                                                                       /* 0x000fc00000000000 */
+        /*09e0*/                   NOP;                                                                /* 0x0000000000007918 */
+                                                                                                       /* 0x000fc00000000000 */
+        /*09f0*/                   NOP;                                                                /* 0x0000000000007918 */
+                                                                                                       /* 0x000fc00000000000 */
+		..........
+
+
+
+Fatbin ptx code:
+================
+arch = sm_70
+code version = [8,4]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 

@@ -1,0 +1,11 @@
+CONFIG benchmark=bench_empty dtype=none mode=empty streams=0 loop_iters=4096 warmup_iters=64 warmup_launches=3 repeats=10 unroll=1
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=0 loop_iters=4096 unroll=1 total_mma=0 cycles=286780 cycles_per_mma=0.00000000 sink_lo=13353452694195345728 sink_hi=595275643012597269
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=1 loop_iters=4096 unroll=1 total_mma=0 cycles=286780 cycles_per_mma=0.00000000 sink_lo=13353452694195345728 sink_hi=595275643012597269
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=2 loop_iters=4096 unroll=1 total_mma=0 cycles=286902 cycles_per_mma=0.00000000 sink_lo=13353452694195345728 sink_hi=595275643012597269
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=3 loop_iters=4096 unroll=1 total_mma=0 cycles=286780 cycles_per_mma=0.00000000 sink_lo=13353452694195345728 sink_hi=595275643012597269
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=4 loop_iters=4096 unroll=1 total_mma=0 cycles=286780 cycles_per_mma=0.00000000 sink_lo=13353452694195345728 sink_hi=595275643012597269
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=5 loop_iters=4096 unroll=1 total_mma=0 cycles=286902 cycles_per_mma=0.00000000 sink_lo=13353452694195345728 sink_hi=595275643012597269
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=6 loop_iters=4096 unroll=1 total_mma=0 cycles=286780 cycles_per_mma=0.00000000 sink_lo=13353452694195345728 sink_hi=595275643012597269
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=7 loop_iters=4096 unroll=1 total_mma=0 cycles=286780 cycles_per_mma=0.00000000 sink_lo=13353452694195345728 sink_hi=595275643012597269
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=8 loop_iters=4096 unroll=1 total_mma=0 cycles=286780 cycles_per_mma=0.00000000 sink_lo=13353452694195345728 sink_hi=595275643012597269
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=9 loop_iters=4096 unroll=1 total_mma=0 cycles=286841 cycles_per_mma=0.00000000 sink_lo=13353452694195345728 sink_hi=595275643012597269
