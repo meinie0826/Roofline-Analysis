@@ -37,7 +37,7 @@ void d1_remote_bcopy_kernel(
 
   const int4* gB = gmem_b + pair_id * vec_elems;
 
-  // CTA0: gmem -> local smem (只做一次)
+  // CTA0: gmem -> local smem (预热，不计入时间)
   if (rank == 0) {
     for (int i = threadIdx.x; i < vec_elems; i += THREADS) {
       sB_local[i] = gB[i];
@@ -49,15 +49,7 @@ void d1_remote_bcopy_kernel(
   // CTA1: 拿到 remote pointer
   int4* remote_sB0 = cluster.map_shared_rank(sB_local, 0);
 
-  // 预热：先做一次拷贝填满本地 smem
-  if (rank == 1) {
-    for (int i = threadIdx.x; i < vec_elems; i += THREADS) {
-      sB_local[i] = remote_sB0[i];
-    }
-  }
-  cluster.sync();
-
-  // === 测量：多次 remote read，只有 CTA1 在跑 ===
+  // === 测量：只有 CTA1 在跑，测量 remote DSMEM → local SMEM ===
   unsigned long long start = 0, stop = 0;
   
   if (rank == 1 && threadIdx.x == 0) {
@@ -280,15 +272,16 @@ int main(int argc, char** argv) {
   CUDA_CHECK(cudaMemcpy(hSink.data(), dSink, pairs * 3 * sizeof(float), cudaMemcpyDeviceToHost));
 
   double total_cycles = 0.0;
-  double total_bytes = 0.0;
   for (int i = 0; i < pairs; ++i) {
     total_cycles += hSink[i * 3];
-    total_bytes += hSink[i * 3 + 1];
   }
   double avg_cycles = total_cycles / pairs;
   double elapsed_ns = avg_cycles / clock_ghz;
-  double total_bytes_all = double(pairs) * double(repeats) * double(tile_bytes);
-  double gbps = total_bytes_all / (elapsed_ns * 1e-9 * pairs) / 1e9;
+  
+  // 每个 pair 的传输量 = repeats * tile_bytes
+  // 带宽 = (repeats * tile_bytes) / elapsed_ns
+  double bytes_per_pair = double(repeats) * double(tile_bytes);
+  double gbps = bytes_per_pair / (elapsed_ns * 1e-9) / 1e9;
 
   std::cout << "CONFIG mode=" << mode
             << " tile_bytes=" << tile_bytes
