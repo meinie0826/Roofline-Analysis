@@ -159,6 +159,7 @@ if [[ "$ONLY_CUTLASS" != "1" ]]; then
   compile bench_dsmem_pingpong.cu bench_dsmem_pingpong
   compile bench_software_dsmem_gemm.cu bench_software_dsmem_gemm
   compile bench_smem_interconnect.cu bench_smem_interconnect
+  compile bench_2sm_comparison.cu bench_2sm_comparison
 fi
 if [[ "$HAVE_CUTLASS" == "1" ]]; then
   SYNCLOG_PATCH="$ROOT_DIR/synclog_host_device.patch"
