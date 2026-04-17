@@ -2,13 +2,13 @@
 
 #include <cooperative_groups.h>
 #include <cuda_fp16.h>
-#include <mma.h>
 
 #include <vector>
 
 namespace cg = cooperative_groups;
-using namespace nvcuda;
 using namespace blackwell_dsmem_2sm;
+
+constexpr int kSoftwareBlockThreads = 128;
 
 struct SoftwareGemmResult {
   float elapsed_ms = 0.0f;
@@ -43,10 +43,15 @@ __global__ void software_dsmem_gemm_kernel(const half* A, const half* B, float* 
   }
   cluster.sync();
 
-  constexpr int FragCountN = TileN / 16;
-  wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc[FragCountN];
-  for (int n_frag = 0; n_frag < FragCountN; ++n_frag) {
-    wmma::fill_fragment(acc[n_frag], 0.0f);
+  constexpr int TileElems = 16 * TileN;
+  constexpr int OutputsPerThread = (TileElems + kSoftwareBlockThreads - 1) / kSoftwareBlockThreads;
+  float acc[OutputsPerThread];
+  int out_idx[OutputsPerThread];
+
+  #pragma unroll
+  for (int slot = 0; slot < OutputsPerThread; ++slot) {
+    out_idx[slot] = threadIdx.x + slot * blockDim.x;
+    acc[slot] = 0.0f;
   }
 
   const int k_tiles = k_total / 16;
@@ -77,33 +82,37 @@ __global__ void software_dsmem_gemm_kernel(const half* A, const half* B, float* 
       }
     }
 
-    wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> a_frag;
-    wmma::load_matrix_sync(a_frag, a_buf, 16);
-
-    for (int n_frag = 0; n_frag < FragCountN; ++n_frag) {
-      wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::row_major> b_frag;
-      wmma::load_matrix_sync(b_frag, b_buf + n_frag * 16, TileN);
-      wmma::mma_sync(acc[n_frag], a_frag, b_frag, acc[n_frag]);
+    #pragma unroll
+    for (int slot = 0; slot < OutputsPerThread; ++slot) {
+      const int linear_idx = out_idx[slot];
+      if (linear_idx < TileElems) {
+        const int row = linear_idx / TileN;
+        const int col = linear_idx % TileN;
+        float sum = acc[slot];
+        #pragma unroll
+        for (int kk = 0; kk < 16; ++kk) {
+          sum += __half2float(a_buf[row * 16 + kk]) * __half2float(b_buf[kk * TileN + col]);
+        }
+        acc[slot] = sum;
+      }
     }
     cluster.sync();
   }
 
-  if (threadIdx.x == 0) {
-    for (int n_frag = 0; n_frag < FragCountN; ++n_frag) {
-      float tile_out[16 * 16];
-      wmma::store_matrix_sync(tile_out, acc[n_frag], 16, wmma::mem_row_major);
-      for (int r = 0; r < 16; ++r) {
-        for (int c = 0; c < 16; ++c) {
-          D[(row_base + r) * ldd + col_base + n_frag * 16 + c] = tile_out[r * 16 + c];
-        }
-      }
+  #pragma unroll
+  for (int slot = 0; slot < OutputsPerThread; ++slot) {
+    const int linear_idx = out_idx[slot];
+    if (linear_idx < TileElems) {
+      const int row = linear_idx / TileN;
+      const int col = linear_idx % TileN;
+      D[(row_base + row) * ldd + col_base + col] = acc[slot];
     }
   }
 }
 
 template <int TileN, int Stages, bool RemoteB>
 void launch_software_gemm(const half* dA, const half* dB, float* dD, const GemmOptions& options) {
-  dim3 block(32, 1, 1);
+  dim3 block(kSoftwareBlockThreads, 1, 1);
   dim3 grid((options.n / TileN) * 2, options.m / 32, 1);
 
   cudaLaunchConfig_t config{};
