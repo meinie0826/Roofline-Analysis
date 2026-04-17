@@ -59,8 +59,7 @@ void launch_pingpong(PingPongResult* d_result, const PingPongOptions& options) {
   config.attrs = &attr;
   config.numAttrs = 1;
 
-  void* args[] = {&d_result, const_cast<int*>(&options.iters)};
-  check_cuda(cudaLaunchKernelEx(&config, dsmem_pingpong_kernel, args), "cudaLaunchKernelEx pingpong");
+  check_cuda(cudaLaunchKernelEx(&config, dsmem_pingpong_kernel, d_result, options.iters), "cudaLaunchKernelEx pingpong");
 }
 
 int main(int argc, char** argv) {

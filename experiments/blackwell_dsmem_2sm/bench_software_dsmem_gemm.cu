@@ -124,22 +124,17 @@ void launch_software_gemm(const half* dA, const half* dB, float* dD, const GemmO
   int ldb = options.n;
   int ldd = options.n;
   int k_total = options.k;
-  const half* argA = dA;
-  const half* argB = dB;
-  float* argD = dD;
-  void* args[] = {
-      &argA,
-      &argB,
-      &argD,
-      &lda,
-      &ldb,
-      &ldd,
-      &k_total};
   check_cuda(
       cudaLaunchKernelEx(
           &config,
           software_dsmem_gemm_kernel<TileN, Stages, RemoteB>,
-          args),
+          dA,
+          dB,
+          dD,
+          lda,
+          ldb,
+          ldd,
+          k_total),
       "cudaLaunchKernelEx software gemm");
 }
 

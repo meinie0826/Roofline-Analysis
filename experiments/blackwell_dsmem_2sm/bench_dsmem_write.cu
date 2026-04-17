@@ -143,14 +143,11 @@ void run_for_vec_bytes(StreamResult* d_result, const StreamOptions& options) {
   config.numAttrs = 1;
 
   if (options.vec_bytes == 4) {
-    void* args[] = {&d_result, const_cast<int*>(&options.iters), const_cast<int*>(&options.buffer_bytes), const_cast<int*>(&options.align_bytes)};
-    check_cuda(cudaLaunchKernelEx(&config, dsmem_write_kernel<Remote, 4>, args), "cudaLaunchKernelEx write 4");
+    check_cuda(cudaLaunchKernelEx(&config, dsmem_write_kernel<Remote, 4>, d_result, options.iters, options.buffer_bytes, options.align_bytes), "cudaLaunchKernelEx write 4");
   } else if (options.vec_bytes == 8) {
-    void* args[] = {&d_result, const_cast<int*>(&options.iters), const_cast<int*>(&options.buffer_bytes), const_cast<int*>(&options.align_bytes)};
-    check_cuda(cudaLaunchKernelEx(&config, dsmem_write_kernel<Remote, 8>, args), "cudaLaunchKernelEx write 8");
+    check_cuda(cudaLaunchKernelEx(&config, dsmem_write_kernel<Remote, 8>, d_result, options.iters, options.buffer_bytes, options.align_bytes), "cudaLaunchKernelEx write 8");
   } else {
-    void* args[] = {&d_result, const_cast<int*>(&options.iters), const_cast<int*>(&options.buffer_bytes), const_cast<int*>(&options.align_bytes)};
-    check_cuda(cudaLaunchKernelEx(&config, dsmem_write_kernel<Remote, 16>, args), "cudaLaunchKernelEx write 16");
+    check_cuda(cudaLaunchKernelEx(&config, dsmem_write_kernel<Remote, 16>, d_result, options.iters, options.buffer_bytes, options.align_bytes), "cudaLaunchKernelEx write 16");
   }
 }
 
