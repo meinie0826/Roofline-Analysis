@@ -44,9 +44,9 @@ __global__ void baseline_load_kernel(
   for (int i = 0; i < iters; ++i) {
     #pragma unroll
     for (int j = tid; j < TileBytes; j += blockDim.x) {
-      char val;
+      unsigned int val;
       asm volatile("ld.global.cg.b8 %0, [%1];" : "=r"(val) : "l"(reinterpret_cast<unsigned long long>(gmem_in + offset + j)));
-      gmem_out[offset + j] = val;
+      gmem_out[offset + j] = static_cast<char>(val);
     }
     __syncthreads();
   }
@@ -90,9 +90,9 @@ void dsmem_copy_kernel(
     // === Phase 1: CTA0 loads from HBM ===
     if (rank == 0) {
       for (int j = tid; j < TileBytes; j += blockDim.x) {
-        char val;
+        unsigned int val;
         asm volatile("ld.global.cg.b8 %0, [%1];" : "=r"(val) : "l"(reinterpret_cast<unsigned long long>(gmem_in + j)));
-        smem[stage][j] = val;
+        smem[stage][j] = static_cast<char>(val);
       }
     }
     
