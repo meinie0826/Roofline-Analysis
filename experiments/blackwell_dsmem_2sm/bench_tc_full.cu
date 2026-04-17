@@ -26,6 +26,7 @@ constexpr int BLOCK_M = 64;
 constexpr int BLOCK_N = 64;
 constexpr int BLOCK_K = 64;
 constexpr int TB_SIZE = 128;
+constexpr int NUM_STAGES = 2;
 
 // MMA shapes for BF16
 constexpr int MMA_M = 64;   // tcgen05.mma supports up to 128
