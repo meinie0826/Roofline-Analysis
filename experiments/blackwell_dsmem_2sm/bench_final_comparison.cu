@@ -19,11 +19,13 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/device_memory.h"
 
+// BlockFill constants
+#define CUTLASS_BLOCKFILL_GRID  256
+#define CUTLASS_BLOCKFILL_BLOCK 128
+
 namespace cg = cooperative_groups;
 using namespace blackwell_dsmem_2sm;
 
-//=============================================================================
-// Template for CUTLASS kernels
 //=============================================================================
 template<int TileN, class MainloopSchedule, class EpilogueSchedule, class StageCountTag>
 struct CutlassRunner {
@@ -41,7 +43,6 @@ struct CutlassRunner {
 
   static constexpr bool kUse2Sm = std::is_same_v<MainloopSchedule, cutlass::gemm::KernelTmaWarpSpecialized2SmSm100>;
   
-  // Tile shape
   using TileShapeMNK = std::conditional_t<kUse2Sm,
     cute::Shape<cute::_256, cute::Int<TileN>, cute::_32>,
     cute::Shape<cute::_128, cute::Int<TileN>, cute::_32>>;
@@ -89,6 +90,7 @@ struct CutlassRunner {
       CollectiveEpilogue>;
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
+  using ProblemShape = typename Gemm::GemmKernel::ProblemShape;
   using StrideA = typename Gemm::GemmKernel::StrideA;
   using StrideB = typename Gemm::GemmKernel::StrideB;
   using StrideC = typename Gemm::GemmKernel::StrideC;
@@ -110,14 +112,14 @@ struct CutlassRunner {
     C.reset(m * n);
     D.reset(m * n);
 
-    // Initialize
-    cutlass::reference::device::BlockFill<ElementA>(A.get(), A.size(), ElementA(1));
-    cutlass::reference::device::BlockFill<ElementB>(B.get(), B.size(), ElementB(1));
-    cutlass::reference::device::BlockFill<ElementC>(C.get(), C.size(), ElementC(0));
+    // Initialize with simple fill (no random)
+    cudaMemset(A.get(), 1, A.size() * sizeof(ElementA));
+    cudaMemset(B.get(), 1, B.size() * sizeof(ElementB));
+    cudaMemset(C.get(), 0, C.size() * sizeof(ElementC));
 
     typename Gemm::Arguments args;
     args.mode = cutlass::gemm::GemmUniversalMode::kGemm;
-    args.problem_shape = {m, n, k, 1};
+    args.problem_shape = ProblemShape{m, n, k, 1};
     args.ptr_A = A.get();
     args.ptr_B = B.get();
     args.ptr_C = C.get();
@@ -309,7 +311,7 @@ int main(int argc, char** argv) {
     config.attrs = attrs;
     config.numAttrs = 1;
     
-    // Allocate dummy memory
+    // Allocate memory
     half *d_A, *d_B, *d_C;
     cudaMalloc(&d_A, M * K * sizeof(half));
     cudaMalloc(&d_B, K * N * sizeof(half));
