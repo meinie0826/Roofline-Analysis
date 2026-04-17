@@ -200,21 +200,32 @@ int main(int argc, char** argv) {
 
   size_t smem_bytes = tile_bytes;
 
-  if (std::strcmp(mode, "local") == 0) {
-    local_smem_read_kernel<16384, 128><<<blocks, 128>>>(
-        d_cycles, repeats);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
+  // 设置 smem 上限
+  auto set_smem_limit = [&](auto kernel) {
+    CUDA_CHECK(cudaFuncSetAttribute(
+        reinterpret_cast<const void*>(kernel),
+        cudaFuncAttributeMaxDynamicSharedMemorySize,
+        int(smem_bytes)));
+  };
 
-  } else if (std::strcmp(mode, "remote") == 0) {
-    // remote 模式：每个 cluster 有 2 个 CTA
+  // 根据 tile_bytes 选择模板实例
+  auto dispatch_local = [&](auto tile_bytes_const) {
+    constexpr int TB = decltype(tile_bytes_const)::value;
+    set_smem_limit(local_smem_read_kernel<TB, 128>);
+    local_smem_read_kernel<TB, 128><<<blocks, 128>>>(d_cycles, repeats);
+  };
+
+  auto dispatch_remote = [&](auto tile_bytes_const) {
+    constexpr int TB = decltype(tile_bytes_const)::value;
+    set_smem_limit(remote_dsmem_read_kernel<TB, 128>);
+    
     dim3 grid(blocks * 2);
     dim3 block(128);
     
     cudaLaunchConfig_t config{};
     config.gridDim = grid;
     config.blockDim = block;
-    config.dynamicSmemBytes = smem_bytes;
+    config.dynamicSmemBytes = TB;
     
     cudaLaunchAttribute attrs[1];
     attrs[0].id = cudaLaunchAttributeClusterDimension;
@@ -222,17 +233,50 @@ int main(int argc, char** argv) {
     config.attrs = attrs;
     config.numAttrs = 1;
     
-    CUDA_CHECK(cudaLaunchKernelEx(&config, remote_dsmem_read_kernel<16384, 128>, d_cycles, repeats));
-    CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaLaunchKernelEx(&config, remote_dsmem_read_kernel<TB, 128>, d_cycles, repeats));
+  };
 
-  } else if (std::strcmp(mode, "gmem") == 0) {
-    gmem_read_kernel<16384, 128><<<blocks, 128, smem_bytes>>>(
-        d_gmem, d_cycles, repeats);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
+  auto dispatch_gmem = [&](auto tile_bytes_const) {
+    constexpr int TB = decltype(tile_bytes_const)::value;
+    set_smem_limit(gmem_read_kernel<TB, 128>);
+    gmem_read_kernel<TB, 128><<<blocks, 128, TB>>>(d_gmem, d_cycles, repeats);
+  };
 
+  // 根据 tile_bytes 分发
+  if (tile_bytes == 16384) {
+    if (std::strcmp(mode, "local") == 0) {
+      dispatch_local(std::integral_constant<int, 16384>{});
+    } else if (std::strcmp(mode, "remote") == 0) {
+      dispatch_remote(std::integral_constant<int, 16384>{});
+    } else if (std::strcmp(mode, "gmem") == 0) {
+      dispatch_gmem(std::integral_constant<int, 16384>{});
+    }
+  } else if (tile_bytes == 32768) {
+    if (std::strcmp(mode, "local") == 0) {
+      dispatch_local(std::integral_constant<int, 32768>{});
+    } else if (std::strcmp(mode, "remote") == 0) {
+      dispatch_remote(std::integral_constant<int, 32768>{});
+    } else if (std::strcmp(mode, "gmem") == 0) {
+      dispatch_gmem(std::integral_constant<int, 32768>{});
+    }
+  } else if (tile_bytes == 65536) {
+    if (std::strcmp(mode, "local") == 0) {
+      dispatch_local(std::integral_constant<int, 65536>{});
+    } else if (std::strcmp(mode, "remote") == 0) {
+      dispatch_remote(std::integral_constant<int, 65536>{});
+    } else if (std::strcmp(mode, "gmem") == 0) {
+      dispatch_gmem(std::integral_constant<int, 65536>{});
+    }
+  } else if (tile_bytes == 131072) {
+    if (std::strcmp(mode, "local") == 0) {
+      dispatch_local(std::integral_constant<int, 131072>{});
+    } else if (std::strcmp(mode, "remote") == 0) {
+      dispatch_remote(std::integral_constant<int, 131072>{});
+    } else if (std::strcmp(mode, "gmem") == 0) {
+      dispatch_gmem(std::integral_constant<int, 131072>{});
+    }
   } else {
-    std::cerr << "Unknown mode: " << mode << "\n";
+    std::cerr << "Unsupported tile_bytes. Use one of: 16384, 32768, 65536, 131072\n";
     return 1;
   }
 
