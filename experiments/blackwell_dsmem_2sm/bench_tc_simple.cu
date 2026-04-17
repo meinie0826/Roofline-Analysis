@@ -87,10 +87,8 @@ void tcgen05_wait_ld() {
 // Host: Create tensor map for 1D TMA
 //=============================================================================
 void create_1d_tensor_map(CUtensorMap* tmap, const nv_bfloat16* ptr, size_t size) {
-  // cuTensorMapEncodeTiled API types:
-  // - global dimensions: cuuint64_t*
-  // - box dimensions: cuuint32_t*
-  cuuint64_t global_dim = static_cast<cuuint64_t>(size);
+  // cuTensorMapEncodeTiled expects cuuint32_t* for 1D tensor
+  cuuint32_t global_dim = static_cast<cuuint32_t>(size);
   cuuint32_t box_dim = static_cast<cuuint32_t>(size);
   
   CUresult err = cuTensorMapEncodeTiled(
@@ -98,9 +96,9 @@ void create_1d_tensor_map(CUtensorMap* tmap, const nv_bfloat16* ptr, size_t size
     CU_TENSOR_MAP_DATA_TYPE_BFLOAT16,
     1,  // rank
     (void*)ptr,
-    &global_dim,  // global dim (64-bit)
+    &global_dim,  // global dim
     nullptr,  // global strides (not needed for 1D)
-    &box_dim,  // box dim (32-bit)
+    &box_dim,  // box dim
     nullptr,  // element strides
     CU_TENSOR_MAP_INTERLEAVE_NONE,
     CU_TENSOR_MAP_SWIZZLE_NONE,
@@ -280,24 +278,4 @@ extern "C" void run_tc_gemm(int M, int N, int K, int repeats, int warmup) {
   cudaFree(d_A);
   cudaFree(d_B);
   cudaFree(d_C);
-}
-
-//=============================================================================
-// Main entry point
-//=============================================================================
-int main(int argc, char** argv) {
-  int M = 2048, N = 2048, K = 8192;
-  int repeats = 20, warmup = 5;
-  
-  for (int i = 1; i < argc; ++i) {
-    std::string arg = argv[i];
-    if      (arg.find("--m=") == 0) M = std::atoi(argv[i] + 4);
-    else if (arg.find("--n=") == 0) N = std::atoi(argv[i] + 4);
-    else if (arg.find("--k=") == 0) K = std::atoi(argv[i] + 4);
-    else if (arg.find("--repeats=") == 0) repeats = std::atoi(argv[i] + 10);
-    else if (arg.find("--warmup=") == 0) warmup = std::atoi(argv[i] + 9);
-  }
-  
-  run_tc_gemm(M, N, K, repeats, warmup);
-  return 0;
 }

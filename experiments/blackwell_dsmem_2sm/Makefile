@@ -27,13 +27,13 @@ bench_3way: bench_3way.cu common.h
 	$(NVCC) $(NVCC_FLAGS) $< -o $@
 
 bench_tc_simple: bench_tc_simple.cu common.h
-	$(NVCC) $(NVCC_FLAGS) $< -o $@ -lcuda
+	$(NVCC) $(NVCC_FLAGS) $< -o $@
 
-bench_tc_103a: bench_tc_103a.cu common.h
-	$(NVCC) $(NVCC_FLAGS) -target sm_103a $< -o $@ -lcuda
+bench_tc_full: bench_tc_full.cu common.h
+	$(NVCC) $(NVCC_FLAGS) $< -o $@
 
 .PHONY: tc
-tc: bench_tc_simple bench_tc_103a
+tc: bench_tc_simple bench_tc_full
 
 # CUTLASS benchmarks
 bench_cutlass_2sm_gemm: bench_cutlass_2sm_gemm.cu common.h

@@ -3,6 +3,12 @@ DeepGEMM Roofline Benchmark
 
 This script benchmarks GEMM performance using DeepGEMM for FP8 and cuBLAS for BF16,
 analyzing performance characteristics across different matrix shapes.
+
+DeepGEMM API (as of 2026.04):
+- fp8_fp4_gemm_nt(a, b, d, c=None, recipe=None, recipe_a=None, recipe_b=None, compiled_dims='nk', disable_ue8m0_cast=False)
+  where a = (A_tensor, A_scale), b = (B_tensor, B_scale), d = output tensor
+- bf16_gemm_nt(a, b, d, c=None)
+  where a, b are BF16 tensors
 """
 
 from __future__ import annotations
@@ -12,7 +18,7 @@ import json
 import os
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -33,9 +39,11 @@ HAS_DEEPGEMM = False
 try:
     import deep_gemm
     HAS_DEEPGEMM = True
+    # Check available APIs
+    DEEPGEMM_APIS = [x for x in dir(deep_gemm) if not x.startswith('_')]
 except ImportError:
     print("Warning: DeepGEMM not installed. FP8 benchmarks will be skipped.")
-    print("Install with: pip install deep-gemm")
+    print("Install with: git clone --recursive https://github.com/deepseek-ai/DeepGEMM.git && cd DeepGEMM && ./develop.sh")
 
 
 @dataclass
@@ -58,24 +66,16 @@ class GEMMResult:
 
 
 def calculate_arithmetic_intensity(M: int, N: int, K: int, 
-                                   element_size: int = 2,  # FP16/BF16 = 2, FP8 = 1
+                                   element_size: int = 2,
                                    c_reads: bool = False) -> Tuple[int, float]:
-    """
-    Calculate arithmetic intensity for GEMM: C = A @ B
-    
-    Returns:
-        (total_bytes, arithmetic_intensity)
-    """
+    """Calculate arithmetic intensity for GEMM."""
     flops = 2 * M * N * K
-    
     bytes_a = M * K * element_size
     bytes_b = K * N * element_size
     bytes_c_write = M * N * element_size
     bytes_c_read = M * N * element_size if c_reads else 0
-    
     total_bytes = bytes_a + bytes_b + bytes_c_write + bytes_c_read
     arithmetic_intensity = flops / total_bytes
-    
     return total_bytes, arithmetic_intensity
 
 
@@ -96,18 +96,7 @@ def benchmark_torch_matmul(M: int, N: int, K: int,
                            dtype: torch.dtype,
                            warmup: int = 5,
                            iterations: int = 20) -> GEMMResult:
-    """
-    Benchmark PyTorch matmul (cuBLAS backend).
-    
-    Args:
-        M, N, K: Matrix dimensions
-        dtype: torch.float16 or torch.bfloat16
-        warmup: Warmup iterations
-        iterations: Timed iterations
-    
-    Returns:
-        GEMMResult with performance metrics
-    """
+    """Benchmark PyTorch matmul (cuBLAS backend)."""
     torch.manual_seed(42)
     device = "cuda"
     
@@ -120,11 +109,11 @@ def benchmark_torch_matmul(M: int, N: int, K: int,
         torch.matmul(A, B, out=C)
         torch.cuda.synchronize()
     
-    # Timed runs using CUDA events
+    # Timed runs
+    times = []
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
     
-    times = []
     for _ in range(iterations):
         start_event.record()
         torch.matmul(A, B, out=C)
@@ -166,18 +155,13 @@ def benchmark_deepgemm_fp8(M: int, N: int, K: int,
     """
     Benchmark DeepGEMM FP8 GEMM.
     
-    DeepGEMM expects:
-    - A: (M, K) in E4M3 format
-    - B: (K, N) in E4M3 format (transposed in memory)
-    - Scaling factors for A and B in FP32
+    New API: fp8_fp4_gemm_nt(a, b, d, c=None, ...)
+    where a = (A_tensor, A_scale), b = (B_tensor, B_scale)
     
-    Args:
-        M, N, K: Matrix dimensions
-        warmup: Warmup iterations
-        iterations: Timed iterations
-    
-    Returns:
-        GEMMResult with performance metrics, or None if DeepGEMM not available
+    DeepGEMM requires:
+    - A: (M, K) in FP8 E4M3 format
+    - B: (K, N) in FP8 E4M3 format (transposed in memory for NT layout)
+    - Scales: FP32 scaling factors
     """
     if not HAS_DEEPGEMM:
         return None
@@ -185,23 +169,45 @@ def benchmark_deepgemm_fp8(M: int, N: int, K: int,
     torch.manual_seed(42)
     device = "cuda"
     
-    # Create FP8 tensors (E4M3)
-    A_fp8 = torch.randn(M, K, dtype=torch.float32, device=device).to(torch.float8_e4m3fn)
-    B_fp8 = torch.randn(K, N, dtype=torch.float32, device=device).to(torch.float8_e4m3fn)
+    # Create FP8 tensors (E4M3 format)
+    # DeepGEMM uses E4M3FN (float8_e4m3fn)
+    A_fp8 = torch.randn(M, K, dtype=torch.float32, device=device)
+    A_fp8 = A_fp8.to(torch.float8_e4m3fn)
     
-    # Create scaling factors (FP32, required by DeepGEMM)
-    # For simplicity, use scale of 1.0
-    # Note: DeepGEMM requires transposed scaling factor layout for LHS
-    scale_a = torch.ones((M,), dtype=torch.float32, device=device)
-    scale_b = torch.ones((N,), dtype=torch.float32, device=device)
+    B_fp8 = torch.randn(K, N, dtype=torch.float32, device=device)
+    B_fp8 = B_fp8.to(torch.float8_e4m3fn)
     
-    # Output tensor
-    C = torch.empty(M, N, dtype=torch.bfloat16, device=device)
+    # Create block-wise scaling factors
+    # For FP8, scales are typically per-block (e.g., 128x128)
+    # Simplified: use per-tensor scale of 1.0
+    # In production, would need proper block-wise quantization
+    
+    # Scale tensors - DeepGEMM expects specific layouts
+    # For per-tensor scale: scalar or 1-element tensor
+    scale_a = torch.ones((), dtype=torch.float32, device=device)
+    scale_b = torch.ones((), dtype=torch.float32, device=device)
+    
+    # Output tensor (BF16)
+    D = torch.empty(M, N, dtype=torch.bfloat16, device=device)
+    
+    # Get the correct function name
+    gemm_func = None
+    for api_name in ['fp8_fp4_gemm_nt', 'fp8_gemm_nt', 'fp8_gemm']:
+        if hasattr(deep_gemm, api_name):
+            gemm_func = getattr(deep_gemm, api_name)
+            break
+    
+    if gemm_func is None:
+        print("No FP8 GEMM API found in DeepGEMM")
+        return None
     
     # Warmup
     for _ in range(warmup):
         try:
-            deep_gemm.fp8_gemm_nt(C, A_fp8, scale_a, B_fp8, scale_b)
+            # New API: tuples for a and b
+            a_tuple = (A_fp8, scale_a)
+            b_tuple = (B_fp8, scale_b)
+            gemm_func(a_tuple, b_tuple, D)
             torch.cuda.synchronize()
         except Exception as e:
             print(f"DeepGEMM warmup error: {e}")
@@ -214,7 +220,9 @@ def benchmark_deepgemm_fp8(M: int, N: int, K: int,
         end = torch.cuda.Event(enable_timing=True)
         start.record()
         try:
-            deep_gemm.fp8_gemm_nt(C, A_fp8, scale_a, B_fp8, scale_b)
+            a_tuple = (A_fp8, scale_a)
+            b_tuple = (B_fp8, scale_b)
+            gemm_func(a_tuple, b_tuple, D)
             end.record()
             torch.cuda.synchronize()
             times.append(start.elapsed_time(end))
@@ -226,7 +234,7 @@ def benchmark_deepgemm_fp8(M: int, N: int, K: int,
     flops = 2 * M * N * K
     gflops = flops / (avg_time_ms * 1e-3) / 1e9
     
-    # FP8 = 1 byte
+    # FP8 = 1 byte per element
     bytes_accessed, ai = calculate_arithmetic_intensity(M, N, K, element_size=1)
     bandwidth = bytes_accessed / (avg_time_ms * 1e-3) / 1e9
     
@@ -249,40 +257,25 @@ def benchmark_deepgemm_fp8(M: int, N: int, K: int,
 
 
 def benchmark_deepgemm_bf16(M: int, N: int, K: int,
-                           warmup: int = 5,
-                           iterations: int = 20) -> Optional[GEMMResult]:
-    """
-    Benchmark DeepGEMM BF16 GEMM.
-    
-    Note: DeepGEMM's primary focus is FP8, but it may have BF16 kernels.
-    If not available, fall back to cuBLAS.
-    
-    Args:
-        M, N, K: Matrix dimensions
-        warmup: Warmup iterations
-        iterations: Timed iterations
-    
-    Returns:
-        GEMMResult with performance metrics, or None if not available
-    """
+                          warmup: int = 5,
+                          iterations: int = 20) -> Optional[GEMMResult]:
+    """Benchmark DeepGEMM BF16 GEMM if available."""
     if not HAS_DEEPGEMM:
         return None
     
-    # Check if DeepGEMM has BF16 kernels
     if not hasattr(deep_gemm, 'bf16_gemm_nt'):
-        # Fall back to cuBLAS
-        return benchmark_torch_matmul(M, N, K, torch.bfloat16, warmup, iterations)
+        return None
     
     torch.manual_seed(42)
     device = "cuda"
     
     A = torch.randn(M, K, dtype=torch.bfloat16, device=device)
     B = torch.randn(K, N, dtype=torch.bfloat16, device=device)
-    C = torch.empty(M, N, dtype=torch.bfloat16, device=device)
+    D = torch.empty(M, N, dtype=torch.bfloat16, device=device)
     
     # Warmup
     for _ in range(warmup):
-        deep_gemm.bf16_gemm_nt(C, A, B)
+        deep_gemm.bf16_gemm_nt(A, B, D)
         torch.cuda.synchronize()
     
     # Timed runs
@@ -291,7 +284,7 @@ def benchmark_deepgemm_bf16(M: int, N: int, K: int,
         start = torch.cuda.Event(enable_timing=True)
         end = torch.cuda.Event(enable_timing=True)
         start.record()
-        deep_gemm.bf16_gemm_nt(C, A, B)
+        deep_gemm.bf16_gemm_nt(A, B, D)
         end.record()
         torch.cuda.synchronize()
         times.append(start.elapsed_time(end))
@@ -342,16 +335,13 @@ def generate_shapes(shape_type: str = "balanced") -> List[Tuple[int, int, int]]:
             for k in k_values:
                 shapes.append((mn, mn, k))
     elif shape_type == "inference_like":
-        # Common inference shapes: batch_size * seq_len patterns
         batch_sizes = [1, 2, 4, 8, 16, 32]
         seq_lens = [128, 256, 512, 1024, 2048]
         hidden_dim = 4096
-        
         for bs in batch_sizes:
             for seq in seq_lens:
                 m = bs * seq
-                shapes.append((m, hidden_dim, hidden_dim))  # QKV projection
-                shapes.append((m, hidden_dim * 4, hidden_dim))  # FFN
+                shapes.append((m, hidden_dim, hidden_dim))
     
     return shapes
 
@@ -360,31 +350,20 @@ def run_benchmark(shapes: List[Tuple[int, int, int]],
                  warmup: int = 5,
                  iterations: int = 20,
                  output_dir: Optional[str] = None) -> List[GEMMResult]:
-    """
-    Run benchmark across all shapes and backends.
-    
-    Args:
-        shapes: List of (M, N, K) tuples
-        warmup: Warmup iterations
-        iterations: Timed iterations
-        output_dir: Output directory for results
-    
-    Returns:
-        List of GEMMResult objects
-    """
+    """Run benchmark across all shapes and backends."""
     results = []
     
     print(f"Benchmarking {len(shapes)} shapes...")
-    print("=" * 100)
-    print(f"{'Shape':<18} | {'Backend':<20} | {'Time(ms)':<10} | {'GFLOPS':<12} | {'AI':<10} | {'BW(GB/s)':<12}")
-    print("=" * 100)
+    print("=" * 110)
+    print(f"{'Shape':<18} | {'Backend':<20} | {'Dtype':<6} | {'Time(ms)':<10} | {'GFLOPS':<12} | {'AI':<10} | {'BW(GB/s)':<12}")
+    print("=" * 110)
     
     for i, (M, N, K) in enumerate(shapes):
         # BF16 - cuBLAS
         try:
             result = benchmark_torch_matmul(M, N, K, torch.bfloat16, warmup, iterations)
             results.append(result)
-            print(f"{M:>6}x{N:>6}x{K:>6} | {result.backend:<20} | {result.time_ms:>10.3f} | "
+            print(f"{M:>6}x{N:>6}x{K:>6} | {result.backend:<20} | {result.dtype:<6} | {result.time_ms:>10.3f} | "
                   f"{result.gflops:>12.1f} | {result.arithmetic_intensity:>10.1f} | "
                   f"{result.achieved_bandwidth_gbps:>12.1f}")
         except Exception as e:
@@ -396,7 +375,7 @@ def run_benchmark(shapes: List[Tuple[int, int, int]],
                 result = benchmark_deepgemm_fp8(M, N, K, warmup, iterations)
                 if result:
                     results.append(result)
-                    print(f"{M:>6}x{N:>6}x{K:>6} | {result.backend:<20} | {result.time_ms:>10.3f} | "
+                    print(f"{M:>6}x{N:>6}x{K:>6} | {result.backend:<20} | {result.dtype:<6} | {result.time_ms:>10.3f} | "
                           f"{result.gflops:>12.1f} | {result.arithmetic_intensity:>10.1f} | "
                           f"{result.achieved_bandwidth_gbps:>12.1f}")
             except Exception as e:
@@ -406,13 +385,13 @@ def run_benchmark(shapes: List[Tuple[int, int, int]],
         if HAS_DEEPGEMM:
             try:
                 result = benchmark_deepgemm_bf16(M, N, K, warmup, iterations)
-                if result and result.backend == "DeepGEMM BF16":
+                if result:
                     results.append(result)
-                    print(f"{M:>6}x{N:>6}x{K:>6} | {result.backend:<20} | {result.time_ms:>10.3f} | "
+                    print(f"{M:>6}x{N:>6}x{K:>6} | {result.backend:<20} | {result.dtype:<6} | {result.time_ms:>10.3f} | "
                           f"{result.gflops:>12.1f} | {result.arithmetic_intensity:>10.1f} | "
                           f"{result.achieved_bandwidth_gbps:>12.1f}")
             except Exception as e:
-                pass  # DeepGEMM BF16 may not be available
+                pass
     
     if output_dir:
         output_dir = Path(output_dir)
@@ -425,6 +404,7 @@ def run_benchmark(shapes: List[Tuple[int, int, int]],
             "timestamp": timestamp,
             "gpu_specs": get_gpu_specs(),
             "has_deepgemm": HAS_DEEPGEMM,
+            "deepgemm_apis": DEEPGEMM_APIS if HAS_DEEPGEMM else [],
             "results": [
                 {
                     "M": r.M, "N": r.N, "K": r.K,
@@ -467,6 +447,8 @@ def main():
     
     print(f"Running on: {torch.cuda.get_device_name(0)}")
     print(f"DeepGEMM available: {HAS_DEEPGEMM}")
+    if HAS_DEEPGEMM:
+        print(f"DeepGEMM APIs: {DEEPGEMM_APIS[:10]}...")
     specs = get_gpu_specs()
     print(f"GPU specs: {specs['name']}, Peak FP8: {specs['peak_fp8_tflops']} TFLOPS, "
           f"Peak BF16: {specs['peak_bf16_tflops']} TFLOPS, BW: {specs['peak_bandwidth_gbps']} GB/s")
@@ -481,7 +463,7 @@ def main():
     )
     
     # Summary
-    print("\n" + "=" * 100)
+    print("\n" + "=" * 110)
     print("Summary:")
     print(f"  Total benchmarks: {len(results)}")
     

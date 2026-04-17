@@ -26,7 +26,6 @@ constexpr int BLOCK_M = 64;
 constexpr int BLOCK_N = 64;
 constexpr int BLOCK_K = 64;
 constexpr int TB_SIZE = 128;
-constexpr int NUM_STAGES = 2;
 
 // MMA shapes for BF16
 constexpr int MMA_M = 64;   // tcgen05.mma supports up to 128
@@ -486,24 +485,4 @@ extern "C" void run_tc_gemm_full(int M, int N, int K, int repeats, int warmup) {
   cudaFree(d_A);
   cudaFree(d_B);
   cudaFree(d_C);
-}
-
-//=============================================================================
-// Main entry point
-//=============================================================================
-int main(int argc, char** argv) {
-  int M = 2048, N = 2048, K = 8192;
-  int repeats = 20, warmup = 5;
-  
-  for (int i = 1; i < argc; ++i) {
-    std::string arg = argv[i];
-    if      (arg.find("--m=") == 0) M = std::atoi(argv[i] + 4);
-    else if (arg.find("--n=") == 0) N = std::atoi(argv[i] + 4);
-    else if (arg.find("--k=") == 0) K = std::atoi(argv[i] + 4);
-    else if (arg.find("--repeats=") == 0) repeats = std::atoi(argv[i] + 10);
-    else if (arg.find("--warmup=") == 0) warmup = std::atoi(argv[i] + 9);
-  }
-  
-  run_tc_gemm_full(M, N, K, repeats, warmup);
-  return 0;
 }
