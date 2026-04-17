@@ -31,6 +31,7 @@ This experiment investigates whether Distributed Shared Memory (DSMEM) can provi
 
 ### Completed
 - ✅ CUTLASS 1SM/2SM comparison
+- ✅ CUTLASS `mma.2sm` cost benchmark with normalized summary output
 - ✅ Software DSMEM sharing verification
 - ✅ TC kernel skeleton (bench_tc_simple)
 - ✅ Full TC kernel implementation (bench_tc_full)
@@ -48,6 +49,7 @@ This experiment investigates whether Distributed Shared Memory (DSMEM) can provi
 | File | Description |
 |------|-------------|
 | `bench_cutlass_2sm_gemm.cu` | CUTLASS 1SM/2SM comparison |
+| `bench_cutlass_mma2sm_cost.cu` | Controlled 1SM vs 2SM benchmark with summary ratios |
 | `bench_3way.cu` | Software DSMEM sharing (no TC) |
 | `bench_tc_simple.cu` | Simple MMA kernel skeleton |
 | `bench_tc_full.cu` | Complete tcgen05.mma implementation |
@@ -62,12 +64,50 @@ make all
 # Build specific targets
 make hand-written  # bench_3way, bench_tc_*
 make cutlass      # CUTLASS benchmarks
+make bench_cutlass_mma2sm_cost
 
 # Run benchmarks
 ./bench_3way --mode=all --m=2048 --n=2048 --k=8192
 ./bench_cutlass_2sm_gemm --mode=1sm --m=8192 --n=8192 --k=8192
+./bench_cutlass_mma2sm_cost --mode=compare --m=8192 --n=8192 --k=8192 --tile-n=128 --stages=2
 ./bench_tc_full --m=2048 --n=2048 --k=8192
 ```
+
+## `bench_cutlass_mma2sm_cost`
+
+This benchmark focuses on the indirect question:
+
+- how much faster or slower is `mma.2sm` than a comparable `mma.1sm` baseline
+- how much of that difference remains after normalizing by total FLOPs
+- what B-operand traffic reduction does the 2SM kernel ideally get from sharing
+
+The benchmark runs CUTLASS `1sm` and `2sm` kernels on the same `(M, N, K)` problem and prints:
+
+- `RESULT ... mode=1sm ...`
+- `RESULT ... mode=2sm ...`
+- `SUMMARY ... compare=2sm_vs_1sm ...`
+
+Important summary fields:
+
+- `speedup`: `time_1sm / time_2sm`
+- `tflops_ratio`: `tflops_2sm / tflops_1sm`
+- `ns_per_flop_ratio`: normalized cost ratio
+- `est_b_bytes_ratio`: idealized B-tile GMEM traffic ratio implied by tile geometry
+- `est_b_bw_ratio`: implied B-load bandwidth ratio using those estimates
+
+Example:
+
+```bash
+./bench_cutlass_mma2sm_cost --mode=compare --m=8192 --n=8192 --k=8192 --tile-n=128 --stages=2
+./bench_cutlass_mma2sm_cost --mode=1sm --m=8192 --n=8192 --k=4096 --tile-n=64 --stages=4
+./bench_cutlass_mma2sm_cost --mode=2sm --m=8192 --n=8192 --k=4096 --tile-n=64 --stages=4
+```
+
+Notes:
+
+- `tile_n=64` or `128` is supported in the current compare path.
+- `stages=2` or `4` is supported.
+- The reported `est_b_*` values are analytic estimates derived from tile geometry, not hardware counter reads.
 
 ## Technical Details
 
