@@ -1,6 +1,6 @@
 #!/bin/bash
-# Simple GEMM Roofline Benchmark Runner
-# Tests cuBLAS and DeepGEMM BF16 implementations
+# Run GEMM Roofline Benchmark
+# Compatible with DeepGEMM BF16 API (requires N == K)
 
 set -e
 
@@ -27,13 +27,15 @@ python3 -c "import deep_gemm" 2>/dev/null && {
     echo "✓ DeepGEMM is installed"
     python3 -c "import deep_gemm; print(f'  BF16 API available: {hasattr(deep_gemm, \"bf16_gemm_nt\")}')" 
 } || {
-    echo "✗ DeepGEMM not installed (BF16 comparison will be skipped)"
+    echo "✗ DeepGEMM not installed (only cuBLAS will be tested)"
 }
 
 echo ""
 echo "Running benchmark..."
+echo "Note: DeepGEMM BF16 requires N == K constraint"
+echo ""
+
 python3 "${SCRIPT_DIR}/benchmark_simple.py" \
-    --shape-type balanced \
     --warmup 5 \
     --iterations 20 \
     --output-dir "${RESULTS_DIR}"
@@ -41,5 +43,6 @@ python3 "${SCRIPT_DIR}/benchmark_simple.py" \
 echo ""
 echo "=========================================="
 echo "Complete!"
+echo "=========================================="
 echo "Results: ${RESULTS_DIR}"
 echo ""
