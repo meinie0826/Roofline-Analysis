@@ -326,7 +326,6 @@ KernelMetrics dispatch_cutlass_mode(
   if (std::strcmp(mode, "1sm") == 0) {
     if (options.tile_n == 64) return dispatch_cutlass_1sm<64, StageCountTag>(options, hw_info);
     if (options.tile_n == 128) return dispatch_cutlass_1sm<128, StageCountTag>(options, hw_info);
-    if (options.tile_n == 256) return dispatch_cutlass_1sm<256, StageCountTag>(options, hw_info);
   } else if (std::strcmp(mode, "2sm") == 0) {
     if (options.tile_n == 64) return dispatch_cutlass_2sm<64, StageCountTag>(options, hw_info);
     if (options.tile_n == 128) return dispatch_cutlass_2sm<128, StageCountTag>(options, hw_info);
