@@ -1,0 +1,11 @@
+CONFIG benchmark=bench_empty_matched_f32acc dtype=f32_f16_f16_f16 mode=empty_matched_f32acc streams=8 loop_iters=4096 warmup_iters=64 warmup_launches=3 repeats=10 unroll=4
+RESULT benchmark=bench_empty_matched_f32acc dtype=f32_f16_f16_f16 mode=empty_matched_f32acc streams=8 repeat=0 loop_iters=4096 unroll=4 total_mma=131072 cycles=3007001 cycles_per_mma=22.94159698 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_empty_matched_f32acc dtype=f32_f16_f16_f16 mode=empty_matched_f32acc streams=8 repeat=1 loop_iters=4096 unroll=4 total_mma=131072 cycles=3007026 cycles_per_mma=22.94178772 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_empty_matched_f32acc dtype=f32_f16_f16_f16 mode=empty_matched_f32acc streams=8 repeat=2 loop_iters=4096 unroll=4 total_mma=131072 cycles=3006977 cycles_per_mma=22.94141388 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_empty_matched_f32acc dtype=f32_f16_f16_f16 mode=empty_matched_f32acc streams=8 repeat=3 loop_iters=4096 unroll=4 total_mma=131072 cycles=3007025 cycles_per_mma=22.94178009 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_empty_matched_f32acc dtype=f32_f16_f16_f16 mode=empty_matched_f32acc streams=8 repeat=4 loop_iters=4096 unroll=4 total_mma=131072 cycles=3007010 cycles_per_mma=22.94166565 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_empty_matched_f32acc dtype=f32_f16_f16_f16 mode=empty_matched_f32acc streams=8 repeat=5 loop_iters=4096 unroll=4 total_mma=131072 cycles=3007010 cycles_per_mma=22.94166565 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_empty_matched_f32acc dtype=f32_f16_f16_f16 mode=empty_matched_f32acc streams=8 repeat=6 loop_iters=4096 unroll=4 total_mma=131072 cycles=3007038 cycles_per_mma=22.94187927 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_empty_matched_f32acc dtype=f32_f16_f16_f16 mode=empty_matched_f32acc streams=8 repeat=7 loop_iters=4096 unroll=4 total_mma=131072 cycles=3006992 cycles_per_mma=22.94152832 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_empty_matched_f32acc dtype=f32_f16_f16_f16 mode=empty_matched_f32acc streams=8 repeat=8 loop_iters=4096 unroll=4 total_mma=131072 cycles=3007014 cycles_per_mma=22.94169617 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_empty_matched_f32acc dtype=f32_f16_f16_f16 mode=empty_matched_f32acc streams=8 repeat=9 loop_iters=4096 unroll=4 total_mma=131072 cycles=3006991 cycles_per_mma=22.94152069 sink_lo=0 sink_hi=0

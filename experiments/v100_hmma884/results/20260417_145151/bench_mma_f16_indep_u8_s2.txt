@@ -1,0 +1,11 @@
+CONFIG benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 loop_iters=4096 warmup_iters=64 warmup_launches=3 repeats=10 unroll=8
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=0 loop_iters=4096 unroll=8 total_mma=65536 cycles=790570 cycles_per_mma=12.06314087 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=1 loop_iters=4096 unroll=8 total_mma=65536 cycles=790631 cycles_per_mma=12.06407166 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=2 loop_iters=4096 unroll=8 total_mma=65536 cycles=790690 cycles_per_mma=12.06497192 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=3 loop_iters=4096 unroll=8 total_mma=65536 cycles=790692 cycles_per_mma=12.06500244 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=4 loop_iters=4096 unroll=8 total_mma=65536 cycles=790570 cycles_per_mma=12.06314087 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=5 loop_iters=4096 unroll=8 total_mma=65536 cycles=790570 cycles_per_mma=12.06314087 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=6 loop_iters=4096 unroll=8 total_mma=65536 cycles=790692 cycles_per_mma=12.06500244 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=7 loop_iters=4096 unroll=8 total_mma=65536 cycles=790692 cycles_per_mma=12.06500244 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=8 loop_iters=4096 unroll=8 total_mma=65536 cycles=790631 cycles_per_mma=12.06407166 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=9 loop_iters=4096 unroll=8 total_mma=65536 cycles=790570 cycles_per_mma=12.06314087 sink_lo=0 sink_hi=0
