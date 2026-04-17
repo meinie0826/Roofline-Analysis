@@ -1,0 +1,11 @@
+CONFIG benchmark=bench_dsmem_read mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752

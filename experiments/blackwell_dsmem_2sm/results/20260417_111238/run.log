@@ -1,0 +1,5 @@
+patching file include/cutlass/arch/synclog.hpp
+Reversed (or previously applied) patch detected!  Assume -R? [n] 
+Apply anyway? [n] 
+Skipping patch.
+5 out of 5 hunks ignored -- saving rejects to file include/cutlass/arch/synclog.hpp.rej

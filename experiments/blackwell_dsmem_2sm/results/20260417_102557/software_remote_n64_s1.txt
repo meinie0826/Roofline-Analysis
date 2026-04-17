@@ -1,0 +1,11 @@
+CONFIG benchmark=bench_software_dsmem_gemm mode=remote m=4096 n=64 k=4096 tile_n=64 stages=1 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=0 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.035488 gflops=2073.8856 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=1 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.035552 gflops=2073.7574 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=2 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.035008 gflops=2074.8475 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=3 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.032800 gflops=2079.2832 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=4 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.033536 gflops=2077.8026 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=5 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.033600 gflops=2077.6739 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=6 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.034720 gflops=2075.4250 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=7 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.033472 gflops=2077.9313 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=8 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.030624 gflops=2083.6732 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=9 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.033696 gflops=2077.4807 bytes_b_share=2048 checksum=9.000000

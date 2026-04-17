@@ -1,0 +1,11 @@
+CONFIG benchmark=bench_dsmem_read mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4220650 bytes=134217728 elapsed_ns=2077091.5354 bandwidth_gbps=64.6181 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4197014 bytes=134217728 elapsed_ns=2065459.6457 bandwidth_gbps=64.9820 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4213372 bytes=134217728 elapsed_ns=2073509.8425 bandwidth_gbps=64.7297 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4213372 bytes=134217728 elapsed_ns=2073509.8425 bandwidth_gbps=64.7297 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4213372 bytes=134217728 elapsed_ns=2073509.8425 bandwidth_gbps=64.7297 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4197022 bytes=134217728 elapsed_ns=2065463.5827 bandwidth_gbps=64.9819 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4213370 bytes=134217728 elapsed_ns=2073508.8583 bandwidth_gbps=64.7298 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4213370 bytes=134217728 elapsed_ns=2073508.8583 bandwidth_gbps=64.7298 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4213370 bytes=134217728 elapsed_ns=2073508.8583 bandwidth_gbps=64.7298 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4207261 bytes=134217728 elapsed_ns=2070502.4606 bandwidth_gbps=64.8237 checksum=65536

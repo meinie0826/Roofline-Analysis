@@ -1,0 +1,11 @@
+CONFIG benchmark=bench_dsmem_write mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4473270 bytes=134217728 elapsed_ns=2201412.4016 bandwidth_gbps=60.9689 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4473270 bytes=134217728 elapsed_ns=2201412.4016 bandwidth_gbps=60.9689 checksum=549439637736652800

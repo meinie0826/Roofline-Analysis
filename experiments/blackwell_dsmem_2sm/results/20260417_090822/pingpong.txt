@@ -1,0 +1,11 @@
+CONFIG benchmark=bench_dsmem_pingpong repeats=10 warmup_repeats=3 iters=10000 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_pingpong repeat=0 iters=10000 cycles=4432059 elapsed_ns=2181131.3976 cycles_per_roundtrip=443.2059 ns_per_roundtrip=218.1131
+RESULT benchmark=bench_dsmem_pingpong repeat=1 iters=10000 cycles=4432059 elapsed_ns=2181131.3976 cycles_per_roundtrip=443.2059 ns_per_roundtrip=218.1131
+RESULT benchmark=bench_dsmem_pingpong repeat=2 iters=10000 cycles=4432048 elapsed_ns=2181125.9843 cycles_per_roundtrip=443.2048 ns_per_roundtrip=218.1126
+RESULT benchmark=bench_dsmem_pingpong repeat=3 iters=10000 cycles=4432059 elapsed_ns=2181131.3976 cycles_per_roundtrip=443.2059 ns_per_roundtrip=218.1131
+RESULT benchmark=bench_dsmem_pingpong repeat=4 iters=10000 cycles=4432048 elapsed_ns=2181125.9843 cycles_per_roundtrip=443.2048 ns_per_roundtrip=218.1126
+RESULT benchmark=bench_dsmem_pingpong repeat=5 iters=10000 cycles=4432059 elapsed_ns=2181131.3976 cycles_per_roundtrip=443.2059 ns_per_roundtrip=218.1131
+RESULT benchmark=bench_dsmem_pingpong repeat=6 iters=10000 cycles=4432059 elapsed_ns=2181131.3976 cycles_per_roundtrip=443.2059 ns_per_roundtrip=218.1131
+RESULT benchmark=bench_dsmem_pingpong repeat=7 iters=10000 cycles=4432048 elapsed_ns=2181125.9843 cycles_per_roundtrip=443.2048 ns_per_roundtrip=218.1126
+RESULT benchmark=bench_dsmem_pingpong repeat=8 iters=10000 cycles=4432059 elapsed_ns=2181131.3976 cycles_per_roundtrip=443.2059 ns_per_roundtrip=218.1131
+RESULT benchmark=bench_dsmem_pingpong repeat=9 iters=10000 cycles=4432048 elapsed_ns=2181125.9843 cycles_per_roundtrip=443.2048 ns_per_roundtrip=218.1126

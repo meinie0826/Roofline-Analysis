@@ -1,0 +1,633 @@
+patching file include/cutlass/arch/synclog.hpp
+===============================================
+Compiling bench_cutlass_2sm_gemm.cu
+===============================================
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                                                     ^
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                                                     ^
+
+patching file include/cutlass/arch/synclog.hpp
+CONFIG benchmark=bench_dsmem_read mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+CONFIG benchmark=bench_dsmem_write mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+CONFIG benchmark=bench_dsmem_read mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=18787259 bytes=134217728 elapsed_ns=9245698.3268 bandwidth_gbps=14.5168 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=18787259 bytes=134217728 elapsed_ns=9245698.3268 bandwidth_gbps=14.5168 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=18787259 bytes=134217728 elapsed_ns=9245698.3268 bandwidth_gbps=14.5168 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=18787259 bytes=134217728 elapsed_ns=9245698.3268 bandwidth_gbps=14.5168 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=18787259 bytes=134217728 elapsed_ns=9245698.3268 bandwidth_gbps=14.5168 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=18787259 bytes=134217728 elapsed_ns=9245698.3268 bandwidth_gbps=14.5168 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=18787259 bytes=134217728 elapsed_ns=9245698.3268 bandwidth_gbps=14.5168 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=18787259 bytes=134217728 elapsed_ns=9245698.3268 bandwidth_gbps=14.5168 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=18787259 bytes=134217728 elapsed_ns=9245698.3268 bandwidth_gbps=14.5168 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=18787259 bytes=134217728 elapsed_ns=9245698.3268 bandwidth_gbps=14.5168 checksum=229376
+CONFIG benchmark=bench_dsmem_write mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+CONFIG benchmark=bench_dsmem_read mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4220650 bytes=134217728 elapsed_ns=2077091.5354 bandwidth_gbps=64.6181 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4197014 bytes=134217728 elapsed_ns=2065459.6457 bandwidth_gbps=64.9820 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4213372 bytes=134217728 elapsed_ns=2073509.8425 bandwidth_gbps=64.7297 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4213372 bytes=134217728 elapsed_ns=2073509.8425 bandwidth_gbps=64.7297 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4213372 bytes=134217728 elapsed_ns=2073509.8425 bandwidth_gbps=64.7297 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4197022 bytes=134217728 elapsed_ns=2065463.5827 bandwidth_gbps=64.9819 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4213370 bytes=134217728 elapsed_ns=2073508.8583 bandwidth_gbps=64.7298 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4213370 bytes=134217728 elapsed_ns=2073508.8583 bandwidth_gbps=64.7298 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4213370 bytes=134217728 elapsed_ns=2073508.8583 bandwidth_gbps=64.7298 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4207261 bytes=134217728 elapsed_ns=2070502.4606 bandwidth_gbps=64.8237 checksum=65536
+CONFIG benchmark=bench_dsmem_write mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+CONFIG benchmark=bench_dsmem_read mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+CONFIG benchmark=bench_dsmem_write mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=25172250 bytes=134217728 elapsed_ns=12387918.3071 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+CONFIG benchmark=bench_dsmem_read mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+CONFIG benchmark=bench_dsmem_write mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4473270 bytes=134217728 elapsed_ns=2201412.4016 bandwidth_gbps=60.9689 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=4473270 bytes=134217728 elapsed_ns=2201412.4016 bandwidth_gbps=60.9689 checksum=549439637736652800
+CONFIG benchmark=bench_dsmem_read mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=13607667 bytes=134217728 elapsed_ns=6696686.5157 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=13607667 bytes=134217728 elapsed_ns=6696686.5157 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=13607667 bytes=134217728 elapsed_ns=6696686.5157 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=13607667 bytes=134217728 elapsed_ns=6696686.5157 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=13607667 bytes=134217728 elapsed_ns=6696686.5157 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=13607667 bytes=134217728 elapsed_ns=6696686.5157 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=13607667 bytes=134217728 elapsed_ns=6696686.5157 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=13607667 bytes=134217728 elapsed_ns=6696686.5157 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=13607667 bytes=134217728 elapsed_ns=6696686.5157 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=13607667 bytes=134217728 elapsed_ns=6696686.5157 bandwidth_gbps=20.0424 checksum=8192
+CONFIG benchmark=bench_dsmem_write mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=50336806 bytes=134217728 elapsed_ns=24772050.1969 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=50336707 bytes=134217728 elapsed_ns=24772001.4764 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=50336783 bytes=134217728 elapsed_ns=24772038.8780 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=50336783 bytes=134217728 elapsed_ns=24772038.8780 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=50336747 bytes=134217728 elapsed_ns=24772021.1614 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=50336721 bytes=134217728 elapsed_ns=24772008.3661 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=50336802 bytes=134217728 elapsed_ns=24772048.2283 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=50336775 bytes=134217728 elapsed_ns=24772034.9409 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=50336762 bytes=134217728 elapsed_ns=24772028.5433 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=32 vec_bytes=16 cycles=50336738 bytes=134217728 elapsed_ns=24772016.7323 bandwidth_gbps=5.4181 checksum=549439637736652800
+CONFIG benchmark=bench_dsmem_read mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+CONFIG benchmark=bench_dsmem_write mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+CONFIG benchmark=bench_dsmem_read mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=18703306 bytes=134217728 elapsed_ns=9204382.8740 bandwidth_gbps=14.5819 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=18703306 bytes=134217728 elapsed_ns=9204382.8740 bandwidth_gbps=14.5819 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=18703306 bytes=134217728 elapsed_ns=9204382.8740 bandwidth_gbps=14.5819 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=18703306 bytes=134217728 elapsed_ns=9204382.8740 bandwidth_gbps=14.5819 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=18703306 bytes=134217728 elapsed_ns=9204382.8740 bandwidth_gbps=14.5819 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=18703306 bytes=134217728 elapsed_ns=9204382.8740 bandwidth_gbps=14.5819 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=18703306 bytes=134217728 elapsed_ns=9204382.8740 bandwidth_gbps=14.5819 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=18703306 bytes=134217728 elapsed_ns=9204382.8740 bandwidth_gbps=14.5819 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=18703306 bytes=134217728 elapsed_ns=9204382.8740 bandwidth_gbps=14.5819 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=18703306 bytes=134217728 elapsed_ns=9204382.8740 bandwidth_gbps=14.5819 checksum=229376
+CONFIG benchmark=bench_dsmem_write mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+CONFIG benchmark=bench_dsmem_read mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4220650 bytes=134217728 elapsed_ns=2077091.5354 bandwidth_gbps=64.6181 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4197014 bytes=134217728 elapsed_ns=2065459.6457 bandwidth_gbps=64.9820 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4213372 bytes=134217728 elapsed_ns=2073509.8425 bandwidth_gbps=64.7297 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4213372 bytes=134217728 elapsed_ns=2073509.8425 bandwidth_gbps=64.7297 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4213372 bytes=134217728 elapsed_ns=2073509.8425 bandwidth_gbps=64.7297 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4197022 bytes=134217728 elapsed_ns=2065463.5827 bandwidth_gbps=64.9819 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4213370 bytes=134217728 elapsed_ns=2073508.8583 bandwidth_gbps=64.7298 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4213370 bytes=134217728 elapsed_ns=2073508.8583 bandwidth_gbps=64.7298 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4213370 bytes=134217728 elapsed_ns=2073508.8583 bandwidth_gbps=64.7298 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4207261 bytes=134217728 elapsed_ns=2070502.4606 bandwidth_gbps=64.8237 checksum=65536
+CONFIG benchmark=bench_dsmem_write mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+CONFIG benchmark=bench_dsmem_read mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+CONFIG benchmark=bench_dsmem_write mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+CONFIG benchmark=bench_dsmem_read mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+CONFIG benchmark=bench_dsmem_write mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=4473270 bytes=134217728 elapsed_ns=2201412.4016 bandwidth_gbps=60.9689 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=4473270 bytes=134217728 elapsed_ns=2201412.4016 bandwidth_gbps=60.9689 checksum=549439637736652800
+CONFIG benchmark=bench_dsmem_read mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+CONFIG benchmark=bench_dsmem_write mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=50336805 bytes=134217728 elapsed_ns=24772049.7047 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=50336718 bytes=134217728 elapsed_ns=24772006.8898 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=50336774 bytes=134217728 elapsed_ns=24772034.4488 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=50336729 bytes=134217728 elapsed_ns=24772012.3031 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=50336775 bytes=134217728 elapsed_ns=24772034.9409 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=50336721 bytes=134217728 elapsed_ns=24772008.3661 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=50336779 bytes=134217728 elapsed_ns=24772036.9094 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=50336784 bytes=134217728 elapsed_ns=24772039.3701 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=50336728 bytes=134217728 elapsed_ns=24772011.8110 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=64 vec_bytes=16 cycles=50336729 bytes=134217728 elapsed_ns=24772012.3031 bandwidth_gbps=5.4181 checksum=549439637736652800
+CONFIG benchmark=bench_dsmem_read mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+RESULT benchmark=bench_dsmem_read mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6537827 bytes=134217728 elapsed_ns=3217434.5472 bandwidth_gbps=41.7158 checksum=458752
+CONFIG benchmark=bench_dsmem_write mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+RESULT benchmark=bench_dsmem_write mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=3576365 bytes=134217728 elapsed_ns=1760022.1457 bandwidth_gbps=76.2591 checksum=0
+CONFIG benchmark=bench_dsmem_read mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=18842462 bytes=134217728 elapsed_ns=9272865.1575 bandwidth_gbps=14.4742 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=18842462 bytes=134217728 elapsed_ns=9272865.1575 bandwidth_gbps=14.4742 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=18842462 bytes=134217728 elapsed_ns=9272865.1575 bandwidth_gbps=14.4742 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=18842462 bytes=134217728 elapsed_ns=9272865.1575 bandwidth_gbps=14.4742 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=18842462 bytes=134217728 elapsed_ns=9272865.1575 bandwidth_gbps=14.4742 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=18842462 bytes=134217728 elapsed_ns=9272865.1575 bandwidth_gbps=14.4742 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=18842462 bytes=134217728 elapsed_ns=9272865.1575 bandwidth_gbps=14.4742 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=18842462 bytes=134217728 elapsed_ns=9272865.1575 bandwidth_gbps=14.4742 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=18842462 bytes=134217728 elapsed_ns=9272865.1575 bandwidth_gbps=14.4742 checksum=229376
+RESULT benchmark=bench_dsmem_read mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=18842462 bytes=134217728 elapsed_ns=9272865.1575 bandwidth_gbps=14.4742 checksum=229376
+CONFIG benchmark=bench_dsmem_write mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+RESULT benchmark=bench_dsmem_write mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=4 cycles=6758569 bytes=134217728 elapsed_ns=3326067.4213 bandwidth_gbps=40.3533 checksum=0
+CONFIG benchmark=bench_dsmem_read mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4220650 bytes=134217728 elapsed_ns=2077091.5354 bandwidth_gbps=64.6181 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4197014 bytes=134217728 elapsed_ns=2065459.6457 bandwidth_gbps=64.9820 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4213372 bytes=134217728 elapsed_ns=2073509.8425 bandwidth_gbps=64.7297 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4213372 bytes=134217728 elapsed_ns=2073509.8425 bandwidth_gbps=64.7297 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4213372 bytes=134217728 elapsed_ns=2073509.8425 bandwidth_gbps=64.7297 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4197022 bytes=134217728 elapsed_ns=2065463.5827 bandwidth_gbps=64.9819 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4213370 bytes=134217728 elapsed_ns=2073508.8583 bandwidth_gbps=64.7298 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4213370 bytes=134217728 elapsed_ns=2073508.8583 bandwidth_gbps=64.7298 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4213370 bytes=134217728 elapsed_ns=2073508.8583 bandwidth_gbps=64.7298 checksum=65536
+RESULT benchmark=bench_dsmem_read mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4207261 bytes=134217728 elapsed_ns=2070502.4606 bandwidth_gbps=64.8237 checksum=65536
+CONFIG benchmark=bench_dsmem_write mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=4737541 bytes=134217728 elapsed_ns=2331467.0276 bandwidth_gbps=57.5679 checksum=562949953421312
+CONFIG benchmark=bench_dsmem_read mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+RESULT benchmark=bench_dsmem_read mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=16876197 bytes=134217728 elapsed_ns=8305215.0591 bandwidth_gbps=16.1607 checksum=16384
+CONFIG benchmark=bench_dsmem_write mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=25172250 bytes=134217728 elapsed_ns=12387918.3071 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=25172250 bytes=134217728 elapsed_ns=12387918.3071 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=25172250 bytes=134217728 elapsed_ns=12387918.3071 bandwidth_gbps=10.8346 checksum=562949953421312
+RESULT benchmark=bench_dsmem_write mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=8 cycles=25172237 bytes=134217728 elapsed_ns=12387911.9094 bandwidth_gbps=10.8346 checksum=562949953421312
+CONFIG benchmark=bench_dsmem_read mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+RESULT benchmark=bench_dsmem_read mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=3041933 bytes=134217728 elapsed_ns=1497014.2717 bandwidth_gbps=89.6569 checksum=466944
+CONFIG benchmark=bench_dsmem_write mode=local repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=local repeat=0 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=1 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=4473270 bytes=134217728 elapsed_ns=2201412.4016 bandwidth_gbps=60.9689 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=2 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=4 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=5 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=4438519 bytes=134217728 elapsed_ns=2184310.5315 bandwidth_gbps=61.4463 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=6 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=7 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=8 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=4440566 bytes=134217728 elapsed_ns=2185317.9134 bandwidth_gbps=61.4179 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=local repeat=9 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=4473270 bytes=134217728 elapsed_ns=2201412.4016 bandwidth_gbps=60.9689 checksum=549439637736652800
+CONFIG benchmark=bench_dsmem_read mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_read mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+RESULT benchmark=bench_dsmem_read mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=13607659 bytes=134217728 elapsed_ns=6696682.5787 bandwidth_gbps=20.0424 checksum=8192
+CONFIG benchmark=bench_dsmem_write mode=remote repeats=10 warmup_repeats=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_write mode=remote repeat=0 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=50336786 bytes=134217728 elapsed_ns=24772040.3543 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=1 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=50336752 bytes=134217728 elapsed_ns=24772023.6220 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=2 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=50336783 bytes=134217728 elapsed_ns=24772038.8780 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=3 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=50336802 bytes=134217728 elapsed_ns=24772048.2283 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=4 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=50336775 bytes=134217728 elapsed_ns=24772034.9409 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=5 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=50336714 bytes=134217728 elapsed_ns=24772004.9213 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=6 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=50336802 bytes=134217728 elapsed_ns=24772048.2283 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=7 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=50336781 bytes=134217728 elapsed_ns=24772037.8937 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=8 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=50336772 bytes=134217728 elapsed_ns=24772033.4646 bandwidth_gbps=5.4181 checksum=549439637736652800
+RESULT benchmark=bench_dsmem_write mode=remote repeat=9 iters=2048 buffer_bytes=65536 align_bytes=128 vec_bytes=16 cycles=50336750 bytes=134217728 elapsed_ns=24772022.6378 bandwidth_gbps=5.4181 checksum=549439637736652800
+CONFIG benchmark=bench_dsmem_pingpong repeats=10 warmup_repeats=3 iters=10000 cluster_dim_x=2
+RESULT benchmark=bench_dsmem_pingpong repeat=0 iters=10000 cycles=4432059 elapsed_ns=2181131.3976 cycles_per_roundtrip=443.2059 ns_per_roundtrip=218.1131
+RESULT benchmark=bench_dsmem_pingpong repeat=1 iters=10000 cycles=4432059 elapsed_ns=2181131.3976 cycles_per_roundtrip=443.2059 ns_per_roundtrip=218.1131
+RESULT benchmark=bench_dsmem_pingpong repeat=2 iters=10000 cycles=4432048 elapsed_ns=2181125.9843 cycles_per_roundtrip=443.2048 ns_per_roundtrip=218.1126
+RESULT benchmark=bench_dsmem_pingpong repeat=3 iters=10000 cycles=4432059 elapsed_ns=2181131.3976 cycles_per_roundtrip=443.2059 ns_per_roundtrip=218.1131
+RESULT benchmark=bench_dsmem_pingpong repeat=4 iters=10000 cycles=4432048 elapsed_ns=2181125.9843 cycles_per_roundtrip=443.2048 ns_per_roundtrip=218.1126
+RESULT benchmark=bench_dsmem_pingpong repeat=5 iters=10000 cycles=4432059 elapsed_ns=2181131.3976 cycles_per_roundtrip=443.2059 ns_per_roundtrip=218.1131
+RESULT benchmark=bench_dsmem_pingpong repeat=6 iters=10000 cycles=4432059 elapsed_ns=2181131.3976 cycles_per_roundtrip=443.2059 ns_per_roundtrip=218.1131
+RESULT benchmark=bench_dsmem_pingpong repeat=7 iters=10000 cycles=4432048 elapsed_ns=2181125.9843 cycles_per_roundtrip=443.2048 ns_per_roundtrip=218.1126
+RESULT benchmark=bench_dsmem_pingpong repeat=8 iters=10000 cycles=4432059 elapsed_ns=2181131.3976 cycles_per_roundtrip=443.2059 ns_per_roundtrip=218.1131
+RESULT benchmark=bench_dsmem_pingpong repeat=9 iters=10000 cycles=4432048 elapsed_ns=2181125.9843 cycles_per_roundtrip=443.2048 ns_per_roundtrip=218.1126
+CONFIG benchmark=bench_software_dsmem_gemm mode=local m=4096 n=64 k=4096 tile_n=64 stages=1 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=0 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=0.769856 gflops=2789.4616 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=1 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=0.765632 gflops=2804.8511 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=2 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=0.769760 gflops=2789.8093 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=3 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=0.767424 gflops=2798.3014 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=4 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=0.767616 gflops=2797.6016 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=5 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=0.771232 gflops=2784.4846 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=6 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=0.769248 gflops=2791.6662 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=7 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=0.771232 gflops=2784.4846 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=8 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=0.764064 gflops=2810.6070 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=9 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=0.767552 gflops=2797.8347 bytes_b_share=2048 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=remote m=4096 n=64 k=4096 tile_n=64 stages=1 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=0 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.035488 gflops=2073.8856 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=1 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.035552 gflops=2073.7574 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=2 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.035008 gflops=2074.8475 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=3 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.032800 gflops=2079.2832 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=4 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.033536 gflops=2077.8026 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=5 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.033600 gflops=2077.6739 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=6 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.034720 gflops=2075.4250 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=7 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.033472 gflops=2077.9313 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=8 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.030624 gflops=2083.6732 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=9 m=4096 n=64 k=4096 tile_n=64 stages=1 elapsed_ms=1.033696 gflops=2077.4807 bytes_b_share=2048 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=local m=4096 n=64 k=4096 tile_n=64 stages=2 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=0 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=0.627840 gflops=3420.4315 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=1 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=0.626144 gflops=3429.6962 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=2 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=0.627552 gflops=3422.0013 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=3 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=0.623680 gflops=3443.2460 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=4 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=0.626816 gflops=3426.0193 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=5 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=0.622752 gflops=3448.3769 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=6 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=0.628800 gflops=3415.2095 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=7 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=0.623008 gflops=3446.9599 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=8 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=0.626624 gflops=3427.0690 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=9 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=0.623264 gflops=3445.5441 bytes_b_share=2048 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=remote m=4096 n=64 k=4096 tile_n=64 stages=2 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=0 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=1.025280 gflops=2094.5338 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=1 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=1.029024 gflops=2086.9131 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=2 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=1.026944 gflops=2091.1399 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=3 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=1.026336 gflops=2092.3789 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=4 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=1.026560 gflops=2091.9223 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=5 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=1.026240 gflops=2092.5745 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=6 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=1.025824 gflops=2093.4232 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=7 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=1.026176 gflops=2092.7051 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=8 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=1.025600 gflops=2093.8804 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=9 m=4096 n=64 k=4096 tile_n=64 stages=2 elapsed_ms=1.025376 gflops=2094.3378 bytes_b_share=2048 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=local m=4096 n=64 k=4096 tile_n=64 stages=4 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=0 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=0.643200 gflops=3338.7496 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=1 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=0.638048 gflops=3365.7086 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=2 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=0.644192 gflops=3333.6082 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=3 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=0.637216 gflops=3370.1033 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=4 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=0.643776 gflops=3335.7622 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=5 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=0.636576 gflops=3373.4914 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=6 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=0.643104 gflops=3339.2478 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=7 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=0.635296 gflops=3380.2884 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=8 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=0.642464 gflops=3342.5744 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=9 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=0.636096 gflops=3376.0370 bytes_b_share=2048 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=remote m=4096 n=64 k=4096 tile_n=64 stages=4 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=0 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=1.045376 gflops=2054.2692 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=1 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=1.044160 gflops=2056.6615 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=2 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=1.043008 gflops=2058.9331 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=3 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=1.044608 gflops=2055.7794 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=4 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=1.043200 gflops=2058.5541 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=5 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=1.043456 gflops=2058.0491 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=6 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=1.044576 gflops=2055.8423 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=7 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=1.043488 gflops=2057.9859 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=8 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=1.044480 gflops=2056.0314 bytes_b_share=2048 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=9 m=4096 n=64 k=4096 tile_n=64 stages=4 elapsed_ms=1.044128 gflops=2056.7246 bytes_b_share=2048 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=local m=4096 n=128 k=4096 tile_n=128 stages=1 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=0 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=0.993760 gflops=4321.9362 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=1 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=0.996736 gflops=4309.0320 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=2 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=0.994912 gflops=4316.9317 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=3 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=0.992000 gflops=4329.6042 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=4 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=0.989408 gflops=4340.9465 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=5 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=0.991328 gflops=4332.5391 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=6 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=0.994336 gflops=4319.4325 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=7 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=0.991328 gflops=4332.5391 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=8 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=0.988672 gflops=4344.1781 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=9 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=0.991424 gflops=4332.1194 bytes_b_share=4096 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=remote m=4096 n=128 k=4096 tile_n=128 stages=1 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=0 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=2.298496 gflops=1868.5990 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=1 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=2.299744 gflops=1867.5850 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=2 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=2.297056 gflops=1869.7704 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=3 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=2.297376 gflops=1869.5100 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=4 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=2.296064 gflops=1870.5783 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=5 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=2.297696 gflops=1869.2495 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=6 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=2.296864 gflops=1869.9267 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=7 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=2.298016 gflops=1868.9892 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=8 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=2.297184 gflops=1869.6662 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=9 m=4096 n=128 k=4096 tile_n=128 stages=1 elapsed_ms=2.299392 gflops=1867.8709 bytes_b_share=4096 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=local m=4096 n=128 k=4096 tile_n=128 stages=2 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=0 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=0.964736 gflops=4451.9613 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=1 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=0.962432 gflops=4462.6188 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=2 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=0.965632 gflops=4447.8302 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=3 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=0.965312 gflops=4449.3048 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=4 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=0.963840 gflops=4456.0998 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=5 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=0.960160 gflops=4473.1787 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=6 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=0.965344 gflops=4449.1572 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=7 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=0.966176 gflops=4445.3261 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=8 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=0.962336 gflops=4463.0641 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=9 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=0.962336 gflops=4463.0641 bytes_b_share=4096 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=remote m=4096 n=128 k=4096 tile_n=128 stages=2 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=0 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=2.213824 gflops=1940.0672 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=1 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=2.217152 gflops=1937.1550 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=2 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=2.212160 gflops=1941.5264 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=3 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=2.212704 gflops=1941.0492 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=4 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=2.212256 gflops=1941.4423 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=5 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=2.211840 gflops=1941.8075 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=6 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=2.212032 gflops=1941.6388 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=7 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=2.213984 gflops=1939.9270 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=8 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=2.211616 gflops=1942.0040 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=9 m=4096 n=128 k=4096 tile_n=128 stages=2 elapsed_ms=2.213088 gflops=1940.7124 bytes_b_share=4096 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=local m=4096 n=128 k=4096 tile_n=128 stages=4 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=0 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=0.970176 gflops=4426.9982 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=1 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=0.969152 gflops=4431.6757 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=2 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=0.962112 gflops=4464.1032 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=3 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=0.964704 gflops=4452.1090 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=4 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=0.968416 gflops=4435.0438 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=5 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=0.965344 gflops=4449.1572 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=6 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=0.963584 gflops=4457.2837 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=7 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=0.967200 gflops=4440.6197 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=8 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=0.967040 gflops=4441.3543 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=9 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=0.962912 gflops=4460.3943 bytes_b_share=4096 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=remote m=4096 n=128 k=4096 tile_n=128 stages=4 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=0 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=2.205472 gflops=1947.4141 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=1 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=2.204736 gflops=1948.0642 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=2 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=2.203936 gflops=1948.7712 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=3 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=2.203392 gflops=1949.2524 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=4 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=2.203968 gflops=1948.7430 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=5 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=2.202944 gflops=1949.6488 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=6 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=2.203680 gflops=1948.9977 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=7 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=2.203232 gflops=1949.3940 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=8 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=2.203168 gflops=1949.4507 bytes_b_share=4096 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=9 m=4096 n=128 k=4096 tile_n=128 stages=4 elapsed_ms=2.202848 gflops=1949.7339 bytes_b_share=4096 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=local m=4096 n=256 k=4096 tile_n=256 stages=1 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=0 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=1.622752 gflops=5293.4366 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=1 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=1.622624 gflops=5293.8539 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=2 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=1.623008 gflops=5292.6015 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=3 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=1.618944 gflops=5305.8873 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=4 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=1.621632 gflops=5297.0925 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=5 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=1.620896 gflops=5299.4977 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=6 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=1.621760 gflops=5296.6743 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=7 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=1.618624 gflops=5306.9365 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=8 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=1.623872 gflops=5289.7854 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=9 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=1.626688 gflops=5280.6282 bytes_b_share=8192 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=remote m=4096 n=256 k=4096 tile_n=256 stages=1 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=0 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=3.155104 gflops=2722.5520 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=1 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=3.154240 gflops=2723.2978 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=2 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=3.149472 gflops=2727.4205 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=3 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=3.150656 gflops=2726.3956 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=4 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=3.149440 gflops=2727.4482 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=5 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=3.149920 gflops=2727.0326 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=6 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=3.149888 gflops=2727.0603 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=7 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=3.150528 gflops=2726.5064 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=8 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=3.151840 gflops=2725.3714 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=9 m=4096 n=256 k=4096 tile_n=256 stages=1 elapsed_ms=3.150272 gflops=2726.7280 bytes_b_share=8192 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=local m=4096 n=256 k=4096 tile_n=256 stages=2 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=0 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=1.609536 gflops=5336.9010 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=1 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=1.610528 gflops=5333.6140 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=2 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=1.608320 gflops=5340.9363 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=3 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=1.607648 gflops=5343.1687 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=4 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=1.607328 gflops=5344.2323 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=5 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=1.607072 gflops=5345.0839 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=6 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=1.609024 gflops=5338.5993 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=7 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=1.607616 gflops=5343.2753 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=8 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=1.607136 gflops=5344.8710 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=9 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=1.607392 gflops=5344.0199 bytes_b_share=8192 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=remote m=4096 n=256 k=4096 tile_n=256 stages=2 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=0 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=2.566464 gflops=3346.9921 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=1 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=2.565152 gflops=3348.7040 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=2 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=2.565056 gflops=3348.8292 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=3 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=2.563968 gflops=3350.2504 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=4 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=2.561600 gflops=3353.3474 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=5 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=2.561888 gflops=3352.9704 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=6 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=2.564320 gflops=3349.7903 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=7 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=2.559488 gflops=3356.1143 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=8 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=2.560992 gflops=3354.1435 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=9 m=4096 n=256 k=4096 tile_n=256 stages=2 elapsed_ms=2.563488 gflops=3350.8776 bytes_b_share=8192 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=local m=4096 n=256 k=4096 tile_n=256 stages=4 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=0 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=1.611168 gflops=5331.4952 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=1 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=1.608576 gflops=5340.0861 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=2 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=1.606592 gflops=5346.6806 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=3 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=1.606432 gflops=5347.2135 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=4 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=1.606272 gflops=5347.7460 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=5 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=1.606592 gflops=5346.6806 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=6 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=1.604960 gflops=5352.1177 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=7 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=1.606336 gflops=5347.5329 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=8 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=1.606400 gflops=5347.3198 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=local repeat=9 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=1.606368 gflops=5347.4265 bytes_b_share=8192 checksum=9.000000
+CONFIG benchmark=bench_software_dsmem_gemm mode=remote m=4096 n=256 k=4096 tile_n=256 stages=4 repeats=10 warmup_repeats=3
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=0 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=2.545056 gflops=3375.1455 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=1 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=2.543520 gflops=3377.1839 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=2 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=2.547136 gflops=3372.3894 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=3 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=2.546528 gflops=3373.1945 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=4 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=2.540992 gflops=3380.5437 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=5 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=2.540192 gflops=3381.6085 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=6 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=2.547008 gflops=3372.5589 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=7 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=2.544960 gflops=3375.2729 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=8 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=2.538336 gflops=3384.0809 bytes_b_share=8192 checksum=9.000000
+RESULT benchmark=bench_software_dsmem_gemm mode=remote repeat=9 m=4096 n=256 k=4096 tile_n=256 stages=4 elapsed_ms=2.544736 gflops=3375.5702 bytes_b_share=8192 checksum=9.000000
+initialize failed: Error Internal (cuda: no error)
+CUTLASS benchmark failed to run.
+CONFIG benchmark=bench_cutlass_2sm_gemm mode=1sm m=4096 n=64 k=4096 tile_n=64 stages=2 repeats=10 warmup_repeats=3 gpu="NVIDIA B300 SXM6 AC"
