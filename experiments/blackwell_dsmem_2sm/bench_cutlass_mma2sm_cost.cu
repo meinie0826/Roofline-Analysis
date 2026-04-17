@@ -1,14 +1,10 @@
 #include "common.h"
 
-#include <cmath>
-#include <iostream>
 #include <type_traits>
 
 // Work around cudaOccupancyMaxPotentialBlockSize issues on sm_100a.
 #define CUTLASS_BLOCKFILL_GRID  256
 #define CUTLASS_BLOCKFILL_BLOCK 128
-
-#include "cute/tensor.hpp"
 
 #include "cutlass/cutlass.h"
 #include "cutlass/epilogue/collective/collective_builder.hpp"
