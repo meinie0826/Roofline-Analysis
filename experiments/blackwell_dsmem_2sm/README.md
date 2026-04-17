@@ -59,7 +59,7 @@
 
 - CTA0 装载共享的 B tile
 - CTA1 通过 DSMEM 读取这块 B tile
-- CTA1 使用 WMMA 做 1SM tensor-core GEMM 代理
+- CTA1 使用一个更保守的 software GEMM 代理去消费这块 B tile
 
 这样它更像“显式 DSMEM 搬运 B”的替身实验，而不是峰值内核。
 
@@ -83,6 +83,12 @@
 - `tile_n`
 - `stages`
 - `mode`
+
+如果当前环境没有 CUTLASS 源码目录，`run.sh` 会自动跳过这部分。你也可以显式指定：
+
+```bash
+CUTLASS_DIR=/path/to/cutlass bash run.sh
+```
 
 ## 典型用法
 
@@ -128,6 +134,8 @@ results/<timestamp>/
 - `results_cutlass_gemm.csv`
 - `metadata.json`
 - `run.log`
+
+如果本机没有 CUTLASS，这个 `results_cutlass_gemm.csv` 会只保留表头，`run.log` 会说明该部分被跳过。
 
 ## 建议先看什么
 

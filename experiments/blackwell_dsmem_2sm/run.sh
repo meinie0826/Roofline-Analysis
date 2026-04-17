@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 NVCC=${NVCC:-nvcc}
 ARCH=${ARCH:-sm_100a}
+CUTLASS_DIR=${CUTLASS_DIR:-$ROOT_DIR/../../cutlass}
 REPEATS=${REPEATS:-10}
 WARMUP_REPEATS=${WARMUP_REPEATS:-3}
 ITERS=${ITERS:-2048}
@@ -50,6 +51,11 @@ require_tool "$NVCC" "Set NVCC=/path/to/nvcc"
 git_commit=$(git -C "$ROOT_DIR/../.." rev-parse HEAD 2>/dev/null || echo unknown)
 gpu_info=$(nvidia-smi --query-gpu=name,compute_cap,driver_version --format=csv,noheader 2>/dev/null | head -n 1 || echo unknown)
 
+HAVE_CUTLASS=0
+if [[ -f "$CUTLASS_DIR/include/cute/tensor.hpp" && -d "$CUTLASS_DIR/tools/util/include" ]]; then
+  HAVE_CUTLASS=1
+fi
+
 python3 - <<PY
 import json
 metadata = {
@@ -58,6 +64,8 @@ metadata = {
   "git_commit": "$git_commit",
   "arch": "$ARCH",
   "nvcc": "$NVCC",
+  "cutlass_dir": "$CUTLASS_DIR",
+  "have_cutlass": $HAVE_CUTLASS,
   "gpu_info": """$gpu_info""",
   "repeats": $REPEATS,
   "warmup_repeats": $WARMUP_REPEATS,
@@ -144,9 +152,15 @@ compile bench_dsmem_read.cu bench_dsmem_read
 compile bench_dsmem_write.cu bench_dsmem_write
 compile bench_dsmem_pingpong.cu bench_dsmem_pingpong
 compile bench_software_dsmem_gemm.cu bench_software_dsmem_gemm
-compile bench_cutlass_2sm_gemm.cu bench_cutlass_2sm_gemm \
-  -I"$ROOT_DIR/../../cutlass/include" \
-  -I"$ROOT_DIR/../../cutlass/tools/util/include"
+if [[ "$HAVE_CUTLASS" == "1" ]]; then
+  compile bench_cutlass_2sm_gemm.cu bench_cutlass_2sm_gemm \
+    -I"$CUTLASS_DIR/include" \
+    -I"$CUTLASS_DIR/tools/util/include"
+else
+  echo "WARNING: CUTLASS not found at $CUTLASS_DIR"
+  echo "Skipping bench_cutlass_2sm_gemm compilation and runtime sweep."
+  echo "Set CUTLASS_DIR=/path/to/cutlass to enable the hardware 1SM/2SM comparison."
+fi
 
 IFS=',' read -r -a ALIGN_VALUES <<< "$ALIGN_LIST"
 IFS=',' read -r -a VEC_VALUES <<< "$VEC_LIST"
@@ -185,15 +199,17 @@ for tile_n in "${SOFT_TILE_VALUES[@]}"; do
   done
 done
 
-for tile_n in "${CUTLASS_TILE_VALUES[@]}"; do
-  for stages in "${STAGES_VALUES[@]}"; do
-    for mode in 1sm 2sm; do
-      log="$OUTDIR/cutlass_${mode}_n${tile_n}_s${stages}.txt"
-      ./bench_cutlass_2sm_gemm --mode="$mode" --m="$GEMM_M" --n="$tile_n" --k="$GEMM_K" \
-        --tile-n="$tile_n" --stages="$stages" --repeats="$REPEATS" --warmup-repeats="$WARMUP_REPEATS" | tee "$log"
-      append_results "$log" "$CUTLASS_GEMM_CSV"
+if [[ "$HAVE_CUTLASS" == "1" ]]; then
+  for tile_n in "${CUTLASS_TILE_VALUES[@]}"; do
+    for stages in "${STAGES_VALUES[@]}"; do
+      for mode in 1sm 2sm; do
+        log="$OUTDIR/cutlass_${mode}_n${tile_n}_s${stages}.txt"
+        ./bench_cutlass_2sm_gemm --mode="$mode" --m="$GEMM_M" --n="$tile_n" --k="$GEMM_K" \
+          --tile-n="$tile_n" --stages="$stages" --repeats="$REPEATS" --warmup-repeats="$WARMUP_REPEATS" | tee "$log"
+        append_results "$log" "$CUTLASS_GEMM_CSV"
+      done
     done
   done
-done
+fi
 
 echo "Results written to $OUTDIR"
