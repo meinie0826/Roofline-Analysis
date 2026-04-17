@@ -15,6 +15,7 @@ ALIGN_LIST=${ALIGN_LIST:-32,64,128}
 VEC_LIST=${VEC_LIST:-4,8,16}
 SOFT_TILE_N_LIST=${SOFT_TILE_N_LIST:-64,128,256}
 STAGES_LIST=${STAGES_LIST:-1,2,4}
+CUTLASS_STAGES_LIST=${CUTLASS_STAGES_LIST:-2,4}
 CUTLASS_TILE_N_LIST=${CUTLASS_TILE_N_LIST:-64,128,256}
 GEMM_M=${GEMM_M:-4096}
 GEMM_K=${GEMM_K:-4096}
@@ -75,6 +76,7 @@ metadata = {
   "vec_list": "$VEC_LIST",
   "soft_tile_n_list": "$SOFT_TILE_N_LIST",
   "cutlass_tile_n_list": "$CUTLASS_TILE_N_LIST",
+  "cutlass_stages_list": "$CUTLASS_STAGES_LIST",
   "stages_list": "$STAGES_LIST",
   "gemm_m": $GEMM_M,
   "gemm_k": $GEMM_K,
@@ -154,6 +156,7 @@ compile bench_dsmem_pingpong.cu bench_dsmem_pingpong
 compile bench_software_dsmem_gemm.cu bench_software_dsmem_gemm
 if [[ "$HAVE_CUTLASS" == "1" ]]; then
   compile bench_cutlass_2sm_gemm.cu bench_cutlass_2sm_gemm \
+    --expt-relaxed-constexpr \
     -I"$CUTLASS_DIR/include" \
     -I"$CUTLASS_DIR/tools/util/include"
 else
@@ -167,6 +170,7 @@ IFS=',' read -r -a VEC_VALUES <<< "$VEC_LIST"
 IFS=',' read -r -a SOFT_TILE_VALUES <<< "$SOFT_TILE_N_LIST"
 IFS=',' read -r -a CUTLASS_TILE_VALUES <<< "$CUTLASS_TILE_N_LIST"
 IFS=',' read -r -a STAGES_VALUES <<< "$STAGES_LIST"
+IFS=',' read -r -a CUTLASS_STAGES_VALUES <<< "$CUTLASS_STAGES_LIST"
 
 for align in "${ALIGN_VALUES[@]}"; do
   for vec in "${VEC_VALUES[@]}"; do
@@ -201,8 +205,12 @@ done
 
 if [[ "$HAVE_CUTLASS" == "1" ]]; then
   for tile_n in "${CUTLASS_TILE_VALUES[@]}"; do
-    for stages in "${STAGES_VALUES[@]}"; do
+    for stages in "${CUTLASS_STAGES_VALUES[@]}"; do
       for mode in 1sm 2sm; do
+        if [[ "$mode" == "1sm" && "$tile_n" == "256" ]]; then
+          echo "Skipping unsupported CUTLASS case mode=1sm tile_n=256"
+          continue
+        fi
         log="$OUTDIR/cutlass_${mode}_n${tile_n}_s${stages}.txt"
         ./bench_cutlass_2sm_gemm --mode="$mode" --m="$GEMM_M" --n="$tile_n" --k="$GEMM_K" \
           --tile-n="$tile_n" --stages="$stages" --repeats="$REPEATS" --warmup-repeats="$WARMUP_REPEATS" | tee "$log"

@@ -207,6 +207,20 @@ double dispatch_cutlass(const GemmOptions& options, const cutlass::KernelHardwar
   return total_ms / static_cast<double>(options.repeats);
 }
 
+template <class StageCountTag>
+double dispatch_cutlass_by_mode(const GemmOptions& options, const cutlass::KernelHardwareInfo& hw_info) {
+  if (std::strcmp(options.mode, "1sm") == 0) {
+    if (options.tile_n == 64) return dispatch_cutlass<64, StageCountTag>(options, hw_info);
+    if (options.tile_n == 128) return dispatch_cutlass<128, StageCountTag>(options, hw_info);
+    return -1.0;
+  }
+
+  if (options.tile_n == 64) return dispatch_cutlass<64, StageCountTag>(options, hw_info);
+  if (options.tile_n == 128) return dispatch_cutlass<128, StageCountTag>(options, hw_info);
+  if (options.tile_n == 256) return dispatch_cutlass<256, StageCountTag>(options, hw_info);
+  return -1.0;
+}
+
 #endif
 
 int main(int argc, char** argv) {
@@ -219,6 +233,14 @@ int main(int argc, char** argv) {
   }
   if (std::strcmp(options.mode, "1sm") != 0 && std::strcmp(options.mode, "2sm") != 0) {
     std::fprintf(stderr, "mode must be 1sm or 2sm\n");
+    return 1;
+  }
+  if (options.stages == 1) {
+    std::fprintf(stderr, "CUTLASS SM100 benchmark does not support stages=1 in this configuration. Use --stages=2 or --stages=4.\n");
+    return 1;
+  }
+  if (std::strcmp(options.mode, "1sm") == 0 && options.tile_n == 256) {
+    std::fprintf(stderr, "CUTLASS 1SM benchmark with tile_n=256 exceeds SMEM capacity in this configuration. Use tile_n=64 or 128.\n");
     return 1;
   }
 
@@ -245,15 +267,8 @@ int main(int argc, char** argv) {
   hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
 
   double avg_ms = -1.0;
-  if (options.tile_n == 64 && options.stages == 1) avg_ms = dispatch_cutlass<64, cute::_1>(options, hw_info);
-  if (options.tile_n == 64 && options.stages == 2) avg_ms = dispatch_cutlass<64, cute::_2>(options, hw_info);
-  if (options.tile_n == 64 && options.stages == 4) avg_ms = dispatch_cutlass<64, cute::_4>(options, hw_info);
-  if (options.tile_n == 128 && options.stages == 1) avg_ms = dispatch_cutlass<128, cute::_1>(options, hw_info);
-  if (options.tile_n == 128 && options.stages == 2) avg_ms = dispatch_cutlass<128, cute::_2>(options, hw_info);
-  if (options.tile_n == 128 && options.stages == 4) avg_ms = dispatch_cutlass<128, cute::_4>(options, hw_info);
-  if (options.tile_n == 256 && options.stages == 1) avg_ms = dispatch_cutlass<256, cute::_1>(options, hw_info);
-  if (options.tile_n == 256 && options.stages == 2) avg_ms = dispatch_cutlass<256, cute::_2>(options, hw_info);
-  if (options.tile_n == 256 && options.stages == 4) avg_ms = dispatch_cutlass<256, cute::_4>(options, hw_info);
+  if (options.stages == 2) avg_ms = dispatch_cutlass_by_mode<cute::_2>(options, hw_info);
+  if (options.stages == 4) avg_ms = dispatch_cutlass_by_mode<cute::_4>(options, hw_info);
 
   if (avg_ms <= 0.0) {
     std::fprintf(stderr, "CUTLASS benchmark failed to run.\n");
