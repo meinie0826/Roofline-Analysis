@@ -66,6 +66,10 @@ make hand-written  # bench_3way, bench_tc_*
 make cutlass      # CUTLASS benchmarks
 make bench_cutlass_mma2sm_cost
 
+# Override architecture when needed
+make ARCH=sm_100a bench_cutlass_2sm_gemm      # B200
+make ARCH=sm_103a bench_cutlass_2sm_gemm      # B300
+
 # Run benchmarks
 ./bench_3way --mode=all --m=2048 --n=2048 --k=8192
 ./bench_cutlass_2sm_gemm --mode=1sm --m=8192 --n=8192 --k=8192
@@ -98,6 +102,7 @@ Important summary fields:
 Example:
 
 ```bash
+make ARCH=sm_100a bench_cutlass_mma2sm_cost
 ./bench_cutlass_mma2sm_cost --mode=compare --m=8192 --n=8192 --k=8192 --tile-n=128 --stages=2
 ./bench_cutlass_mma2sm_cost --mode=1sm --m=8192 --n=8192 --k=4096 --tile-n=64 --stages=4
 ./bench_cutlass_mma2sm_cost --mode=2sm --m=8192 --n=8192 --k=4096 --tile-n=64 --stages=4
@@ -105,6 +110,8 @@ Example:
 
 Notes:
 
+- `ARCH` defaults to `sm_100a` so the build matches B200 by default. Override with
+  `make ARCH=sm_103a ...` on B300.
 - `tile_n=64` or `128` is supported in the current compare path.
 - `stages=2` or `4` is supported.
 - The reported `est_b_*` values are analytic estimates derived from tile geometry, not hardware counter reads.
