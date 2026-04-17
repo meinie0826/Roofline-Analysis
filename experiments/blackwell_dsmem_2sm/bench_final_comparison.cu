@@ -17,78 +17,151 @@
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/gemm/kernel/gemm_universal.hpp"
 #include "cutlass/util/packed_stride.hpp"
+#include "cutlass/util/device_memory.h"
 
 namespace cg = cooperative_groups;
 using namespace blackwell_dsmem_2sm;
 
 //=============================================================================
-// CUTLASS type aliases
+// Template for CUTLASS kernels
 //=============================================================================
-using ElementA = cutlass::half_t;
-using ElementB = cutlass::half_t;
-using ElementC = cutlass::half_t;
-using ElementAccumulator = float;
+template<int TileN, class MainloopSchedule, class EpilogueSchedule, class StageCountTag>
+struct CutlassRunner {
+  using LayoutA = cutlass::layout::RowMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
+  using LayoutC = cutlass::layout::ColumnMajor;
+  using LayoutD = cutlass::layout::ColumnMajor;
 
-using LayoutA = cutlass::layout::RowMajor;
-using LayoutB = cutlass::layout::ColumnMajor;
-using LayoutC = cutlass::layout::ColumnMajor;
+  using ElementA = cutlass::half_t;
+  using ElementB = cutlass::half_t;
+  using ElementC = cutlass::half_t;
+  using ElementD = cutlass::half_t;
+  using ElementAccumulator = float;
+  using ElementCompute = float;
 
-//=============================================================================
-// Helper to run CUTLASS kernel
-//=============================================================================
-template<typename Gemm>
-double run_cutlass(const half* d_A, const half* d_B, half* d_C,
-                   int M, int N, int K, int repeats, int warmup) {
-  using StrideA = cutlass::detail::TagToStrideB<LayoutA>::type;
-  using StrideB = cutlass::detail::TagToStrideB<LayoutB>::type;
-  using StrideC = cutlass::detail::TagToStrideB<LayoutC>::type;
+  static constexpr bool kUse2Sm = std::is_same_v<MainloopSchedule, cutlass::gemm::KernelTmaWarpSpecialized2SmSm100>;
   
-  typename Gemm::Arguments args;
-  args.mode = cutlass::gemm::GemmUniversalMode::kGemm;
-  args.problem_size = {M, N, K};
-  args.ptr_A = reinterpret_cast<const ElementA*>(d_A);
-  args.ptr_B = reinterpret_cast<const ElementB*>(d_B);
-  args.ptr_C = reinterpret_cast<ElementC*>(d_C);
-  args.ptr_D = reinterpret_cast<ElementC*>(d_C);
-  args.dA = StrideA(K);
-  args.dB = StrideB(K);
-  args.dC = StrideC(N);
-  args.dD = StrideC(N);
-  
-  Gemm gemm;
-  auto status = gemm.initialize(args);
-  if (status != cutlass::Status::kSuccess) {
-    std::fprintf(stderr, "CUTLASS initialization failed\n");
-    return -1.0;
+  // Tile shape
+  using TileShapeMNK = std::conditional_t<kUse2Sm,
+    cute::Shape<cute::_256, cute::Int<TileN>, cute::_32>,
+    cute::Shape<cute::_128, cute::Int<TileN>, cute::_32>>;
+  using ClusterShapeMNK = cute::Shape<cute::_2, cute::_1, cute::_1>;
+
+  static constexpr int AlignmentA = 128 / cutlass::sizeof_bits<ElementA>::value;
+  static constexpr int AlignmentB = 128 / cutlass::sizeof_bits<ElementB>::value;
+  static constexpr int AlignmentC = 128 / cutlass::sizeof_bits<ElementC>::value;
+  static constexpr int AlignmentD = 128 / cutlass::sizeof_bits<ElementD>::value;
+
+  using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
+      cutlass::arch::Sm100,
+      cutlass::arch::OpClassTensorOp,
+      TileShapeMNK,
+      ClusterShapeMNK,
+      cutlass::epilogue::collective::EpilogueTileAuto,
+      ElementAccumulator,
+      ElementCompute,
+      ElementC,
+      LayoutC,
+      AlignmentC,
+      ElementD,
+      LayoutD,
+      AlignmentD,
+      EpilogueSchedule>::CollectiveOp;
+
+  using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
+      cutlass::arch::Sm100,
+      cutlass::arch::OpClassTensorOp,
+      ElementA,
+      LayoutA,
+      AlignmentA,
+      ElementB,
+      LayoutB,
+      AlignmentB,
+      ElementAccumulator,
+      TileShapeMNK,
+      ClusterShapeMNK,
+      StageCountTag,
+      MainloopSchedule>::CollectiveOp;
+
+  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
+      cute::Shape<int, int, int, int>,
+      CollectiveMainloop,
+      CollectiveEpilogue>;
+  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
+
+  using StrideA = typename Gemm::GemmKernel::StrideA;
+  using StrideB = typename Gemm::GemmKernel::StrideB;
+  using StrideC = typename Gemm::GemmKernel::StrideC;
+  using StrideD = typename Gemm::GemmKernel::StrideD;
+
+  cutlass::DeviceAllocation<ElementA> A;
+  cutlass::DeviceAllocation<ElementB> B;
+  cutlass::DeviceAllocation<ElementC> C;
+  cutlass::DeviceAllocation<ElementD> D;
+
+  double run(int m, int n, int k, int repeats, int warmup) {
+    auto stride_a = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(m, k, 1));
+    auto stride_b = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(n, k, 1));
+    auto stride_c = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(m, n, 1));
+    auto stride_d = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(m, n, 1));
+
+    A.reset(m * k);
+    B.reset(k * n);
+    C.reset(m * n);
+    D.reset(m * n);
+
+    // Initialize
+    cutlass::reference::device::BlockFill<ElementA>(A.get(), A.size(), ElementA(1));
+    cutlass::reference::device::BlockFill<ElementB>(B.get(), B.size(), ElementB(1));
+    cutlass::reference::device::BlockFill<ElementC>(C.get(), C.size(), ElementC(0));
+
+    typename Gemm::Arguments args;
+    args.mode = cutlass::gemm::GemmUniversalMode::kGemm;
+    args.problem_shape = {m, n, k, 1};
+    args.ptr_A = A.get();
+    args.ptr_B = B.get();
+    args.ptr_C = C.get();
+    args.ptr_D = D.get();
+    args.dA = stride_a;
+    args.dB = stride_b;
+    args.dC = stride_c;
+    args.dD = stride_d;
+
+    Gemm gemm;
+    auto status = gemm.initialize(args);
+    if (status != cutlass::Status::kSuccess) {
+      std::fprintf(stderr, "CUTLASS initialization failed\n");
+      return -1.0;
+    }
+
+    // Warmup
+    for (int w = 0; w < warmup; ++w) {
+      gemm.run();
+    }
+    cudaDeviceSynchronize();
+
+    // Measure
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    float total_ms = 0.0f;
+    for (int r = 0; r < repeats; ++r) {
+      cudaEventRecord(start);
+      gemm.run();
+      cudaEventRecord(stop);
+      cudaEventSynchronize(stop);
+      float ms = 0.0f;
+      cudaEventElapsedTime(&ms, start, stop);
+      total_ms += ms;
+    }
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
+    return total_ms / repeats;
   }
-  
-  // Warmup
-  for (int w = 0; w < warmup; ++w) {
-    gemm.run();
-  }
-  cudaDeviceSynchronize();
-  
-  // Measure
-  cudaEvent_t start, stop;
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
-  
-  float total_ms = 0.0f;
-  for (int r = 0; r < repeats; ++r) {
-    cudaEventRecord(start);
-    gemm.run();
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
-    float ms = 0.0f;
-    cudaEventElapsedTime(&ms, start, stop);
-    total_ms += ms;
-  }
-  
-  cudaEventDestroy(start);
-  cudaEventDestroy(stop);
-  
-  return total_ms / repeats;
-}
+};
 
 //=============================================================================
 // D1: Custom cluster kernel with DSMEM copy (tile 128×64×32)
@@ -197,15 +270,6 @@ int main(int argc, char** argv) {
   std::fprintf(stdout, "CONFIG mode=%s m=%d n=%d k=%d repeats=%d warmup=%d gpu=\"%s\"\n",
                mode, M, N, K, repeats, warmup, gpu_name().c_str());
   
-  half *d_A, *d_B, *d_C;
-  cudaMalloc(&d_A, M * K * sizeof(half));
-  cudaMalloc(&d_B, K * N * sizeof(half));
-  cudaMalloc(&d_C, M * N * sizeof(half));
-  
-  cudaMemset(d_A, 1, M * K * sizeof(half));
-  cudaMemset(d_B, 1, K * N * sizeof(half));
-  cudaMemset(d_C, 0, M * N * sizeof(half));
-  
   double gflops = 2.0 * M * N * K / 1e9;
   
   cudaEvent_t start, stop;
@@ -214,26 +278,15 @@ int main(int argc, char** argv) {
   
 #if defined(CUTLASS_ARCH_MMA_SM100_SUPPORTED)
   
-  // Baseline: CUTLASS 1SM (tile 128×64)
+  // Baseline: CUTLASS 1SM (tile 128×N)
   if (std::strcmp(mode, "all") == 0 || std::strcmp(mode, "baseline") == 0) {
-    using Gemm1SM = cutlass::gemm::device::GemmUniversalAdapter<
-      cutlass::gemm::kernel::GemmUniversal<
-        cutlass::gemm::collective::CollectiveMma<
-          cutlass::gemm::KernelTmaWarpSpecialized1SmSm100,
-          cutlass::gemm::GemmShape<128, 64, 32>,
-          ElementA, LayoutA,
-          ElementB, LayoutB,
-          ElementAccumulator, LayoutC
-        >,
-        cutlass::epilogue::collective::CollectiveEpilogue<
-          cutlass::epilogue::TmaWarpSpecialized1Sm,
-          cutlass::gemm::GemmShape<128, 64, 32>,
-          ElementAccumulator, ElementC, LayoutC, ElementC, LayoutC
-        >
-      >
-    >;
+    using Runner = CutlassRunner<64, 
+        cutlass::gemm::KernelTmaWarpSpecialized1SmSm100,
+        cutlass::epilogue::TmaWarpSpecialized1Sm,
+        cute::_2>;
     
-    double ms = run_cutlass<Gemm1SM>(d_A, d_B, d_C, M, N, K, repeats, warmup);
+    Runner runner;
+    double ms = runner.run(M, N, K, repeats, warmup);
     if (ms > 0) {
       std::fprintf(stdout, "RESULT mode=baseline elapsed_ms=%.6f gflops=%.2f\n", ms, gflops / ms);
     }
@@ -256,6 +309,12 @@ int main(int argc, char** argv) {
     config.attrs = attrs;
     config.numAttrs = 1;
     
+    // Allocate dummy memory
+    half *d_A, *d_B, *d_C;
+    cudaMalloc(&d_A, M * K * sizeof(half));
+    cudaMalloc(&d_B, K * N * sizeof(half));
+    cudaMalloc(&d_C, M * N * sizeof(half));
+    
     for (int w = 0; w < warmup; ++w) {
       cudaLaunchKernelEx(&config, d1_cluster_gemm_kernel, d_A, d_B, d_C, M, N, K);
     }
@@ -273,28 +332,21 @@ int main(int argc, char** argv) {
     }
     double avg_ms = total_ms / repeats;
     std::fprintf(stdout, "RESULT mode=d1 elapsed_ms=%.6f gflops=%.2f\n", avg_ms, gflops / avg_ms);
+    
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
   }
   
-  // D2: CUTLASS 2SM (tile 256×64, real mma.2sm)
+  // D2: CUTLASS 2SM (tile 256×N, real mma.2sm)
   if (std::strcmp(mode, "all") == 0 || std::strcmp(mode, "d2") == 0) {
-    using Gemm2SM = cutlass::gemm::device::GemmUniversalAdapter<
-      cutlass::gemm::kernel::GemmUniversal<
-        cutlass::gemm::collective::CollectiveMma<
-          cutlass::gemm::KernelTmaWarpSpecialized2SmSm100,
-          cutlass::gemm::GemmShape<256, 64, 32>,
-          ElementA, LayoutA,
-          ElementB, LayoutB,
-          ElementAccumulator, LayoutC
-        >,
-        cutlass::epilogue::collective::CollectiveEpilogue<
-          cutlass::epilogue::TmaWarpSpecialized2Sm,
-          cutlass::gemm::GemmShape<256, 64, 32>,
-          ElementAccumulator, ElementC, LayoutC, ElementC, LayoutC
-        >
-      >
-    >;
+    using Runner = CutlassRunner<64,
+        cutlass::gemm::KernelTmaWarpSpecialized2SmSm100,
+        cutlass::epilogue::TmaWarpSpecialized2Sm,
+        cute::_2>;
     
-    double ms = run_cutlass<Gemm2SM>(d_A, d_B, d_C, M, N, K, repeats, warmup);
+    Runner runner;
+    double ms = runner.run(M, N, K, repeats, warmup);
     if (ms > 0) {
       std::fprintf(stdout, "RESULT mode=d2 elapsed_ms=%.6f gflops=%.2f\n", ms, gflops / ms);
     }
@@ -306,9 +358,6 @@ int main(int argc, char** argv) {
   
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
-  cudaFree(d_A);
-  cudaFree(d_B);
-  cudaFree(d_C);
   
   return 0;
 }
