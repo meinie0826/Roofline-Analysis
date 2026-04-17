@@ -176,13 +176,13 @@ void d1_kernel(const half* __restrict__ A,
 //=============================================================================
 __device__ __forceinline__
 half ld_shared_cluster(const half* ptr) {
-  half val;
+  uint16_t val;
   // ld.shared::cluster.b16 - cluster-wide shared memory read
   asm volatile ("ld.shared::cluster.b16 %0, [%1];" 
                 : "=h"(val) 
                 : "l"(reinterpret_cast<uintptr_t>(ptr))
                 : "memory");
-  return val;
+  return reinterpret_cast<half&>(val);
 }
 
 __global__ __cluster_dims__(2, 1, 1) __launch_bounds__(128)
