@@ -7,11 +7,14 @@ numpy>=1.24.0
 # Plotting
 matplotlib>=3.7.0
 
-# Optional: CuTe DSL (for B300 kernel development)
+# Optional: DeepGEMM (for FP8 benchmarks)
+# Requires SM90/SM100 GPU (Hopper/Blackwell)
+# Install manually:
+#   git clone --recursive https://github.com/deepseek-ai/DeepGEMM.git
+#   cd DeepGEMM && ./develop.sh
+
+# Optional: CuTe DSL (for custom kernels)
 # nvidia-cutlass-dsl>=0.4.0
 
 # Optional: Triton (alternative kernel implementation)
 # triton>=2.1.0
-
-# Profiling (optional)
-# nvidia-nsight-compute

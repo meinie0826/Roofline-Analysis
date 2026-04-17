@@ -1,10 +1,10 @@
 # GEMM Roofline Analysis
 
-This experiment analyzes the performance characteristics of GEMM (General Matrix Multiply) operations across different matrix shapes, visualizing the transition from memory-bound to compute-bound regions using the Roofline model.
+This experiment analyzes GEMM performance across different matrix shapes and implementations, visualizing the transition from memory-bound to compute-bound regions using the Roofline model.
 
 ## Background
 
-The Roofline model is a performance model that provides a visual representation of performance limitations:
+The Roofline model provides a visual representation of performance limitations:
 
 - **Memory-Bound Region**: When arithmetic intensity is low, performance is limited by memory bandwidth
 - **Compute-Bound Region**: When arithmetic intensity is high, performance is limited by peak compute throughput
@@ -15,117 +15,132 @@ For GEMM `C = A @ B` where A is M×K and B is K×N:
 - **Bytes accessed** = M×K + K×N + M×N (reading A, B and writing C)
 - **Arithmetic Intensity** = (2 × M × N × K) / (M×K + K×N + M×N) FLOPs/Byte
 
+## Implementations Tested
+
+| Backend | Precision | Peak TFLOPS | Notes |
+|---------|-----------|-------------|-------|
+| **cuBLAS** (torch.matmul) | BF16 | 1250 | PyTorch default, highly optimized |
+| **DeepGEMM** | FP8 | 5000 | DeepSeek's optimized kernel, SM90+ |
+
 ## Key Observations
 
-1. **Small matrices** (especially small K): Low arithmetic intensity → Memory-bound
+1. **Small matrices**: Low arithmetic intensity → Memory-bound
 2. **Large matrices**: High arithmetic intensity → Compute-bound
-3. **Square matrices** (M=N=K): Arithmetic intensity ≈ 2K/3
+3. **FP8 vs BF16**: FP8 has 4x higher peak TFLOPS but same memory bandwidth
 
-### Transition Analysis
+### Arithmetic Intensity by Shape
 
-As matrix size increases:
-- Small shapes (e.g., 64×64×32): AI ≈ 7.5 → Memory-bound
-- Medium shapes (e.g., 512×512×512): AI ≈ 170 → Near ridge point
-- Large shapes (e.g., 4096×4096×4096): AI ≈ 1365 → Compute-bound
+| Shape (M=N=K) | AI (FP8) | AI (BF16) | Region |
+|---------------|----------|-----------|--------|
+| 64 | 21 | 42 | Memory-bound |
+| 512 | 170 | 341 | Near ridge |
+| 4096 | 1365 | 2731 | Compute-bound |
 
 ## Files
 
-- `benchmark_roofline.py` - Benchmark script for testing various GEMM shapes
-- `plot_roofline.py` - Roofline plotting script
-- `gemm_kernel.py` - CuTeDSL GEMM kernel (optional, can also use PyTorch matmul)
-- `run_benchmark.sh` - Runner script for the complete analysis
+```
+gemm_roofline/
+├── README.md                  # This file
+├── benchmark_deepgemm.py      # Main benchmark script
+├── test_deepgemm.py           # DeepGEMM installation test
+├── analyze_roofline.py        # Plotting and analysis script
+├── run_deepgemm.sh            # Runner script
+├── requirements.txt           # Dependencies
+└── results/                   # Output directory
+```
 
 ## Usage
+
+### Quick Start
+
+```bash
+# Run full analysis
+./run_deepgemm.sh
+```
+
+### Manual Steps
+
+```bash
+# 1. Test DeepGEMM installation
+python3 test_deepgemm.py
+
+# 2. Run benchmark
+python3 benchmark_deepgemm.py --shape-type balanced --output-dir results
+
+# 3. Analyze and plot
+python3 analyze_roofline.py results/deepgemm_roofline_*.json
+```
 
 ### On B300 Server
 
 ```bash
 # Set GPU specs for B300
-export PEAK_TFLOPS=2500  # FP16 Tensor Core peak
-export PEAK_BANDWIDTH=8000  # HBM3e bandwidth
+export PEAK_FP8_TFLOPS=5000
+export PEAK_BF16_TFLOPS=1250
+export PEAK_BANDWIDTH_GBPS=8000
 
-# Run with default balanced shapes
-./run_benchmark.sh
-
-# Or run comprehensive sweep
-SHAPE_TYPE=comprehensive ./run_benchmark.sh
-
-# Or focus on memory-heavy shapes
-SHAPE_TYPE=memory_heavy ./run_benchmark.sh
-```
-
-### Direct Python Usage
-
-```bash
-# Run benchmark
-python3 benchmark_roofline.py \
+# Run comprehensive sweep
+python3 benchmark_deepgemm.py \
     --shape-type balanced \
     --warmup 5 \
     --iterations 20 \
-    --output-dir results \
-    --peak-tflops 2500 \
-    --peak-bandwidth 8000
+    --output-dir results
 
 # Generate plots
-python3 plot_roofline.py results/roofline_results_*.json \
-    --peak-tflops 2500 \
-    --peak-bandwidth 8000
+python3 analyze_roofline.py results/deepgemm_roofline_*.json
 ```
 
 ## Shape Types
 
 | Type | Description | Use Case |
 |------|-------------|----------|
-| `balanced` | Square matrices (M=N=K), doubling from 64 to 8192 | Basic roofline curve |
-| `memory_heavy` | Small K values, varying M×N | Memory-bound region |
-| `compute_heavy` | Large K values, small M×N | Compute-bound region |
-| `layer_like` | Transformer layer shapes | Real-world applications |
-| `comprehensive` | Full sweep across all dimensions | Complete analysis |
+| `balanced` | Square matrices (M=N=K) | Basic roofline curve |
+| `memory_heavy` | Small K values | Memory-bound region detail |
+| `compute_heavy` | Large K values | Compute-bound region detail |
+| `inference_like` | Transformer layer shapes | Real-world performance |
+
+## Installing DeepGEMM
+
+DeepGEMM requires SM90 (Hopper) or SM100 (Blackwell) GPU:
+
+```bash
+# Clone with submodules
+git clone --recursive https://github.com/deepseek-ai/DeepGEMM.git
+cd DeepGEMM
+
+# Development install
+./develop.sh
+
+# Or regular install
+./install.sh
+```
+
+### Requirements
+
+- NVIDIA SM90 or SM100 GPU (H100/H800/B100/B200/B300)
+- Python 3.8+
+- CUDA 12.3+ (12.9+ recommended for best performance)
+- PyTorch 2.1+
+- CUTLASS 4.0+ (included as submodule)
 
 ## Expected Results
 
 ### B300 GPU (Blackwell)
 
-- **Peak FP16 TC**: 2500 TFLOPS (sparse) / 1250 TFLOPS (dense)
-- **Peak Bandwidth**: ~8000 GB/s (HBM3e)
-- **Ridge Point**: AI ≈ 312 FLOPs/Byte (dense) or 156 FLOPs/Byte (sparse)
+- **Peak FP8**: 5000 TFLOPS
+- **Peak BF16**: 1250 TFLOPS  
+- **Peak BW**: 8000 GB/s
+- **Ridge Point FP8**: AI = 625
+- **Ridge Point BF16**: AI = 156
 
-### Performance Characteristics
+### Performance Comparison
 
-For PyTorch `torch.matmul` (uses cuBLAS Tensor Cores):
+For large shapes (M=N=K=4096):
 
-| Shape (M×N×K) | AI | Expected GFLOPS | Region |
-|--------------|-----|-----------------|--------|
-| 64×64×32 | 7.5 | ~60,000 | Memory-bound |
-| 256×256×256 | 85 | ~340,000 | Near ridge |
-| 1024×1024×1024 | 341 | ~800,000 | Compute-bound |
-| 4096×4096×4096 | 1365 | ~1,200,000 | Compute-bound |
-
-## Customization
-
-### Adding Custom Shapes
-
-Modify `generate_shapes()` in `benchmark_roofline.py`:
-
-```python
-# Add your custom shape progression
-shapes.append((your_M, your_N, your_K))
-```
-
-### Different Data Types
-
-Change `dtype` parameter:
-
-```python
-# FP16 (default) - uses Tensor Cores
-dtype=torch.float16
-
-# FP32 - uses CUDA cores
-dtype=torch.float32
-
-# BF16 - uses Tensor Cores (if supported)
-dtype=torch.bfloat16
-```
+| Backend | Precision | Expected TFLOPS | Efficiency |
+|---------|-----------|-----------------|------------|
+| cuBLAS | BF16 | ~1000 | ~80% |
+| DeepGEMM | FP8 | ~3500-4000 | ~70-80% |
 
 ## Dependencies
 
@@ -133,23 +148,50 @@ dtype=torch.bfloat16
 pip install torch matplotlib numpy
 ```
 
-For CuTe DSL kernel (optional):
+For DeepGEMM:
 ```bash
-pip install nvidia-cutlass-dsl
+# See DeepGEMM repository for detailed installation
 ```
 
 ## Output
 
 The benchmark produces:
-1. JSON results file with all metrics
-2. PNG roofline plot
-3. PNG transition analysis plot
-4. Console summary statistics
 
-Results are saved in `results/roofline_results_YYYYMMDD_HHMMSS.json`
+1. **JSON results file**: Contains all metrics for each shape/backend
+2. **Roofline plot**: Shows performance vs arithmetic intensity
+3. **Comparison plot**: Bar chart comparing backends for same shapes
+
+Results are saved in `results/deepgemm_roofline_YYYYMMDD_HHMMSS.json`
+
+## Troubleshooting
+
+### DeepGEMM not found
+
+```
+Error: No module named 'deep_gemm'
+```
+
+Solution: Install DeepGEMM following the instructions above.
+
+### CUDA out of memory
+
+```
+RuntimeError: CUDA out of memory
+```
+
+Solution: Reduce matrix sizes or use `--shape-type memory_heavy` for smaller K values.
+
+### Compute capability mismatch
+
+```
+RuntimeError: DeepGEMM requires SM90 or SM100
+```
+
+Solution: DeepGEMM only works on Hopper/Blackwell GPUs. For other GPUs, use the cuBLAS BF16 benchmark.
 
 ## References
 
 - [Roofline Model Paper](https://dl.acm.org/doi/10.1145/1498765.1498785) - Williams et al., CACM 2009
-- [NVIDIA Nsight Compute](https://developer.nvidia.com/nsight-compute) - Profiling tool
-- [CUTLASS](https://github.com/NVIDIA/cutlass) - High-performance GEMM kernels
+- [DeepGEMM Repository](https://github.com/deepseek-ai/DeepGEMM)
+- [CUTLASS](https://github.com/NVIDIA/cutlass)
+- [PyTorch Roofline Blog](https://pytorch.org/blog/cutlass-ping-pong-gemm-kernel/)
