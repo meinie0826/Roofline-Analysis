@@ -416,7 +416,7 @@ int main(int argc, char** argv) {
   
   std::fprintf(stdout, "CONFIG benchmark=bench_smem_interconnect mode=%s buffer_bytes=%d iters=%d repeats=%d vec_bytes=%d gpu=\"%s\"\n",
                mode_str, options.buffer_bytes, options.iters, options.repeats, options.vec_bytes,
-               query_gpu_name().c_str());
+               gpu_name().c_str());
   
   if (options.vec_bytes == 4) {
     run_benchmark<4>(d_result, d_global_buffer, options, mode, sm_clock_ghz);
