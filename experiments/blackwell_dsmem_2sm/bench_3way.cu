@@ -187,9 +187,11 @@ void d2_kernel(const half* __restrict__ A,
   const int n0 = blockIdx.y * kTileN;
   if (m0 >= M || n0 >= N) return;
 
-  // Flat pointer into CTA0's B buffer - safer for cross-CTA access
+  // Get pointer to CTA0's shared memory, then compute B buffer offset
+  // A buffer size = kStages * kCTATileM * kTileK halves
+  constexpr int kASize = kStages * kCTATileM * kTileK;
   const half* B0 = reinterpret_cast<const half*>(
-      cluster.map_shared_rank(&sm, 0)) + offsetof(SmemTile, B);
+      cluster.map_shared_rank(&sm, 0)) + kASize;
 
   const int tid = threadIdx.x;
   const int rbase = (tid / 16) * 4;
