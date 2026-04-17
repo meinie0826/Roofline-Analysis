@@ -1,0 +1,11 @@
+CONFIG benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 loop_iters=4096 warmup_iters=64 warmup_launches=3 repeats=10 unroll=1
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=0 loop_iters=4096 unroll=1 total_mma=16384 cycles=1171674 cycles_per_mma=71.51330566 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=1 loop_iters=4096 unroll=1 total_mma=16384 cycles=1171554 cycles_per_mma=71.50598145 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=2 loop_iters=4096 unroll=1 total_mma=16384 cycles=1171554 cycles_per_mma=71.50598145 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=3 loop_iters=4096 unroll=1 total_mma=16384 cycles=1171554 cycles_per_mma=71.50598145 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=4 loop_iters=4096 unroll=1 total_mma=16384 cycles=1171554 cycles_per_mma=71.50598145 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=5 loop_iters=4096 unroll=1 total_mma=16384 cycles=1171554 cycles_per_mma=71.50598145 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=6 loop_iters=4096 unroll=1 total_mma=16384 cycles=1171554 cycles_per_mma=71.50598145 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=7 loop_iters=4096 unroll=1 total_mma=16384 cycles=1171613 cycles_per_mma=71.50958252 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=8 loop_iters=4096 unroll=1 total_mma=16384 cycles=1171615 cycles_per_mma=71.50970459 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=9 loop_iters=4096 unroll=1 total_mma=16384 cycles=1171554 cycles_per_mma=71.50598145 sink_lo=0 sink_hi=0
