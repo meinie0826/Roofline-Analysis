@@ -170,9 +170,21 @@ void d1_kernel(const half* __restrict__ A,
 }
 
 //=============================================================================
-// D2: Simplified version - same as D1 for now, to avoid segfault
-// TODO: Investigate proper remote DSMEM read syntax for Blackwell
+// D2: Cluster, CTA1 reads B directly from CTA0's DSMEM during compute (no copy)
+// This simulates mma.2sm hardware behavior: operand B fetched from peer smem
+// Uses inline PTX for proper cluster-wide shared memory access
 //=============================================================================
+__device__ __forceinline__
+half ld_shared_cluster(const half* ptr) {
+  half val;
+  // ld.shared::cluster.b16 - cluster-wide shared memory read
+  asm volatile ("ld.shared::cluster.b16 %0, [%1];" 
+                : "=h"(val) 
+                : "l"(reinterpret_cast<uintptr_t>(ptr))
+                : "memory");
+  return val;
+}
+
 __global__ __cluster_dims__(2, 1, 1) __launch_bounds__(128)
 void d2_kernel(const half* __restrict__ A,
                const half* __restrict__ B,
@@ -187,9 +199,14 @@ void d2_kernel(const half* __restrict__ A,
   const int n0 = blockIdx.y * kTileN;
   if (m0 >= M || n0 >= N) return;
 
-  // Pointer into CTA0's B buffer (flat byte pointer for easier indexing)
-  const half* remB = reinterpret_cast<SmemTile*>(
-      cluster.map_shared_rank(&sm, 0))->B[0][0];
+  // Get pointer to CTA0's B buffer using mapa PTX instruction
+  // This is the correct way to get remote shared memory address
+  uintptr_t sm0_addr;
+  asm volatile("mapa.u64 %0, %1, %2;" 
+               : "=l"(sm0_addr) 
+               : "l"(reinterpret_cast<uintptr_t>(&sm)), "r"(0));
+  
+  const half* B0 = reinterpret_cast<const half*>(sm0_addr + offsetof(SmemTile, B));
 
   const int tid = threadIdx.x;
   const int rbase = (tid / 16) * 4;
@@ -208,7 +225,7 @@ void d2_kernel(const half* __restrict__ A,
                           : __float2half(0.f);
     }
 
-    // Only CTA0 loads B from HBM
+    // Only CTA0 loads B from HBM (no copy step for CTA1)
     if (rank == 0) {
       for (int i = tid; i < kTileN * kTileK; i += 128) {
         int n = i / kTileK, k = i % kTileK;
@@ -218,21 +235,20 @@ void d2_kernel(const half* __restrict__ A,
       }
     }
 
-    cluster.sync(); // wait for CTA0's B to be ready
+    cluster.sync(); // wait for CTA0's B
 
-    // Both CTAs copy B from CTA0's DSMEM into local smem (same as D1)
-    for (int i = tid; i < kTileN * kTileK; i += 128) {
-      sm.B[stage][i / kTileK][i % kTileK] = remB[stage * kTileN * kTileK + i];
-    }
-
-    cluster.sync(); // wait for copy to finish
-
-    // Compute from LOCAL smem
+    // Compute: BOTH CTAs read B from CTA0's smem via ld.shared::cluster
+    // CTA0 reads local (mapa returns local address)
+    // CTA1 reads remote DSMEM
     for (int k = 0; k < kt; ++k) {
-      for (int r = 0; r < 4; ++r)
-        for (int c = 0; c < 4; ++c)
+      for (int r = 0; r < 4; ++r) {
+        for (int c = 0; c < 4; ++c) {
+          int b_idx = stage * kTileN * kTileK + (cbase + c) * kTileK + k;
+          half b_val = ld_shared_cluster(B0 + b_idx);
           acc[r*4+c] += __half2float(sm.A[stage][rbase+r][k])
-                      * __half2float(sm.B[stage][cbase+c][k]);
+                      * __half2float(b_val);
+        }
+      }
     }
   }
 
