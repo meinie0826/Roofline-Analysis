@@ -989,6 +989,18 @@ class FusedMask:
 
 
 fmha_utils = None
+def _arch_setmaxregister_decrease(register_count: int) -> None:
+    fn = getattr(cute.arch, "setmaxregister_decrease", None)
+    if fn is not None:
+        fn(register_count)
+
+
+def _arch_setmaxregister_increase(register_count: int) -> None:
+    fn = getattr(cute.arch, "setmaxregister_increase", None)
+    if fn is not None:
+        fn(register_count)
+
+
 def make_thread_cooperative_group(size: int):
     return pipeline.CooperativeGroup(pipeline.Agent.Thread, size)
 
@@ -1687,13 +1699,13 @@ class BlackwellFusedMultiHeadAttentionForward:
         #  EMPTY
         # ///////////////////////////////////////////////////////////////////////////////
         if warp_idx == self.empty_warp_id:
-            cute.arch.setmaxregister_decrease(self.num_regs_other)
+            _arch_setmaxregister_decrease(self.num_regs_other)
 
         # ///////////////////////////////////////////////////////////////////////////////
         #  LOAD
         # ///////////////////////////////////////////////////////////////////////////////
         if warp_idx == self.load_warp_id:
-            cute.arch.setmaxregister_decrease(self.num_regs_other)
+            _arch_setmaxregister_decrease(self.num_regs_other)
 
             tile_sched = create_fmha_static_tile_scheduler(
                 tile_sched_params, cute.arch.block_idx(), cute.arch.grid_dim()
@@ -1882,7 +1894,7 @@ class BlackwellFusedMultiHeadAttentionForward:
         #  MMA
         # ///////////////////////////////////////////////////////////////////////////////
         if warp_idx == self.mma_warp_id:
-            cute.arch.setmaxregister_decrease(self.num_regs_other)
+            _arch_setmaxregister_decrease(self.num_regs_other)
 
             # Alloc tmem buffer
             tmem_alloc_cols = Int32(self.tmem_alloc_cols)
@@ -2156,7 +2168,7 @@ class BlackwellFusedMultiHeadAttentionForward:
         #  Epilogue
         # ///////////////////////////////////////////////////////////////////////////////
         if warp_idx == self.epilogue_warp_id:
-            cute.arch.setmaxregister_decrease(self.num_regs_other)
+            _arch_setmaxregister_decrease(self.num_regs_other)
             tile_sched = create_fmha_static_tile_scheduler(
                 tile_sched_params, cute.arch.block_idx(), cute.arch.grid_dim()
             )
@@ -2239,7 +2251,7 @@ class BlackwellFusedMultiHeadAttentionForward:
         # ///////////////////////////////////////////////////////////////////////////////
         if warp_idx < self.softmax1_warp_ids[0]:
             # increase register after decreasing
-            cute.arch.setmaxregister_increase(self.num_regs_softmax)
+            _arch_setmaxregister_increase(self.num_regs_softmax)
 
             self.softmax(
                 stage=0,
@@ -2269,7 +2281,7 @@ class BlackwellFusedMultiHeadAttentionForward:
             and warp_idx >= self.softmax1_warp_ids[0]
         ):
             # increase register after decreasing
-            cute.arch.setmaxregister_increase(self.num_regs_softmax)
+            _arch_setmaxregister_increase(self.num_regs_softmax)
 
             self.softmax(
                 stage=1,
@@ -2295,7 +2307,7 @@ class BlackwellFusedMultiHeadAttentionForward:
         #  Correction
         # ///////////////////////////////////////////////////////////////////////////////
         if warp_idx >= self.correction_warp_ids[0] and warp_idx < self.mma_warp_id:
-            cute.arch.setmaxregister_decrease(self.num_regs_correction)
+            _arch_setmaxregister_decrease(self.num_regs_correction)
 
             cS = cute.make_identity_tensor((self.qk_mma_tiler[0], self.qk_mma_tiler[1]))
             tScS = qk_thr_mma.partition_C(cS)
