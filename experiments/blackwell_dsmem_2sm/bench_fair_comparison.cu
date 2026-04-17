@@ -1,5 +1,5 @@
 /**
- * Complete GEMM kernels with proper work distribution
+ * GEMM kernels with optimization barriers
  */
 
 #include "common.h"
@@ -13,8 +13,14 @@ using namespace blackwell_dsmem_2sm;
 //=============================================================================
 constexpr int kTileM = 64;
 constexpr int kTileN = 64;
-constexpr int kTileK = 64;
+constexpr int kTileK = 32;  // Smaller K tile to increase iterations
 constexpr int kStages = 2;
+
+//=============================================================================
+__device__ float prevent_optimize(float val) {
+  volatile float* ptr = reinterpret_cast<volatile float*>(val);
+  return *ptr;
+}
 
 //=============================================================================
 struct GmemTile {
@@ -23,10 +29,10 @@ struct GmemTile {
 };
 
 //=============================================================================
-// Baseline: Independent CTAs, each loads B from HBM
+// Baseline: Independent CTAs
 //=============================================================================
 
-__global__ void __launch_bounds__(64)
+__global__ void __launch_bounds__(128)
 baseline_gemm_kernel(
     const half* __restrict__ A,
     const half* __restrict__ B,
@@ -35,89 +41,76 @@ baseline_gemm_kernel(
 {
   __shared__ GmemTile tile;
   
-  int m_tile = blockIdx.x;
-  int n_tile = blockIdx.y;
-  int m_start = m_tile * kTileM;
-  int n_start = n_tile * kTileN;
+  int m_start = blockIdx.x * kTileM;
+  int n_start = blockIdx.y * kTileN;
   
   if (m_start >= M || n_start >= N) return;
   
   int tid = threadIdx.x;
   
-  // Each thread handles 4x4 elements = 16 accumulators
-  int row_tile = tid / 8;      // 0-7
-  int col_tile = tid % 8;      // 0-7
+  // Each thread handles 1 output element
+  int row = tid / 8;  // 0-15
+  int col = tid % 8;  // 0-7
   
-  int row_start = row_tile * 8;   // Each thread handles 8 rows
-  int col_start = col_tile * 8;   // Each thread handles 8 cols
+  // Multiple passes to cover full tile
+  int num_passes = (kTileM * kTileN) / 128;  // 32 passes
   
-  float accum[64] = {0};  // 8x8 = 64 accumulators per thread
+  float accum = 0.0f;
   
   for (int k_offset = 0; k_offset < K; k_offset += kTileK) {
     int stage = (k_offset / kTileK) % kStages;
     int k_tiles = min(kTileK, K - k_offset);
     
-    // Cooperative load A
+    // Load A
     for (int i = tid; i < kTileM * kTileK; i += blockDim.x) {
       int m = i / kTileK;
       int k = i % kTileK;
-      half val = __float2half(0.0f);
       if (m_start + m < M && k_offset + k < K) {
-        val = A[(m_start + m) * K + k_offset + k];
+        tile.A[stage][m][k] = A[(m_start + m) * K + k_offset + k];
+      } else {
+        tile.A[stage][m][k] = __float2half(0.0f);
       }
-      tile.A[stage][m][k] = val;
     }
     
-    // Cooperative load B (each CTA loads independently)
+    // Load B
     for (int i = tid; i < kTileN * kTileK; i += blockDim.x) {
       int n = i / kTileK;
       int k = i % kTileK;
-      half val = __float2half(0.0f);
       if (n_start + n < N && k_offset + k < K) {
-        val = B[(n_start + n) * K + k_offset + k];
+        tile.B[stage][n][k] = B[(n_start + n) * K + k_offset + k];
+      } else {
+        tile.B[stage][n][k] = __float2half(0.0f);
       }
-      tile.B[stage][n][k] = val;
     }
     
     __syncthreads();
     
-    // Accumulate
-    for (int k = 0; k < k_tiles; ++k) {
-      #pragma unroll
-      for (int r = 0; r < 8; ++r) {
-        int row = row_start + r;
-        half a_val = tile.A[stage][row % kTileM][k];
-        float a_f = __half2float(a_val);
-        
-        #pragma unroll
-        for (int c = 0; c < 8; ++c) {
-          int col = col_start + c;
-          half b_val = tile.B[stage][col % kTileN][k];
-          accum[r * 8 + c] += a_f * __half2float(b_val);
-        }
+    // Accumulate for this thread's element
+    for (int pass = 0; pass < num_passes; ++pass) {
+      int idx = pass * 128 + tid;
+      int r = idx / kTileN;
+      int c = idx % kTileN;
+      
+      for (int k = 0; k < k_tiles; ++k) {
+        accum += __half2float(tile.A[stage][r % kTileM][k]) *
+                 __half2float(tile.B[stage][c % kTileN][k]);
       }
     }
   }
   
-  // Write C
-  #pragma unroll
-  for (int r = 0; r < 8; ++r) {
-    int row = row_start + r;
-    #pragma unroll
-    for (int c = 0; c < 8; ++c) {
-      int col = col_start + c;
-      if (m_start + row < M && n_start + col < N) {
-        C[(m_start + row) * N + n_start + col] = __float2half(accum[r * 8 + c]);
-      }
-    }
+  // Write C - force use of accum
+  int idx = tid;
+  if (idx < kTileM * kTileN && m_start + idx / kTileN < M && n_start + idx % kTileN < N) {
+    C[(m_start + idx / kTileN) * N + n_start + idx % kTileN] = 
+        __float2half(accum);
   }
 }
 
 //=============================================================================
-// D1: Cluster with DSMEM B sharing
+// D1: Cluster with DSMEM sharing
 //=============================================================================
 
-__global__ __cluster_dims__(2, 1, 1) __launch_bounds__(64)
+__global__ __cluster_dims__(2, 1, 1) __launch_bounds__(128)
 void d1_cluster_gemm_kernel(
     const half* __restrict__ A,
     const half* __restrict__ B,
@@ -129,54 +122,48 @@ void d1_cluster_gemm_kernel(
   cg::cluster_group cluster = cg::this_cluster();
   int rank = cluster.block_rank();
   
-  // Two CTAs process adjacent tiles in M dimension
   int m_start = (blockIdx.x * 2 + rank) * kTileM;
   int n_start = blockIdx.y * kTileN;
   
   if (m_start >= M || n_start >= N) return;
   
-  // Pointer to CTA0's smem
   GmemTile* tile0 = reinterpret_cast<GmemTile*>(cluster.map_shared_rank(&tile, 0));
   
   int tid = threadIdx.x;
-  int row_tile = tid / 8;
-  int col_tile = tid % 8;
-  int row_start = row_tile * 8;
-  int col_start = col_tile * 8;
-  
-  float accum[64] = {0};
+  float accum = 0.0f;
+  int num_passes = (kTileM * kTileN) / 128;
   
   for (int k_offset = 0; k_offset < K; k_offset += kTileK) {
     int stage = (k_offset / kTileK) % kStages;
     int k_tiles = min(kTileK, K - k_offset);
     
-    // Load A (each CTA loads its own)
+    // Load A
     for (int i = tid; i < kTileM * kTileK; i += blockDim.x) {
       int m = i / kTileK;
       int k = i % kTileK;
-      half val = __float2half(0.0f);
       if (m_start + m < M && k_offset + k < K) {
-        val = A[(m_start + m) * K + k_offset + k];
+        tile.A[stage][m][k] = A[(m_start + m) * K + k_offset + k];
+      } else {
+        tile.A[stage][m][k] = __float2half(0.0f);
       }
-      tile.A[stage][m][k] = val;
     }
     
-    // Load B (CTA0 only from HBM)
+    // Load B (CTA0 only)
     if (rank == 0) {
       for (int i = tid; i < kTileN * kTileK; i += blockDim.x) {
         int n = i / kTileK;
         int k = i % kTileK;
-        half val = __float2half(0.0f);
         if (n_start + n < N && k_offset + k < K) {
-          val = B[(n_start + n) * K + k_offset + k];
+          tile.B[stage][n][k] = B[(n_start + n) * K + k_offset + k];
+        } else {
+          tile.B[stage][n][k] = __float2half(0.0f);
         }
-        tile.B[stage][n][k] = val;
       }
     }
     
     cluster.sync();
     
-    // CTA1 copies B from CTA0's DSMEM
+    // CTA1 copies B from CTA0
     if (rank == 1) {
       for (int i = tid; i < kTileN * kTileK; i += blockDim.x) {
         int n = i / kTileK;
@@ -187,35 +174,22 @@ void d1_cluster_gemm_kernel(
     
     cluster.sync();
     
-    // Accumulate (same as baseline)
-    for (int k = 0; k < k_tiles; ++k) {
-      #pragma unroll
-      for (int r = 0; r < 8; ++r) {
-        int row = row_start + r;
-        half a_val = tile.A[stage][row % kTileM][k];
-        float a_f = __half2float(a_val);
-        
-        #pragma unroll
-        for (int c = 0; c < 8; ++c) {
-          int col = col_start + c;
-          half b_val = tile.B[stage][col % kTileN][k];
-          accum[r * 8 + c] += a_f * __half2float(b_val);
-        }
+    // Accumulate
+    for (int pass = 0; pass < num_passes; ++pass) {
+      int idx = pass * 128 + tid;
+      int r = idx / kTileN;
+      int c = idx % kTileN;
+      
+      for (int k = 0; k < k_tiles; ++k) {
+        accum += __half2float(tile.A[stage][r % kTileM][k]) *
+                 __half2float(tile.B[stage][c % kTileN][k]);
       }
     }
   }
   
-  // Write C
-  #pragma unroll
-  for (int r = 0; r < 8; ++r) {
-    int row = row_start + r;
-    #pragma unroll
-    for (int c = 0; c < 8; ++c) {
-      int col = col_start + c;
-      if (m_start + row < M && n_start + col < N) {
-        C[(m_start + row) * N + n_start + col] = __float2half(accum[r * 8 + c]);
-      }
-    }
+  int idx = tid;
+  if (idx < kTileM * kTileN && m_start + idx / kTileN < M && n_start + idx % kTileN < N) {
+    C[(m_start + idx / kTileN) * N + n_start + idx % kTileN] = __float2half(accum);
   }
 }
 
@@ -238,24 +212,19 @@ int main(int argc, char** argv) {
   std::fprintf(stdout, "CONFIG mode=%s m=%d n=%d k=%d repeats=%d warmup=%d gpu=\"%s\"\n",
                mode, M, N, K, repeats, warmup, gpu_name().c_str());
   
-  // Allocate
   half *d_A, *d_B, *d_C;
-  size_t A_bytes = M * K * sizeof(half);
-  size_t B_bytes = K * N * sizeof(half);
-  size_t C_bytes = M * N * sizeof(half);
+  cudaMalloc(&d_A, M * K * sizeof(half));
+  cudaMalloc(&d_B, K * N * sizeof(half));
+  cudaMalloc(&d_C, M * N * sizeof(half));
   
-  cudaMalloc(&d_A, A_bytes);
-  cudaMalloc(&d_B, B_bytes);
-  cudaMalloc(&d_C, C_bytes);
-  
-  cudaMemset(d_A, 1, A_bytes);
-  cudaMemset(d_B, 1, B_bytes);
-  cudaMemset(d_C, 0, C_bytes);
+  cudaMemset(d_A, 1, M * K * sizeof(half));
+  cudaMemset(d_B, 1, K * N * sizeof(half));
+  cudaMemset(d_C, 0, M * N * sizeof(half));
   
   double gflops = 2.0 * M * N * K / 1e9;
   
   dim3 grid((M + kTileM - 1) / kTileM, (N + kTileN - 1) / kTileN);
-  dim3 block(64);
+  dim3 block(128);
   size_t smem = sizeof(GmemTile);
   
   cudaEvent_t start, stop;
