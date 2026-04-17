@@ -95,11 +95,12 @@ printf 'benchmark,mode,m,n,k,tile_n,stages,avg_ms,gflops,bytes_b_share\n' > "$CU
 compile() {
   local src="$1"
   local out="$2"
+  local arch_arg="${COMPILE_ARCH:--arch=$ARCH}"
   shift 2
   echo "==============================================="
   echo "Compiling $src"
   echo "==============================================="
-  "$NVCC" -std=c++17 -O3 -arch="$ARCH" "$src" -o "$out" "$@"
+  "$NVCC" -std=c++17 -O3 $arch_arg "$src" -o "$out" "$@"
 }
 
 append_results() {
@@ -155,10 +156,13 @@ compile bench_dsmem_write.cu bench_dsmem_write
 compile bench_dsmem_pingpong.cu bench_dsmem_pingpong
 compile bench_software_dsmem_gemm.cu bench_software_dsmem_gemm
 if [[ "$HAVE_CUTLASS" == "1" ]]; then
+  COMPILE_ARCH="--generate-code arch=compute_100a,code=sm_100a" \
   compile bench_cutlass_2sm_gemm.cu bench_cutlass_2sm_gemm \
     --expt-relaxed-constexpr \
     -I"$CUTLASS_DIR/include" \
-    -I"$CUTLASS_DIR/tools/util/include"
+    -I"$CUTLASS_DIR/tools/util/include" \
+    -DCUTLASS_ARCH_MMA_SM100A_ENABLED \
+    -DCUTLASS_ARCH_MMA_SM100_ENABLED
 else
   echo "WARNING: CUTLASS not found at $CUTLASS_DIR"
   echo "Skipping bench_cutlass_2sm_gemm compilation and runtime sweep."

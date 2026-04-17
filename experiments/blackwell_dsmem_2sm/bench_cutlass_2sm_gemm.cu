@@ -2,6 +2,12 @@
 
 #include <iostream>
 
+// Workaround: provide fixed grid/block sizes to bypass cudaOccupancyMaxPotentialBlockSize
+// which fails on sm_100a kernels. We use BlockForEach directly instead of
+// BlockFillRandomUniform so we can pass explicit launch parameters.
+#define CUTLASS_BLOCKFILL_GRID  256
+#define CUTLASS_BLOCKFILL_BLOCK 128
+
 #include "cute/tensor.hpp"
 
 #include "cutlass/cutlass.h"
@@ -136,9 +142,24 @@ struct CutlassRunner {
     C.reset(static_cast<std::size_t>(m) * n);
     D.reset(static_cast<std::size_t>(m) * n);
 
-    cutlass::reference::device::BlockFillRandomUniform(A.get(), A.size(), 2023, ElementA(3), ElementA(-3), 0);
-    cutlass::reference::device::BlockFillRandomUniform(B.get(), B.size(), 2024, ElementB(3), ElementB(-3), 0);
-    cutlass::reference::device::BlockFillRandomUniform(C.get(), C.size(), 2025, ElementC(3), ElementC(-3), 0);
+    {
+      using RF = cutlass::reference::device::detail::RandomUniformFunc<ElementA>;
+      cutlass::reference::device::BlockForEach<ElementA, RF>(
+        A.get(), A.size(), typename RF::Params(2023, ElementA(3), ElementA(-3), 0, 0),
+        CUTLASS_BLOCKFILL_GRID, CUTLASS_BLOCKFILL_BLOCK);
+    }
+    {
+      using RF = cutlass::reference::device::detail::RandomUniformFunc<ElementB>;
+      cutlass::reference::device::BlockForEach<ElementB, RF>(
+        B.get(), B.size(), typename RF::Params(2024, ElementB(3), ElementB(-3), 0, 0),
+        CUTLASS_BLOCKFILL_GRID, CUTLASS_BLOCKFILL_BLOCK);
+    }
+    {
+      using RF = cutlass::reference::device::detail::RandomUniformFunc<ElementC>;
+      cutlass::reference::device::BlockForEach<ElementC, RF>(
+        C.get(), C.size(), typename RF::Params(2025, ElementC(3), ElementC(-3), 0, 0),
+        CUTLASS_BLOCKFILL_GRID, CUTLASS_BLOCKFILL_BLOCK);
+    }
   }
 
   bool run_once(const GemmOptions& options, const cutlass::KernelHardwareInfo& hw_info) {
