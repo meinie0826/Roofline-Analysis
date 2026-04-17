@@ -131,6 +131,7 @@ struct CutlassRunner {
   StrideB strideB;
   StrideC strideC;
   StrideD strideD;
+  const char* debug_mode = "unknown";
 
   void initialize(int m, int n, int k) {
     strideA = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(m, k, 1));
@@ -185,9 +186,28 @@ struct CutlassRunner {
     std::size_t workspace_size = Gemm::get_workspace_size(arguments);
     workspace_ = cutlass::device_memory::allocation<uint8_t>(workspace_size);
 
+    std::fprintf(
+        stderr,
+        "[bench_cutlass_mma2sm_cost] setup mode=%s use_2sm=%d m=%d n=%d k=%d tile_n=%d "
+        "cluster=(%d,%d,%d) workspace_bytes=%zu sm_count=%d\n",
+        debug_mode,
+        int(Use2Sm),
+        options.m,
+        options.n,
+        options.k,
+        TileN,
+        int(size<0>(ClusterShapeMNK{})),
+        int(size<1>(ClusterShapeMNK{})),
+        int(size<2>(ClusterShapeMNK{})),
+        workspace_size,
+        hw_info.sm_count);
+
     cutlass::Status status = gemm_op_.can_implement(arguments);
     if (status != cutlass::Status::kSuccess) {
-      std::fprintf(stderr, "can_implement failed: %s\n", cutlass::cutlassGetStatusString(status));
+      std::fprintf(stderr,
+                   "[bench_cutlass_mma2sm_cost] can_implement failed mode=%s: %s\n",
+                   debug_mode,
+                   cutlass::cutlassGetStatusString(status));
       return false;
     }
 
@@ -195,7 +215,8 @@ struct CutlassRunner {
     if (status != cutlass::Status::kSuccess) {
       cudaError_t cuda_err = cudaGetLastError();
       std::fprintf(stderr,
-                   "initialize failed: %s (cuda: %s)\n",
+                   "[bench_cutlass_mma2sm_cost] initialize failed mode=%s: %s (cuda: %s)\n",
+                   debug_mode,
                    cutlass::cutlassGetStatusString(status),
                    cudaGetErrorString(cuda_err));
       return false;
@@ -298,6 +319,7 @@ KernelMetrics dispatch_cutlass_1sm(
     const cutlass::KernelHardwareInfo& hw_info) {
   using Runner = CutlassRunner<TileN, false, StageCountTag>;
   Runner runner;
+  runner.debug_mode = "1sm";
   return measure_runner(runner, options, hw_info, 128, TileN);
 }
 
@@ -307,6 +329,7 @@ KernelMetrics dispatch_cutlass_2sm(
     const cutlass::KernelHardwareInfo& hw_info) {
   using Runner = CutlassRunner<TileN, true, StageCountTag>;
   Runner runner;
+  runner.debug_mode = "2sm";
   return measure_runner(runner, options, hw_info, 256, TileN);
 }
 
