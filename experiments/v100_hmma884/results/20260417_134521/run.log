@@ -1,0 +1,560 @@
+Output directory: /home/guyida/v100_profile/Roofline-Analysis/experiments/v100_hmma884/results/20260417_134521
+===============================================
+Compiling bench_empty.cu
+===============================================
+===============================================
+Compiling bench_mma_f16_dep.cu
+===============================================
+===============================================
+Compiling bench_mma_f16_indep.cu
+===============================================
+===============================================
+Compiling bench_mma_f32acc.cu
+===============================================
+===============================================
+Dumping SASS for bench_mma_f16_dep
+===============================================
+        /*0120*/                   HMMA.884.F16.F16.STEP0 R4, R2.reuse.ROW, R2.reuse.COL, R4 ;        /* 0x0000000202047236 */
+        /*0130*/                   HMMA.884.F16.F16.STEP1 R6, R2.ROW, R2.COL, R6 ;                    /* 0x0000000202067236 */
+        /*0290*/               @P0 HMMA.884.F16.F16.STEP0 R4, R8.reuse.ROW, R12.reuse.COL, R4 ;       /* 0x0000000c08040236 */
+        /*02e0*/               @P0 HMMA.884.F16.F16.STEP1 R6, R8.ROW, R12.COL, R6 ;                   /* 0x0000000c08060236 */
+        /*0330*/               @P2 HMMA.884.F16.F16.STEP0 R4, R10.ROW, R18.COL, R4 ;                  /* 0x000000120a042236 */
+        /*0360*/               @P2 HMMA.884.F16.F16.STEP1 R6, R10.ROW, R18.COL, R6 ;                  /* 0x000000120a062236 */
+        /*03b0*/               @P3 HMMA.884.F16.F16.STEP0 R8, R16.reuse.ROW, R20.reuse.COL, R4 ;      /* 0x0000001410083236 */
+        /*03c0*/               @P3 HMMA.884.F16.F16.STEP1 R10, R16.ROW, R20.COL, R6 ;                 /* 0x00000014100a3236 */
+        /*0400*/               @P3 HMMA.884.F16.F16.STEP0 R4, R18.ROW, R22.COL, R8 ;                  /* 0x0000001612043236 */
+        /*0420*/               @P3 HMMA.884.F16.F16.STEP1 R6, R18.ROW, R22.COL, R10 ;                 /* 0x0000001612063236 */
+        /*0460*/               @P1 HMMA.884.F16.F16.STEP0 R8, R12.reuse.ROW, R20.reuse.COL, R4 ;      /* 0x000000140c081236 */
+        /*0470*/               @P1 HMMA.884.F16.F16.STEP1 R10, R12.ROW, R20.COL, R6 ;                 /* 0x000000140c0a1236 */
+        /*0480*/               @P1 HMMA.884.F16.F16.STEP0 R8, R16.reuse.ROW, R18.reuse.COL, R8 ;      /* 0x0000001210081236 */
+        /*0490*/               @P1 HMMA.884.F16.F16.STEP1 R10, R16.ROW, R18.COL, R10 ;                /* 0x00000012100a1236 */
+        /*04a0*/               @P1 HMMA.884.F16.F16.STEP0 R8, R12.reuse.ROW, R20.reuse.COL, R8 ;      /* 0x000000140c081236 */
+        /*04b0*/               @P1 HMMA.884.F16.F16.STEP1 R10, R12.ROW, R20.COL, R10 ;                /* 0x000000140c0a1236 */
+        /*04c0*/               @P1 HMMA.884.F16.F16.STEP0 R4, R16.reuse.ROW, R18.reuse.COL, R8 ;      /* 0x0000001210041236 */
+        /*04d0*/               @P1 HMMA.884.F16.F16.STEP1 R6, R16.ROW, R18.COL, R10 ;                 /* 0x0000001210061236 */
+        /*0510*/                   HMMA.884.F16.F16.STEP0 R4, R8.reuse.ROW, R8.reuse.COL, R4 ;        /* 0x0000000808047236 */
+        /*0520*/                   HMMA.884.F16.F16.STEP1 R6, R8.reuse.ROW, R8.reuse.COL, R6 ;        /* 0x0000000808067236 */
+        /*0530*/                   HMMA.884.F16.F16.STEP0 R4, R8.reuse.ROW, R8.reuse.COL, R4 ;        /* 0x0000000808047236 */
+        /*0540*/                   HMMA.884.F16.F16.STEP1 R6, R8.reuse.ROW, R8.reuse.COL, R6 ;        /* 0x0000000808067236 */
+        /*0550*/                   HMMA.884.F16.F16.STEP0 R4, R8.reuse.ROW, R8.reuse.COL, R4 ;        /* 0x0000000808047236 */
+        /*0560*/                   HMMA.884.F16.F16.STEP1 R6, R8.reuse.ROW, R8.reuse.COL, R6 ;        /* 0x0000000808067236 */
+        /*0570*/                   HMMA.884.F16.F16.STEP0 R4, R8.reuse.ROW, R8.reuse.COL, R4 ;        /* 0x0000000808047236 */
+        /*0580*/                   HMMA.884.F16.F16.STEP1 R6, R8.reuse.ROW, R8.reuse.COL, R6 ;        /* 0x0000000808067236 */
+        /*0590*/                   HMMA.884.F16.F16.STEP0 R4, R8.reuse.ROW, R8.reuse.COL, R4 ;        /* 0x0000000808047236 */
+        /*05a0*/                   HMMA.884.F16.F16.STEP1 R6, R8.reuse.ROW, R8.reuse.COL, R6 ;        /* 0x0000000808067236 */
+        /*05b0*/                   HMMA.884.F16.F16.STEP0 R4, R8.reuse.ROW, R8.reuse.COL, R4 ;        /* 0x0000000808047236 */
+        /*05c0*/                   HMMA.884.F16.F16.STEP1 R6, R8.reuse.ROW, R8.reuse.COL, R6 ;        /* 0x0000000808067236 */
+        /*05d0*/                   HMMA.884.F16.F16.STEP0 R4, R8.reuse.ROW, R8.reuse.COL, R4 ;        /* 0x0000000808047236 */
+        /*05e0*/                   HMMA.884.F16.F16.STEP1 R6, R8.reuse.ROW, R8.reuse.COL, R6 ;        /* 0x0000000808067236 */
+        /*05f0*/                   HMMA.884.F16.F16.STEP0 R4, R8.reuse.ROW, R8.reuse.COL, R4 ;        /* 0x0000000808047236 */
+        /*0600*/                   HMMA.884.F16.F16.STEP1 R6, R8.ROW, R8.COL, R6 ;                    /* 0x0000000808067236 */
+Saved SASS to /home/guyida/v100_profile/Roofline-Analysis/experiments/v100_hmma884/results/20260417_134521/sass_bench_mma_f16_dep.txt
+===============================================
+Dumping SASS for bench_mma_f16_indep
+===============================================
+        /*02f0*/                   HMMA.884.F16.F16.STEP0 R16, R2.reuse.ROW, R2.reuse.COL, R16 ;  /* 0x0000000202107236 */
+        /*0300*/                   HMMA.884.F16.F16.STEP1 R18, R2.reuse.ROW, R2.reuse.COL, R18 ;  /* 0x0000000202127236 */
+        /*0310*/                   HMMA.884.F16.F16.STEP0 R20, R2.reuse.ROW, R2.reuse.COL, R12 ;  /* 0x0000000202147236 */
+        /*0320*/                   HMMA.884.F16.F16.STEP1 R22, R2.reuse.ROW, R2.reuse.COL, R14 ;  /* 0x0000000202167236 */
+        /*0330*/                   HMMA.884.F16.F16.STEP0 R28, R2.reuse.ROW, R2.reuse.COL, R4 ;   /* 0x00000002021c7236 */
+        /*0360*/                   HMMA.884.F16.F16.STEP1 R30, R2.reuse.ROW, R2.reuse.COL, R6 ;   /* 0x00000002021e7236 */
+        /*0380*/                   HMMA.884.F16.F16.STEP0 R32, R2.reuse.ROW, R2.reuse.COL, R8 ;   /* 0x0000000202207236 */
+        /*03a0*/                   HMMA.884.F16.F16.STEP1 R34, R2.reuse.ROW, R2.reuse.COL, R10 ;  /* 0x0000000202227236 */
+        /*0410*/                   HMMA.884.F16.F16.STEP0 R16, R2.reuse.ROW, R2.reuse.COL, R16 ;  /* 0x0000000202107236 */
+        /*0420*/                   HMMA.884.F16.F16.STEP1 R18, R2.reuse.ROW, R2.reuse.COL, R18 ;  /* 0x0000000202127236 */
+        /*0430*/                   HMMA.884.F16.F16.STEP0 R24, R2.reuse.ROW, R2.reuse.COL, R12 ;  /* 0x0000000202187236 */
+        /*0440*/                   HMMA.884.F16.F16.STEP1 R26, R2.reuse.ROW, R2.reuse.COL, R14 ;  /* 0x00000002021a7236 */
+        /*0450*/                   HMMA.884.F16.F16.STEP0 R28, R2.reuse.ROW, R2.reuse.COL, R4 ;   /* 0x00000002021c7236 */
+        /*0480*/                   HMMA.884.F16.F16.STEP1 R30, R2.reuse.ROW, R2.reuse.COL, R6 ;   /* 0x00000002021e7236 */
+        /*04a0*/                   HMMA.884.F16.F16.STEP0 R32, R2.reuse.ROW, R2.reuse.COL, R8 ;   /* 0x0000000202207236 */
+        /*04c0*/                   HMMA.884.F16.F16.STEP1 R34, R2.reuse.ROW, R2.reuse.COL, R10 ;  /* 0x0000000202227236 */
+        /*0530*/                   HMMA.884.F16.F16.STEP0 R16, R2.reuse.ROW, R2.reuse.COL, R16 ;  /* 0x0000000202107236 */
+        /*0540*/                   HMMA.884.F16.F16.STEP1 R18, R2.reuse.ROW, R2.reuse.COL, R18 ;  /* 0x0000000202127236 */
+        /*0550*/                   HMMA.884.F16.F16.STEP0 R20, R2.reuse.ROW, R2.reuse.COL, R12 ;  /* 0x0000000202147236 */
+        /*0560*/                   HMMA.884.F16.F16.STEP1 R22, R2.reuse.ROW, R2.reuse.COL, R14 ;  /* 0x0000000202167236 */
+        /*0570*/                   HMMA.884.F16.F16.STEP0 R24, R2.reuse.ROW, R2.reuse.COL, R4 ;   /* 0x0000000202187236 */
+        /*05a0*/                   HMMA.884.F16.F16.STEP1 R26, R2.reuse.ROW, R2.reuse.COL, R6 ;   /* 0x00000002021a7236 */
+        /*05c0*/                   HMMA.884.F16.F16.STEP0 R28, R2.reuse.ROW, R2.reuse.COL, R8 ;   /* 0x00000002021c7236 */
+        /*05e0*/                   HMMA.884.F16.F16.STEP1 R30, R2.ROW, R2.COL, R10 ;              /* 0x00000002021e7236 */
+        /*0680*/                   HMMA.884.F16.F16.STEP0 R16, R2.reuse.ROW, R2.reuse.COL, R16 ;  /* 0x0000000202107236 */
+        /*0690*/                   HMMA.884.F16.F16.STEP1 R18, R2.reuse.ROW, R2.reuse.COL, R18 ;  /* 0x0000000202127236 */
+        /*06a0*/                   HMMA.884.F16.F16.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R12 ;  /* 0x00000002020c7236 */
+        /*06b0*/                   HMMA.884.F16.F16.STEP1 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;  /* 0x00000002020e7236 */
+        /*06c0*/                   HMMA.884.F16.F16.STEP0 R4, R2.reuse.ROW, R2.reuse.COL, R4 ;    /* 0x0000000202047236 */
+        /*06e0*/                   HMMA.884.F16.F16.STEP1 R6, R2.reuse.ROW, R2.reuse.COL, R6 ;    /* 0x0000000202067236 */
+        /*06f0*/                   HMMA.884.F16.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R8 ;    /* 0x0000000202087236 */
+        /*0710*/                   HMMA.884.F16.F16.STEP1 R10, R2.ROW, R2.COL, R10 ;              /* 0x00000002020a7236 */
+        /*07e0*/                   HMMA.884.F16.F16.STEP0 R16, R2.reuse.ROW, R2.reuse.COL, R16 ;  /* 0x0000000202107236 */
+        /*07f0*/                   HMMA.884.F16.F16.STEP1 R18, R2.reuse.ROW, R2.reuse.COL, R18 ;  /* 0x0000000202127236 */
+        /*0800*/                   HMMA.884.F16.F16.STEP0 R20, R2.reuse.ROW, R2.reuse.COL, R12 ;  /* 0x0000000202147236 */
+        /*0810*/                   HMMA.884.F16.F16.STEP1 R22, R2.reuse.ROW, R2.reuse.COL, R14 ;  /* 0x0000000202167236 */
+        /*0820*/                   HMMA.884.F16.F16.STEP0 R24, R2.reuse.ROW, R2.reuse.COL, R4 ;   /* 0x0000000202187236 */
+        /*0850*/                   HMMA.884.F16.F16.STEP1 R26, R2.reuse.ROW, R2.reuse.COL, R6 ;   /* 0x00000002021a7236 */
+        /*0870*/                   HMMA.884.F16.F16.STEP0 R28, R2.reuse.ROW, R2.reuse.COL, R8 ;   /* 0x00000002021c7236 */
+        /*0890*/                   HMMA.884.F16.F16.STEP1 R30, R2.ROW, R2.COL, R10 ;              /* 0x00000002021e7236 */
+        /*0930*/                   HMMA.884.F16.F16.STEP0 R16, R2.reuse.ROW, R2.reuse.COL, R16 ;  /* 0x0000000202107236 */
+        /*0940*/                   HMMA.884.F16.F16.STEP1 R18, R2.reuse.ROW, R2.reuse.COL, R18 ;  /* 0x0000000202127236 */
+        /*0950*/                   HMMA.884.F16.F16.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R12 ;  /* 0x00000002020c7236 */
+        /*0960*/                   HMMA.884.F16.F16.STEP1 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;  /* 0x00000002020e7236 */
+        /*0970*/                   HMMA.884.F16.F16.STEP0 R4, R2.reuse.ROW, R2.reuse.COL, R4 ;    /* 0x0000000202047236 */
+        /*0990*/                   HMMA.884.F16.F16.STEP1 R6, R2.reuse.ROW, R2.reuse.COL, R6 ;    /* 0x0000000202067236 */
+        /*09a0*/                   HMMA.884.F16.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R8 ;    /* 0x0000000202087236 */
+        /*09c0*/                   HMMA.884.F16.F16.STEP1 R10, R2.ROW, R2.COL, R10 ;              /* 0x00000002020a7236 */
+        /*0ab0*/                   HMMA.884.F16.F16.STEP0 R16, R2.reuse.ROW, R2.reuse.COL, R16 ;  /* 0x0000000202107236 */
+        /*0ac0*/                   HMMA.884.F16.F16.STEP1 R18, R2.reuse.ROW, R2.reuse.COL, R18 ;  /* 0x0000000202127236 */
+        /*0ad0*/                   HMMA.884.F16.F16.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R12 ;  /* 0x00000002020c7236 */
+        /*0ae0*/                   HMMA.884.F16.F16.STEP1 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;  /* 0x00000002020e7236 */
+        /*0af0*/                   HMMA.884.F16.F16.STEP0 R4, R2.reuse.ROW, R2.reuse.COL, R4 ;    /* 0x0000000202047236 */
+        /*0b10*/                   HMMA.884.F16.F16.STEP1 R6, R2.reuse.ROW, R2.reuse.COL, R6 ;    /* 0x0000000202067236 */
+        /*0b20*/                   HMMA.884.F16.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R8 ;    /* 0x0000000202087236 */
+        /*0b40*/                   HMMA.884.F16.F16.STEP1 R10, R2.ROW, R2.COL, R10 ;              /* 0x00000002020a7236 */
+        /*0bf0*/                   HMMA.884.F16.F16.STEP0 R4, R2.reuse.ROW, R2.reuse.COL, R4 ;    /* 0x0000000202047236 */
+        /*0c00*/                   HMMA.884.F16.F16.STEP1 R6, R2.ROW, R2.COL, R6 ;                /* 0x0000000202067236 */
+        /*0c90*/                   HMMA.884.F16.F16.STEP0 R4, R2.reuse.ROW, R8.reuse.COL, R4 ;    /* 0x0000000802047236 */
+        /*0ca0*/                   HMMA.884.F16.F16.STEP1 R6, R2.ROW, R8.COL, R6 ;                /* 0x0000000802067236 */
+        /*0d20*/                   HMMA.884.F16.F16.STEP0 R4, R2.reuse.ROW, R8.reuse.COL, R4 ;    /* 0x0000000802047236 */
+        /*0d30*/                   HMMA.884.F16.F16.STEP1 R6, R2.ROW, R8.COL, R6 ;                /* 0x0000000802067236 */
+        /*0ff0*/                   HMMA.884.F16.F16.STEP0 R20, R2.reuse.ROW, R2.reuse.COL, R16 ;  /* 0x0000000202147236 */
+        /*1000*/                   HMMA.884.F16.F16.STEP1 R22, R2.reuse.ROW, R2.reuse.COL, R18 ;  /* 0x0000000202167236 */
+        /*1020*/                   HMMA.884.F16.F16.STEP0 R28, R2.reuse.ROW, R2.reuse.COL, R12 ;  /* 0x00000002021c7236 */
+        /*1030*/                   HMMA.884.F16.F16.STEP1 R30, R2.reuse.ROW, R2.reuse.COL, R14 ;  /* 0x00000002021e7236 */
+        /*1050*/                   HMMA.884.F16.F16.STEP0 R24, R2.reuse.ROW, R2.reuse.COL, R8 ;   /* 0x0000000202187236 */
+        /*1070*/                   HMMA.884.F16.F16.STEP1 R26, R2.reuse.ROW, R2.reuse.COL, R10 ;  /* 0x00000002021a7236 */
+        /*1090*/                   HMMA.884.F16.F16.STEP0 R32, R2.reuse.ROW, R2.reuse.COL, R4 ;   /* 0x0000000202207236 */
+        /*10b0*/                   HMMA.884.F16.F16.STEP1 R34, R2.reuse.ROW, R2.reuse.COL, R6 ;   /* 0x0000000202227236 */
+        /*10f0*/                   HMMA.884.F16.F16.STEP0 R20, R2.reuse.ROW, R2.reuse.COL, R12 ;  /* 0x0000000202147236 */
+        /*1100*/                   HMMA.884.F16.F16.STEP1 R22, R2.reuse.ROW, R2.reuse.COL, R14 ;  /* 0x0000000202167236 */
+        /*1120*/                   HMMA.884.F16.F16.STEP0 R28, R2.reuse.ROW, R2.reuse.COL, R16 ;  /* 0x00000002021c7236 */
+        /*1130*/                   HMMA.884.F16.F16.STEP1 R30, R2.reuse.ROW, R2.reuse.COL, R18 ;  /* 0x00000002021e7236 */
+        /*1150*/                   HMMA.884.F16.F16.STEP0 R24, R2.reuse.ROW, R2.reuse.COL, R4 ;   /* 0x0000000202187236 */
+        /*1160*/                   HMMA.884.F16.F16.STEP1 R26, R2.reuse.ROW, R2.reuse.COL, R6 ;   /* 0x00000002021a7236 */
+        /*1180*/                   HMMA.884.F16.F16.STEP0 R32, R2.reuse.ROW, R2.reuse.COL, R8 ;   /* 0x0000000202207236 */
+        /*1190*/                   HMMA.884.F16.F16.STEP1 R34, R2.reuse.ROW, R2.reuse.COL, R10 ;  /* 0x0000000202227236 */
+        /*11f0*/                   HMMA.884.F16.F16.STEP0 R20, R2.reuse.ROW, R2.reuse.COL, R12 ;  /* 0x0000000202147236 */
+        /*1200*/                   HMMA.884.F16.F16.STEP1 R22, R2.reuse.ROW, R2.reuse.COL, R14 ;  /* 0x0000000202167236 */
+        /*1220*/                   HMMA.884.F16.F16.STEP0 R16, R2.reuse.ROW, R2.reuse.COL, R16 ;  /* 0x0000000202107236 */
+        /*1230*/                   HMMA.884.F16.F16.STEP1 R18, R2.reuse.ROW, R2.reuse.COL, R18 ;  /* 0x0000000202127236 */
+        /*1240*/                   HMMA.884.F16.F16.STEP0 R4, R2.reuse.ROW, R2.reuse.COL, R4 ;    /* 0x0000000202047236 */
+        /*1250*/                   HMMA.884.F16.F16.STEP1 R6, R2.reuse.ROW, R2.reuse.COL, R6 ;    /* 0x0000000202067236 */
+        /*1270*/                   HMMA.884.F16.F16.STEP0 R28, R2.reuse.ROW, R2.reuse.COL, R8 ;   /* 0x00000002021c7236 */
+        /*1280*/                   HMMA.884.F16.F16.STEP1 R30, R2.ROW, R2.COL, R10 ;              /* 0x00000002021e7236 */
+        /*1320*/                   HMMA.884.F16.F16.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R12 ;  /* 0x00000002020c7236 */
+        /*1330*/                   HMMA.884.F16.F16.STEP1 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;  /* 0x00000002020e7236 */
+        /*1340*/                   HMMA.884.F16.F16.STEP0 R24, R2.reuse.ROW, R2.reuse.COL, R24 ;  /* 0x0000000202187236 */
+        /*1350*/                   HMMA.884.F16.F16.STEP1 R26, R2.reuse.ROW, R2.reuse.COL, R26 ;  /* 0x00000002021a7236 */
+        /*1360*/                   HMMA.884.F16.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R8 ;    /* 0x0000000202087236 */
+        /*1370*/                   HMMA.884.F16.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R10 ;  /* 0x00000002020a7236 */
+        /*1380*/                   HMMA.884.F16.F16.STEP0 R20, R2.reuse.ROW, R2.reuse.COL, R20 ;  /* 0x0000000202147236 */
+        /*1390*/                   HMMA.884.F16.F16.STEP1 R22, R2.ROW, R2.COL, R22 ;              /* 0x0000000202167236 */
+        /*1490*/                   HMMA.884.F16.F16.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R4 ;   /* 0x00000002020c7236 */
+        /*14a0*/                   HMMA.884.F16.F16.STEP1 R14, R2.reuse.ROW, R2.reuse.COL, R6 ;   /* 0x00000002020e7236 */
+        /*14c0*/                   HMMA.884.F16.F16.STEP0 R24, R2.reuse.ROW, R2.reuse.COL, R24 ;  /* 0x0000000202187236 */
+        /*14d0*/                   HMMA.884.F16.F16.STEP1 R26, R2.reuse.ROW, R2.reuse.COL, R26 ;  /* 0x00000002021a7236 */
+        /*14e0*/                   HMMA.884.F16.F16.STEP0 R20, R2.reuse.ROW, R2.reuse.COL, R20 ;  /* 0x0000000202147236 */
+        /*1500*/                   HMMA.884.F16.F16.STEP1 R22, R2.reuse.ROW, R2.reuse.COL, R22 ;  /* 0x0000000202167236 */
+        /*1510*/                   HMMA.884.F16.F16.STEP0 R28, R2.reuse.ROW, R2.reuse.COL, R8 ;   /* 0x00000002021c7236 */
+        /*1530*/                   HMMA.884.F16.F16.STEP1 R30, R2.ROW, R2.COL, R10 ;              /* 0x00000002021e7236 */
+        /*15b0*/                   HMMA.884.F16.F16.STEP0 R4, R2.reuse.ROW, R2.reuse.COL, R4 ;    /* 0x0000000202047236 */
+        /*15c0*/                   HMMA.884.F16.F16.STEP1 R6, R2.reuse.ROW, R2.reuse.COL, R6 ;    /* 0x0000000202067236 */
+        /*15d0*/                   HMMA.884.F16.F16.STEP0 R16, R2.reuse.ROW, R2.reuse.COL, R16 ;  /* 0x0000000202107236 */
+        /*15e0*/                   HMMA.884.F16.F16.STEP1 R18, R2.reuse.ROW, R2.reuse.COL, R18 ;  /* 0x0000000202127236 */
+        /*15f0*/                   HMMA.884.F16.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R8 ;    /* 0x0000000202087236 */
+        /*1600*/                   HMMA.884.F16.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R10 ;  /* 0x00000002020a7236 */
+        /*1610*/                   HMMA.884.F16.F16.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R12 ;  /* 0x00000002020c7236 */
+        /*1620*/                   HMMA.884.F16.F16.STEP1 R14, R2.ROW, R2.COL, R14 ;              /* 0x00000002020e7236 */
+        /*1730*/                   HMMA.884.F16.F16.STEP0 R16, R2.reuse.ROW, R2.reuse.COL, R16 ;  /* 0x0000000202107236 */
+        /*1740*/                   HMMA.884.F16.F16.STEP1 R18, R2.reuse.ROW, R2.reuse.COL, R18 ;  /* 0x0000000202127236 */
+        /*1750*/                   HMMA.884.F16.F16.STEP0 R12, R2.reuse.ROW, R2.reuse.COL, R12 ;  /* 0x00000002020c7236 */
+        /*1760*/                   HMMA.884.F16.F16.STEP1 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;  /* 0x00000002020e7236 */
+        /*1770*/                   HMMA.884.F16.F16.STEP0 R4, R2.reuse.ROW, R2.reuse.COL, R4 ;    /* 0x0000000202047236 */
+        /*1790*/                   HMMA.884.F16.F16.STEP1 R6, R2.reuse.ROW, R2.reuse.COL, R6 ;    /* 0x0000000202067236 */
+        /*17a0*/                   HMMA.884.F16.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R8 ;    /* 0x0000000202087236 */
+        /*17c0*/                   HMMA.884.F16.F16.STEP1 R10, R2.ROW, R2.COL, R10 ;              /* 0x00000002020a7236 */
+        /*1880*/                   HMMA.884.F16.F16.STEP0 R4, R2.reuse.ROW, R2.reuse.COL, R4 ;    /* 0x0000000202047236 */
+        /*1890*/                   HMMA.884.F16.F16.STEP1 R6, R2.ROW, R2.COL, R6 ;                /* 0x0000000202067236 */
+        /*1920*/                   HMMA.884.F16.F16.STEP0 R4, R2.reuse.ROW, R8.reuse.COL, R4 ;    /* 0x0000000802047236 */
+        /*1930*/                   HMMA.884.F16.F16.STEP1 R6, R2.ROW, R8.COL, R6 ;                /* 0x0000000802067236 */
+        /*19b0*/                   HMMA.884.F16.F16.STEP0 R4, R2.reuse.ROW, R8.reuse.COL, R4 ;    /* 0x0000000802047236 */
+        /*19c0*/                   HMMA.884.F16.F16.STEP1 R6, R2.ROW, R8.COL, R6 ;                /* 0x0000000802067236 */
+Saved SASS to /home/guyida/v100_profile/Roofline-Analysis/experiments/v100_hmma884/results/20260417_134521/sass_bench_mma_f16_indep.txt
+===============================================
+Dumping SASS for bench_mma_f32acc
+===============================================
+        /*03d0*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*03e0*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*03f0*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*0400*/                   HMMA.884.F32.F16.STEP3 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;         /* 0x00000002020e7236 */
+        /*0440*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*0450*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*0460*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*0470*/                   HMMA.884.F32.F16.STEP3 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;         /* 0x00000002020e7236 */
+        /*04b0*/                   HMMA.884.F32.F16.STEP0 R16, R2.reuse.ROW, R2.reuse.COL, R20.reuse ;   /* 0x0000000202107236 */
+        /*04c0*/                   HMMA.884.F32.F16.STEP1 R18, R2.reuse.ROW, R2.reuse.COL, R20 ;         /* 0x0000000202127236 */
+        /*04d0*/                   HMMA.884.F32.F16.STEP2 R20, R2.reuse.ROW, R2.reuse.COL, R22.reuse ;   /* 0x0000000202147236 */
+        /*04e0*/                   HMMA.884.F32.F16.STEP3 R22, R2.ROW, R2.COL, R22 ;                     /* 0x0000000202167236 */
+        /*0540*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*0550*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*0560*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*0570*/                   HMMA.884.F32.F16.STEP3 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;         /* 0x00000002020e7236 */
+        /*05c0*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*05d0*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*05e0*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*05f0*/                   HMMA.884.F32.F16.STEP3 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;         /* 0x00000002020e7236 */
+        /*0630*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R16.reuse ;    /* 0x0000000202087236 */
+        /*0640*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R16 ;         /* 0x00000002020a7236 */
+        /*0650*/                   HMMA.884.F32.F16.STEP2 R16, R2.reuse.ROW, R2.reuse.COL, R18.reuse ;   /* 0x0000000202107236 */
+        /*0660*/                   HMMA.884.F32.F16.STEP3 R18, R2.reuse.ROW, R2.reuse.COL, R18 ;         /* 0x0000000202127236 */
+        /*06a0*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*06b0*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*06c0*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*06d0*/                   HMMA.884.F32.F16.STEP3 R14, R2.ROW, R2.COL, R14 ;                     /* 0x00000002020e7236 */
+        /*0730*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*0740*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*0750*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*0760*/                   HMMA.884.F32.F16.STEP3 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;         /* 0x00000002020e7236 */
+        /*07b0*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R16.reuse ;    /* 0x0000000202087236 */
+        /*07c0*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R16 ;         /* 0x00000002020a7236 */
+        /*07d0*/                   HMMA.884.F32.F16.STEP2 R16, R2.reuse.ROW, R2.reuse.COL, R18.reuse ;   /* 0x0000000202107236 */
+        /*07e0*/                   HMMA.884.F32.F16.STEP3 R18, R2.reuse.ROW, R2.reuse.COL, R18 ;         /* 0x0000000202127236 */
+        /*0820*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*0830*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*0840*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*0850*/                   HMMA.884.F32.F16.STEP3 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;         /* 0x00000002020e7236 */
+        /*0890*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*08a0*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*08b0*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*08c0*/                   HMMA.884.F32.F16.STEP3 R14, R2.ROW, R2.COL, R14 ;                     /* 0x00000002020e7236 */
+        /*0920*/                   HMMA.884.F32.F16.STEP0 R16, R2.reuse.ROW, R2.reuse.COL, R20.reuse ;   /* 0x0000000202107236 */
+        /*0930*/                   HMMA.884.F32.F16.STEP1 R18, R2.reuse.ROW, R2.reuse.COL, R20 ;         /* 0x0000000202127236 */
+        /*0940*/                   HMMA.884.F32.F16.STEP2 R20, R2.reuse.ROW, R2.reuse.COL, R22.reuse ;   /* 0x0000000202147236 */
+        /*0950*/                   HMMA.884.F32.F16.STEP3 R22, R2.reuse.ROW, R2.reuse.COL, R22 ;         /* 0x0000000202167236 */
+        /*09a0*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*09b0*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*09c0*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*09d0*/                   HMMA.884.F32.F16.STEP3 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;         /* 0x00000002020e7236 */
+        /*0a10*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*0a20*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*0a30*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*0a40*/                   HMMA.884.F32.F16.STEP3 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;         /* 0x00000002020e7236 */
+        /*0a80*/                   HMMA.884.F32.F16.STEP0 R16, R2.reuse.ROW, R2.reuse.COL, R20.reuse ;   /* 0x0000000202107236 */
+        /*0a90*/                   HMMA.884.F32.F16.STEP1 R18, R2.reuse.ROW, R2.reuse.COL, R20 ;         /* 0x0000000202127236 */
+        /*0aa0*/                   HMMA.884.F32.F16.STEP2 R20, R2.reuse.ROW, R2.reuse.COL, R22.reuse ;   /* 0x0000000202147236 */
+        /*0ab0*/                   HMMA.884.F32.F16.STEP3 R22, R2.ROW, R2.COL, R22 ;                     /* 0x0000000202167236 */
+        /*0b20*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*0b30*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*0b40*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*0b50*/                   HMMA.884.F32.F16.STEP3 R14, R2.ROW, R2.COL, R14 ;                     /* 0x00000002020e7236 */
+        /*0c00*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*0c10*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*0c20*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*0c30*/                   HMMA.884.F32.F16.STEP3 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;         /* 0x00000002020e7236 */
+        /*0c70*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*0c80*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*0c90*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*0ca0*/                   HMMA.884.F32.F16.STEP3 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;         /* 0x00000002020e7236 */
+        /*0ce0*/                   HMMA.884.F32.F16.STEP0 R16, R2.reuse.ROW, R2.reuse.COL, R20.reuse ;   /* 0x0000000202107236 */
+        /*0cf0*/                   HMMA.884.F32.F16.STEP1 R18, R2.reuse.ROW, R2.reuse.COL, R20 ;         /* 0x0000000202127236 */
+        /*0d00*/                   HMMA.884.F32.F16.STEP2 R20, R2.reuse.ROW, R2.reuse.COL, R22.reuse ;   /* 0x0000000202147236 */
+        /*0d10*/                   HMMA.884.F32.F16.STEP3 R22, R2.ROW, R2.COL, R22 ;                     /* 0x0000000202167236 */
+        /*0d70*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*0d80*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*0d90*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*0da0*/                   HMMA.884.F32.F16.STEP3 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;         /* 0x00000002020e7236 */
+        /*0df0*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*0e00*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*0e10*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*0e20*/                   HMMA.884.F32.F16.STEP3 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;         /* 0x00000002020e7236 */
+        /*0e60*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R16.reuse ;    /* 0x0000000202087236 */
+        /*0e70*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R16 ;         /* 0x00000002020a7236 */
+        /*0e80*/                   HMMA.884.F32.F16.STEP2 R16, R2.reuse.ROW, R2.reuse.COL, R18.reuse ;   /* 0x0000000202107236 */
+        /*0e90*/                   HMMA.884.F32.F16.STEP3 R18, R2.reuse.ROW, R2.reuse.COL, R18 ;         /* 0x0000000202127236 */
+        /*0ed0*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*0ee0*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*0ef0*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*0f00*/                   HMMA.884.F32.F16.STEP3 R14, R2.ROW, R2.COL, R14 ;                     /* 0x00000002020e7236 */
+        /*0f70*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*0f80*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*0f90*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*0fa0*/                   HMMA.884.F32.F16.STEP3 R14, R2.ROW, R2.COL, R14 ;                     /* 0x00000002020e7236 */
+        /*1040*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*1050*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*1060*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*1070*/                   HMMA.884.F32.F16.STEP3 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;         /* 0x00000002020e7236 */
+        /*10b0*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*10c0*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*10d0*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*10e0*/                   HMMA.884.F32.F16.STEP3 R14, R2.reuse.ROW, R2.reuse.COL, R14 ;         /* 0x00000002020e7236 */
+        /*1120*/                   HMMA.884.F32.F16.STEP0 R16, R2.reuse.ROW, R2.reuse.COL, R20.reuse ;   /* 0x0000000202107236 */
+        /*1130*/                   HMMA.884.F32.F16.STEP1 R18, R2.reuse.ROW, R2.reuse.COL, R20 ;         /* 0x0000000202127236 */
+        /*1140*/                   HMMA.884.F32.F16.STEP2 R20, R2.reuse.ROW, R2.reuse.COL, R22.reuse ;   /* 0x0000000202147236 */
+        /*1150*/                   HMMA.884.F32.F16.STEP3 R22, R2.ROW, R2.COL, R22 ;                     /* 0x0000000202167236 */
+        /*11c0*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*11d0*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*11e0*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*11f0*/                   HMMA.884.F32.F16.STEP3 R14, R2.ROW, R2.COL, R14 ;                     /* 0x00000002020e7236 */
+        /*12b0*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R2.reuse.COL, R12.reuse ;    /* 0x0000000202087236 */
+        /*12c0*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R2.reuse.COL, R12 ;         /* 0x00000002020a7236 */
+        /*12d0*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R2.reuse.COL, R14.reuse ;   /* 0x00000002020c7236 */
+        /*12e0*/                   HMMA.884.F32.F16.STEP3 R14, R2.ROW, R2.COL, R14 ;                     /* 0x00000002020e7236 */
+        /*1380*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R16.reuse.COL, R12.reuse ;   /* 0x0000001002087236 */
+        /*1390*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R16.reuse.COL, R12 ;        /* 0x00000010020a7236 */
+        /*13a0*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R16.reuse.COL, R14.reuse ;  /* 0x00000010020c7236 */
+        /*13b0*/                   HMMA.884.F32.F16.STEP3 R14, R2.ROW, R16.COL, R14 ;                    /* 0x00000010020e7236 */
+        /*1440*/                   HMMA.884.F32.F16.STEP0 R8, R2.reuse.ROW, R16.reuse.COL, R12.reuse ;   /* 0x0000001002087236 */
+        /*1450*/                   HMMA.884.F32.F16.STEP1 R10, R2.reuse.ROW, R16.reuse.COL, R12 ;        /* 0x00000010020a7236 */
+        /*1460*/                   HMMA.884.F32.F16.STEP2 R12, R2.reuse.ROW, R16.reuse.COL, R14.reuse ;  /* 0x00000010020c7236 */
+        /*1470*/                   HMMA.884.F32.F16.STEP3 R14, R2.ROW, R16.COL, R14 ;                    /* 0x00000010020e7236 */
+        /*1720*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*1730*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*1740*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*1750*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*1790*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*17a0*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*17b0*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*17c0*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*1800*/                   HMMA.884.F32.F16.STEP0 R16, R4.reuse.ROW, R4.reuse.COL, R20.reuse ;   /* 0x0000000404107236 */
+        /*1810*/                   HMMA.884.F32.F16.STEP1 R18, R4.reuse.ROW, R4.reuse.COL, R20 ;         /* 0x0000000404127236 */
+        /*1820*/                   HMMA.884.F32.F16.STEP2 R20, R4.reuse.ROW, R4.reuse.COL, R22.reuse ;   /* 0x0000000404147236 */
+        /*1830*/                   HMMA.884.F32.F16.STEP3 R22, R4.reuse.ROW, R4.reuse.COL, R22 ;         /* 0x0000000404167236 */
+        /*1870*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*1880*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*1890*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*18a0*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*18e0*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*18f0*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*1900*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*1910*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*1950*/                   HMMA.884.F32.F16.STEP0 R16, R4.reuse.ROW, R4.reuse.COL, R20.reuse ;   /* 0x0000000404107236 */
+        /*1960*/                   HMMA.884.F32.F16.STEP1 R18, R4.reuse.ROW, R4.reuse.COL, R20 ;         /* 0x0000000404127236 */
+        /*1970*/                   HMMA.884.F32.F16.STEP2 R20, R4.reuse.ROW, R4.reuse.COL, R22.reuse ;   /* 0x0000000404147236 */
+        /*1980*/                   HMMA.884.F32.F16.STEP3 R22, R4.reuse.ROW, R4.reuse.COL, R22 ;         /* 0x0000000404167236 */
+        /*19c0*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*19d0*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*19e0*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*19f0*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*1a30*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*1a40*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*1a50*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*1a60*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*1aa0*/                   HMMA.884.F32.F16.STEP0 R16, R4.reuse.ROW, R4.reuse.COL, R20.reuse ;   /* 0x0000000404107236 */
+        /*1ab0*/                   HMMA.884.F32.F16.STEP1 R18, R4.reuse.ROW, R4.reuse.COL, R20 ;         /* 0x0000000404127236 */
+        /*1ac0*/                   HMMA.884.F32.F16.STEP2 R20, R4.reuse.ROW, R4.reuse.COL, R22.reuse ;   /* 0x0000000404147236 */
+        /*1ad0*/                   HMMA.884.F32.F16.STEP3 R22, R4.reuse.ROW, R4.reuse.COL, R22 ;         /* 0x0000000404167236 */
+        /*1b10*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*1b20*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*1b30*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*1b40*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*1b80*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*1b90*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*1ba0*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*1bb0*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*1bf0*/                   HMMA.884.F32.F16.STEP0 R16, R4.reuse.ROW, R4.reuse.COL, R20.reuse ;   /* 0x0000000404107236 */
+        /*1c00*/                   HMMA.884.F32.F16.STEP1 R18, R4.reuse.ROW, R4.reuse.COL, R20 ;         /* 0x0000000404127236 */
+        /*1c10*/                   HMMA.884.F32.F16.STEP2 R20, R4.reuse.ROW, R4.reuse.COL, R22.reuse ;   /* 0x0000000404147236 */
+        /*1c20*/                   HMMA.884.F32.F16.STEP3 R22, R4.reuse.ROW, R4.reuse.COL, R22 ;         /* 0x0000000404167236 */
+        /*1c60*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*1c70*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*1c80*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*1c90*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*1cd0*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*1ce0*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*1cf0*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*1d00*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*1d40*/                   HMMA.884.F32.F16.STEP0 R16, R4.reuse.ROW, R4.reuse.COL, R20.reuse ;   /* 0x0000000404107236 */
+        /*1d50*/                   HMMA.884.F32.F16.STEP1 R18, R4.reuse.ROW, R4.reuse.COL, R20 ;         /* 0x0000000404127236 */
+        /*1d60*/                   HMMA.884.F32.F16.STEP2 R20, R4.reuse.ROW, R4.reuse.COL, R22.reuse ;   /* 0x0000000404147236 */
+        /*1d70*/                   HMMA.884.F32.F16.STEP3 R22, R4.ROW, R4.COL, R22 ;                     /* 0x0000000404167236 */
+        /*1df0*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*1e00*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*1e10*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*1e20*/                   HMMA.884.F32.F16.STEP3 R14, R4.ROW, R4.COL, R14 ;                     /* 0x00000004040e7236 */
+        /*1ec0*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*1ed0*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*1ee0*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*1ef0*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*1f30*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*1f40*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*1f50*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*1f60*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*1fa0*/                   HMMA.884.F32.F16.STEP0 R16, R4.reuse.ROW, R4.reuse.COL, R20.reuse ;   /* 0x0000000404107236 */
+        /*1fb0*/                   HMMA.884.F32.F16.STEP1 R18, R4.reuse.ROW, R4.reuse.COL, R20 ;         /* 0x0000000404127236 */
+        /*1fc0*/                   HMMA.884.F32.F16.STEP2 R20, R4.reuse.ROW, R4.reuse.COL, R22.reuse ;   /* 0x0000000404147236 */
+        /*1fd0*/                   HMMA.884.F32.F16.STEP3 R22, R4.reuse.ROW, R4.reuse.COL, R22 ;         /* 0x0000000404167236 */
+        /*2010*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*2020*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*2030*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*2040*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*2080*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*2090*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*20a0*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*20b0*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*20f0*/                   HMMA.884.F32.F16.STEP0 R16, R4.reuse.ROW, R4.reuse.COL, R20.reuse ;   /* 0x0000000404107236 */
+        /*2100*/                   HMMA.884.F32.F16.STEP1 R18, R4.reuse.ROW, R4.reuse.COL, R20 ;         /* 0x0000000404127236 */
+        /*2110*/                   HMMA.884.F32.F16.STEP2 R20, R4.reuse.ROW, R4.reuse.COL, R22.reuse ;   /* 0x0000000404147236 */
+        /*2120*/                   HMMA.884.F32.F16.STEP3 R22, R4.reuse.ROW, R4.reuse.COL, R22 ;         /* 0x0000000404167236 */
+        /*2160*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*2170*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*2180*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*2190*/                   HMMA.884.F32.F16.STEP3 R14, R4.ROW, R4.COL, R14 ;                     /* 0x00000004040e7236 */
+        /*2210*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*2220*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*2230*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*2240*/                   HMMA.884.F32.F16.STEP3 R14, R4.ROW, R4.COL, R14 ;                     /* 0x00000004040e7236 */
+        /*22d0*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*22e0*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*22f0*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*2300*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*2340*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*2350*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*2360*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*2370*/                   HMMA.884.F32.F16.STEP3 R14, R4.reuse.ROW, R4.reuse.COL, R14 ;         /* 0x00000004040e7236 */
+        /*23b0*/                   HMMA.884.F32.F16.STEP0 R16, R4.reuse.ROW, R4.reuse.COL, R20.reuse ;   /* 0x0000000404107236 */
+        /*23c0*/                   HMMA.884.F32.F16.STEP1 R18, R4.reuse.ROW, R4.reuse.COL, R20 ;         /* 0x0000000404127236 */
+        /*23d0*/                   HMMA.884.F32.F16.STEP2 R20, R4.reuse.ROW, R4.reuse.COL, R22.reuse ;   /* 0x0000000404147236 */
+        /*23e0*/                   HMMA.884.F32.F16.STEP3 R22, R4.ROW, R4.COL, R22 ;                     /* 0x0000000404167236 */
+        /*2460*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*2470*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*2480*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*2490*/                   HMMA.884.F32.F16.STEP3 R14, R4.ROW, R4.COL, R14 ;                     /* 0x00000004040e7236 */
+        /*2560*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R4.reuse.COL, R12.reuse ;    /* 0x0000000404087236 */
+        /*2570*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R4.reuse.COL, R12 ;         /* 0x00000004040a7236 */
+        /*2580*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R4.reuse.COL, R14.reuse ;   /* 0x00000004040c7236 */
+        /*2590*/                   HMMA.884.F32.F16.STEP3 R14, R4.ROW, R4.COL, R14 ;                     /* 0x00000004040e7236 */
+        /*2630*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R16.reuse.COL, R12.reuse ;   /* 0x0000001004087236 */
+        /*2640*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R16.reuse.COL, R12 ;        /* 0x00000010040a7236 */
+        /*2650*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R16.reuse.COL, R14.reuse ;  /* 0x00000010040c7236 */
+        /*2660*/                   HMMA.884.F32.F16.STEP3 R14, R4.ROW, R16.COL, R14 ;                    /* 0x00000010040e7236 */
+        /*26f0*/                   HMMA.884.F32.F16.STEP0 R8, R4.reuse.ROW, R16.reuse.COL, R12.reuse ;   /* 0x0000001004087236 */
+        /*2700*/                   HMMA.884.F32.F16.STEP1 R10, R4.reuse.ROW, R16.reuse.COL, R12 ;        /* 0x00000010040a7236 */
+        /*2710*/                   HMMA.884.F32.F16.STEP2 R12, R4.reuse.ROW, R16.reuse.COL, R14.reuse ;  /* 0x00000010040c7236 */
+        /*2720*/                   HMMA.884.F32.F16.STEP3 R14, R4.ROW, R16.COL, R14 ;                    /* 0x00000010040e7236 */
+Saved SASS to /home/guyida/v100_profile/Roofline-Analysis/experiments/v100_hmma884/results/20260417_134521/sass_bench_mma_f32acc.txt
+===============================================
+Running bench_empty
+===============================================
+CONFIG benchmark=bench_empty dtype=none mode=empty streams=0 loop_iters=4096 warmup_iters=64 warmup_launches=3 repeats=10 unroll=8
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=0 loop_iters=4096 unroll=8 total_mma=0 cycles=565362 cycles_per_mma=0.00000000 sink_lo=4836107857864116544 sink_hi=12495993677528352277
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=1 loop_iters=4096 unroll=8 total_mma=0 cycles=565301 cycles_per_mma=0.00000000 sink_lo=4836107857864116544 sink_hi=12495993677528352277
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=2 loop_iters=4096 unroll=8 total_mma=0 cycles=565362 cycles_per_mma=0.00000000 sink_lo=4836107857864116544 sink_hi=12495993677528352277
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=3 loop_iters=4096 unroll=8 total_mma=0 cycles=565301 cycles_per_mma=0.00000000 sink_lo=4836107857864116544 sink_hi=12495993677528352277
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=4 loop_iters=4096 unroll=8 total_mma=0 cycles=565362 cycles_per_mma=0.00000000 sink_lo=4836107857864116544 sink_hi=12495993677528352277
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=5 loop_iters=4096 unroll=8 total_mma=0 cycles=565362 cycles_per_mma=0.00000000 sink_lo=4836107857864116544 sink_hi=12495993677528352277
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=6 loop_iters=4096 unroll=8 total_mma=0 cycles=565301 cycles_per_mma=0.00000000 sink_lo=4836107857864116544 sink_hi=12495993677528352277
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=7 loop_iters=4096 unroll=8 total_mma=0 cycles=565423 cycles_per_mma=0.00000000 sink_lo=4836107857864116544 sink_hi=12495993677528352277
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=8 loop_iters=4096 unroll=8 total_mma=0 cycles=565301 cycles_per_mma=0.00000000 sink_lo=4836107857864116544 sink_hi=12495993677528352277
+RESULT benchmark=bench_empty dtype=none mode=empty streams=0 repeat=9 loop_iters=4096 unroll=8 total_mma=0 cycles=565423 cycles_per_mma=0.00000000 sink_lo=4836107857864116544 sink_hi=12495993677528352277
+===============================================
+Running bench_mma_f16_dep
+===============================================
+CONFIG benchmark=bench_mma_f16_dep dtype=f16_f16_f16_f16 mode=dep streams=1 loop_iters=4096 warmup_iters=64 warmup_launches=3 repeats=10 unroll=8
+RESULT benchmark=bench_mma_f16_dep dtype=f16_f16_f16_f16 mode=dep streams=1 repeat=0 loop_iters=4096 unroll=8 total_mma=32768 cycles=458791 cycles_per_mma=14.00119019 sink_lo=8070573679429316608 sink_hi=8070573679429316608
+RESULT benchmark=bench_mma_f16_dep dtype=f16_f16_f16_f16 mode=dep streams=1 repeat=1 loop_iters=4096 unroll=8 total_mma=32768 cycles=458852 cycles_per_mma=14.00305176 sink_lo=8070573679429316608 sink_hi=8070573679429316608
+RESULT benchmark=bench_mma_f16_dep dtype=f16_f16_f16_f16 mode=dep streams=1 repeat=2 loop_iters=4096 unroll=8 total_mma=32768 cycles=458791 cycles_per_mma=14.00119019 sink_lo=8070573679429316608 sink_hi=8070573679429316608
+RESULT benchmark=bench_mma_f16_dep dtype=f16_f16_f16_f16 mode=dep streams=1 repeat=3 loop_iters=4096 unroll=8 total_mma=32768 cycles=458910 cycles_per_mma=14.00482178 sink_lo=8070573679429316608 sink_hi=8070573679429316608
+RESULT benchmark=bench_mma_f16_dep dtype=f16_f16_f16_f16 mode=dep streams=1 repeat=4 loop_iters=4096 unroll=8 total_mma=32768 cycles=458791 cycles_per_mma=14.00119019 sink_lo=8070573679429316608 sink_hi=8070573679429316608
+RESULT benchmark=bench_mma_f16_dep dtype=f16_f16_f16_f16 mode=dep streams=1 repeat=5 loop_iters=4096 unroll=8 total_mma=32768 cycles=458913 cycles_per_mma=14.00491333 sink_lo=8070573679429316608 sink_hi=8070573679429316608
+RESULT benchmark=bench_mma_f16_dep dtype=f16_f16_f16_f16 mode=dep streams=1 repeat=6 loop_iters=4096 unroll=8 total_mma=32768 cycles=458791 cycles_per_mma=14.00119019 sink_lo=8070573679429316608 sink_hi=8070573679429316608
+RESULT benchmark=bench_mma_f16_dep dtype=f16_f16_f16_f16 mode=dep streams=1 repeat=7 loop_iters=4096 unroll=8 total_mma=32768 cycles=458852 cycles_per_mma=14.00305176 sink_lo=8070573679429316608 sink_hi=8070573679429316608
+RESULT benchmark=bench_mma_f16_dep dtype=f16_f16_f16_f16 mode=dep streams=1 repeat=8 loop_iters=4096 unroll=8 total_mma=32768 cycles=458791 cycles_per_mma=14.00119019 sink_lo=8070573679429316608 sink_hi=8070573679429316608
+RESULT benchmark=bench_mma_f16_dep dtype=f16_f16_f16_f16 mode=dep streams=1 repeat=9 loop_iters=4096 unroll=8 total_mma=32768 cycles=458852 cycles_per_mma=14.00305176 sink_lo=8070573679429316608 sink_hi=8070573679429316608
+===============================================
+Running bench_mma_f16_indep
+===============================================
+CONFIG benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 loop_iters=4096 warmup_iters=64 warmup_launches=3 repeats=10 unroll=8
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=0 loop_iters=4096 unroll=8 total_mma=65536 cycles=6357451 cycles_per_mma=97.00700378 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=1 loop_iters=4096 unroll=8 total_mma=65536 cycles=6357512 cycles_per_mma=97.00793457 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=2 loop_iters=4096 unroll=8 total_mma=65536 cycles=6357512 cycles_per_mma=97.00793457 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=3 loop_iters=4096 unroll=8 total_mma=65536 cycles=6357512 cycles_per_mma=97.00793457 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=4 loop_iters=4096 unroll=8 total_mma=65536 cycles=6357390 cycles_per_mma=97.00607300 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=5 loop_iters=4096 unroll=8 total_mma=65536 cycles=6357512 cycles_per_mma=97.00793457 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=6 loop_iters=4096 unroll=8 total_mma=65536 cycles=6357512 cycles_per_mma=97.00793457 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=7 loop_iters=4096 unroll=8 total_mma=65536 cycles=6357451 cycles_per_mma=97.00700378 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=8 loop_iters=4096 unroll=8 total_mma=65536 cycles=6357451 cycles_per_mma=97.00700378 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=2 repeat=9 loop_iters=4096 unroll=8 total_mma=65536 cycles=6357512 cycles_per_mma=97.00793457 sink_lo=0 sink_hi=0
+===============================================
+Running bench_mma_f16_indep
+===============================================
+CONFIG benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=4 loop_iters=4096 warmup_iters=64 warmup_launches=3 repeats=10 unroll=8
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=4 repeat=0 loop_iters=4096 unroll=8 total_mma=131072 cycles=8159761 cycles_per_mma=62.25403595 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=4 repeat=1 loop_iters=4096 unroll=8 total_mma=131072 cycles=8159822 cycles_per_mma=62.25450134 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=4 repeat=2 loop_iters=4096 unroll=8 total_mma=131072 cycles=8159822 cycles_per_mma=62.25450134 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=4 repeat=3 loop_iters=4096 unroll=8 total_mma=131072 cycles=8159822 cycles_per_mma=62.25450134 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=4 repeat=4 loop_iters=4096 unroll=8 total_mma=131072 cycles=8159822 cycles_per_mma=62.25450134 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=4 repeat=5 loop_iters=4096 unroll=8 total_mma=131072 cycles=8159761 cycles_per_mma=62.25403595 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=4 repeat=6 loop_iters=4096 unroll=8 total_mma=131072 cycles=8159822 cycles_per_mma=62.25450134 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=4 repeat=7 loop_iters=4096 unroll=8 total_mma=131072 cycles=8159761 cycles_per_mma=62.25403595 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=4 repeat=8 loop_iters=4096 unroll=8 total_mma=131072 cycles=8159822 cycles_per_mma=62.25450134 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=4 repeat=9 loop_iters=4096 unroll=8 total_mma=131072 cycles=8159822 cycles_per_mma=62.25450134 sink_lo=0 sink_hi=0
+===============================================
+Running bench_mma_f16_indep
+===============================================
+CONFIG benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=8 loop_iters=4096 warmup_iters=64 warmup_launches=3 repeats=10 unroll=8
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=8 repeat=0 loop_iters=4096 unroll=8 total_mma=262144 cycles=10617666 cycles_per_mma=40.50318146 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=8 repeat=1 loop_iters=4096 unroll=8 total_mma=262144 cycles=10617544 cycles_per_mma=40.50271606 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=8 repeat=2 loop_iters=4096 unroll=8 total_mma=262144 cycles=10617605 cycles_per_mma=40.50294876 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=8 repeat=3 loop_iters=4096 unroll=8 total_mma=262144 cycles=10617849 cycles_per_mma=40.50387955 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=8 repeat=4 loop_iters=4096 unroll=8 total_mma=262144 cycles=10617788 cycles_per_mma=40.50364685 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=8 repeat=5 loop_iters=4096 unroll=8 total_mma=262144 cycles=10617544 cycles_per_mma=40.50271606 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=8 repeat=6 loop_iters=4096 unroll=8 total_mma=262144 cycles=10617788 cycles_per_mma=40.50364685 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=8 repeat=7 loop_iters=4096 unroll=8 total_mma=262144 cycles=10617544 cycles_per_mma=40.50271606 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=8 repeat=8 loop_iters=4096 unroll=8 total_mma=262144 cycles=10617666 cycles_per_mma=40.50318146 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f16_indep dtype=f16_f16_f16_f16 mode=indep streams=8 repeat=9 loop_iters=4096 unroll=8 total_mma=262144 cycles=10617788 cycles_per_mma=40.50364685 sink_lo=0 sink_hi=0
+===============================================
+Running bench_mma_f32acc
+===============================================
+CONFIG benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc streams=1 loop_iters=4096 warmup_iters=64 warmup_launches=3 repeats=10 unroll=8
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc streams=1 repeat=0 loop_iters=4096 unroll=8 total_mma=32768 cycles=4198926 cycles_per_mma=128.14105225 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc streams=1 repeat=1 loop_iters=4096 unroll=8 total_mma=32768 cycles=4198743 cycles_per_mma=128.13546753 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc streams=1 repeat=2 loop_iters=4096 unroll=8 total_mma=32768 cycles=4198926 cycles_per_mma=128.14105225 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc streams=1 repeat=3 loop_iters=4096 unroll=8 total_mma=32768 cycles=4198682 cycles_per_mma=128.13360596 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc streams=1 repeat=4 loop_iters=4096 unroll=8 total_mma=32768 cycles=4198865 cycles_per_mma=128.13919067 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc streams=1 repeat=5 loop_iters=4096 unroll=8 total_mma=32768 cycles=4198865 cycles_per_mma=128.13919067 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc streams=1 repeat=6 loop_iters=4096 unroll=8 total_mma=32768 cycles=4198926 cycles_per_mma=128.14105225 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc streams=1 repeat=7 loop_iters=4096 unroll=8 total_mma=32768 cycles=4198926 cycles_per_mma=128.14105225 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc streams=1 repeat=8 loop_iters=4096 unroll=8 total_mma=32768 cycles=4198682 cycles_per_mma=128.13360596 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc streams=1 repeat=9 loop_iters=4096 unroll=8 total_mma=32768 cycles=4198926 cycles_per_mma=128.14105225 sink_lo=0 sink_hi=0
+===============================================
+Running bench_mma_f32acc
+===============================================
+CONFIG benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=2 loop_iters=4096 warmup_iters=64 warmup_launches=3 repeats=10 unroll=8
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=2 repeat=0 loop_iters=4096 unroll=8 total_mma=65536 cycles=6492684 cycles_per_mma=99.07049561 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=2 repeat=1 loop_iters=4096 unroll=8 total_mma=65536 cycles=6492623 cycles_per_mma=99.06956482 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=2 repeat=2 loop_iters=4096 unroll=8 total_mma=65536 cycles=6492867 cycles_per_mma=99.07328796 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=2 repeat=3 loop_iters=4096 unroll=8 total_mma=65536 cycles=6492745 cycles_per_mma=99.07142639 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=2 repeat=4 loop_iters=4096 unroll=8 total_mma=65536 cycles=6492806 cycles_per_mma=99.07235718 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=2 repeat=5 loop_iters=4096 unroll=8 total_mma=65536 cycles=6492623 cycles_per_mma=99.06956482 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=2 repeat=6 loop_iters=4096 unroll=8 total_mma=65536 cycles=6492745 cycles_per_mma=99.07142639 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=2 repeat=7 loop_iters=4096 unroll=8 total_mma=65536 cycles=6492745 cycles_per_mma=99.07142639 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=2 repeat=8 loop_iters=4096 unroll=8 total_mma=65536 cycles=6492623 cycles_per_mma=99.06956482 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=2 repeat=9 loop_iters=4096 unroll=8 total_mma=65536 cycles=6492623 cycles_per_mma=99.06956482 sink_lo=0 sink_hi=0
+===============================================
+Running bench_mma_f32acc
+===============================================
+CONFIG benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 loop_iters=4096 warmup_iters=64 warmup_launches=3 repeats=10 unroll=8
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=0 loop_iters=4096 unroll=8 total_mma=131072 cycles=13865795 cycles_per_mma=105.78762054 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=1 loop_iters=4096 unroll=8 total_mma=131072 cycles=13865795 cycles_per_mma=105.78762054 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=2 loop_iters=4096 unroll=8 total_mma=131072 cycles=13865795 cycles_per_mma=105.78762054 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=3 loop_iters=4096 unroll=8 total_mma=131072 cycles=13865795 cycles_per_mma=105.78762054 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=4 loop_iters=4096 unroll=8 total_mma=131072 cycles=13865917 cycles_per_mma=105.78855133 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=5 loop_iters=4096 unroll=8 total_mma=131072 cycles=13865795 cycles_per_mma=105.78762054 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=6 loop_iters=4096 unroll=8 total_mma=131072 cycles=13865856 cycles_per_mma=105.78808594 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=7 loop_iters=4096 unroll=8 total_mma=131072 cycles=13865917 cycles_per_mma=105.78855133 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=8 loop_iters=4096 unroll=8 total_mma=131072 cycles=13865856 cycles_per_mma=105.78808594 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=4 repeat=9 loop_iters=4096 unroll=8 total_mma=131072 cycles=13865917 cycles_per_mma=105.78855133 sink_lo=0 sink_hi=0
+===============================================
+Running bench_mma_f32acc
+===============================================
+CONFIG benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=8 loop_iters=4096 warmup_iters=64 warmup_launches=3 repeats=10 unroll=8
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=8 repeat=0 loop_iters=4096 unroll=8 total_mma=262144 cycles=22910315 cycles_per_mma=87.39591599 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=8 repeat=1 loop_iters=4096 unroll=8 total_mma=262144 cycles=22910315 cycles_per_mma=87.39591599 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=8 repeat=2 loop_iters=4096 unroll=8 total_mma=262144 cycles=22910315 cycles_per_mma=87.39591599 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=8 repeat=3 loop_iters=4096 unroll=8 total_mma=262144 cycles=22910315 cycles_per_mma=87.39591599 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=8 repeat=4 loop_iters=4096 unroll=8 total_mma=262144 cycles=22910376 cycles_per_mma=87.39614868 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=8 repeat=5 loop_iters=4096 unroll=8 total_mma=262144 cycles=22910315 cycles_per_mma=87.39591599 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=8 repeat=6 loop_iters=4096 unroll=8 total_mma=262144 cycles=22910315 cycles_per_mma=87.39591599 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=8 repeat=7 loop_iters=4096 unroll=8 total_mma=262144 cycles=22910376 cycles_per_mma=87.39614868 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=8 repeat=8 loop_iters=4096 unroll=8 total_mma=262144 cycles=22910376 cycles_per_mma=87.39614868 sink_lo=0 sink_hi=0
+RESULT benchmark=bench_mma_f32acc dtype=f32_f16_f16_f16 mode=fixedc_indep streams=8 repeat=9 loop_iters=4096 unroll=8 total_mma=262144 cycles=22910254 cycles_per_mma=87.39568329 sink_lo=0 sink_hi=0
+Saved raw results to /home/guyida/v100_profile/Roofline-Analysis/experiments/v100_hmma884/results/20260417_134521/results_raw.csv
+Saved summary to /home/guyida/v100_profile/Roofline-Analysis/experiments/v100_hmma884/results/20260417_134521/results_summary.csv
+Saved metadata to /home/guyida/v100_profile/Roofline-Analysis/experiments/v100_hmma884/results/20260417_134521/metadata.json
