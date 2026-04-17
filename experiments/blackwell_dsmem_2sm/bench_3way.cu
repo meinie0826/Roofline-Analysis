@@ -187,9 +187,9 @@ void d2_kernel(const half* __restrict__ A,
   const int n0 = blockIdx.y * kTileN;
   if (m0 >= M || n0 >= N) return;
 
-  // Pointer into CTA0's B buffer (used by BOTH CTAs)
-  const SmemTile* sm0 = reinterpret_cast<const SmemTile*>(
-      cluster.map_shared_rank(&sm, 0));
+  // Flat pointer into CTA0's B buffer - safer for cross-CTA access
+  const half* B0 = reinterpret_cast<const half*>(
+      cluster.map_shared_rank(&sm, 0)) + offsetof(SmemTile, B);
 
   const int tid = threadIdx.x;
   const int rbase = (tid / 16) * 4;
@@ -220,14 +220,17 @@ void d2_kernel(const half* __restrict__ A,
 
     cluster.sync(); // wait for CTA0's B
 
-    // Compute: BOTH CTAs read B from CTA0's smem (sm0)
-    // CTA0 reads local (sm0 == &sm for CTA0)
-    // CTA1 reads from CTA0 across cluster (remote DSMEM access during compute)
+    // Compute: BOTH CTAs read B from CTA0's smem via flat pointer
+    // CTA0 reads local, CTA1 reads remote DSMEM
     for (int k = 0; k < kt; ++k) {
-      for (int r = 0; r < 4; ++r)
-        for (int c = 0; c < 4; ++c)
+      for (int r = 0; r < 4; ++r) {
+        for (int c = 0; c < 4; ++c) {
+          // B index: [stage][cbase+c][k] flattened
+          int b_idx = stage * kTileN * kTileK + (cbase + c) * kTileK + k;
           acc[r*4+c] += __half2float(sm.A[stage][rbase+r][k])
-                      * __half2float(sm0->B[stage][cbase+c][k]);
+                      * __half2float(B0[b_idx]);
+        }
+      }
     }
   }
 
