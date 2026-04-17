@@ -87,14 +87,18 @@ void tcgen05_wait_ld() {
 // Host: Create tensor map for 1D TMA
 //=============================================================================
 void create_1d_tensor_map(CUtensorMap* tmap, const nv_bfloat16* ptr, size_t size) {
+  // cuTensorMapEncodeTiled expects cuuint32_t* for 1D tensor
+  cuuint32_t global_dim = static_cast<cuuint32_t>(size);
+  cuuint32_t box_dim = static_cast<cuuint32_t>(size);
+  
   CUresult err = cuTensorMapEncodeTiled(
     tmap,
     CU_TENSOR_MAP_DATA_TYPE_BFLOAT16,
     1,  // rank
     (void*)ptr,
-    &size,  // global dim
+    &global_dim,  // global dim
     nullptr,  // global strides (not needed for 1D)
-    &size,  // box dim
+    &box_dim,  // box dim
     nullptr,  // element strides
     CU_TENSOR_MAP_INTERLEAVE_NONE,
     CU_TENSOR_MAP_SWIZZLE_NONE,

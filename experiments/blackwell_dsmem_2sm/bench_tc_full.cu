@@ -187,17 +187,17 @@ uint32_t encode_inst_desc_bf16(uint32_t mma_m, uint32_t mma_n) {
 // Host: Create TMA descriptor
 //=============================================================================
 void create_tma_descriptor_2d(CUtensorMap* tmap, const nv_bfloat16* ptr,
-                              uint64_t global_dim0, uint64_t global_dim1,
-                              uint32_t box_dim0, uint32_t box_dim1) {
+                              cuuint64_t global_dim0, cuuint64_t global_dim1,
+                              cuuint32_t box_dim0, cuuint32_t box_dim1) {
   constexpr uint32_t rank = 2;
   
   // Global dimensions (reversed order for TMA)
-  uint64_t globalDim[rank] = {global_dim0, global_dim1};
-  uint64_t globalStrides[rank-1] = {global_dim0 * sizeof(nv_bfloat16)};
+  cuuint64_t globalDim[rank] = {global_dim0, global_dim1};
+  cuuint64_t globalStrides[rank-1] = {global_dim0 * sizeof(nv_bfloat16)};
   
   // Box dimensions (tile size in shared memory)
-  uint32_t boxDim[rank] = {box_dim0, box_dim1};
-  uint32_t elementStrides[rank] = {1, 1};
+  cuuint32_t boxDim[rank] = {box_dim0, box_dim1};
+  cuuint32_t elementStrides[rank] = {1, 1};
   
   CUresult err = cuTensorMapEncodeTiled(
     tmap,
