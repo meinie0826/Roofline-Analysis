@@ -1,7 +1,7 @@
 # Makefile for Blackwell DSMEM 2SM experiments
 
 NVCC = nvcc
-NVCC_FLAGS = -std=c++17 -O3 -arch=sm_103a -Xcudafe --diag_suppress=20012 --diag_suppress=20013
+NVCC_FLAGS = -std=c++17 -O3 -arch=sm_103a -Xcudafe --diag_suppress=20012 -Xcudafe --diag_suppress=20013
 
 # CUTLASS path (for existing benchmarks)
 CUTLASS_PATH ?= ../../cutlass
