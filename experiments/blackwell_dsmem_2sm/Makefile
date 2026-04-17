@@ -27,10 +27,10 @@ bench_3way: bench_3way.cu common.h
 	$(NVCC) $(NVCC_FLAGS) $< -o $@
 
 bench_tc_simple: bench_tc_simple.cu common.h
-	$(NVCC) $(NVCC_FLAGS) $< -o $@
+	$(NVCC) $(NVCC_FLAGS) $< -o $@ -lcuda
 
 bench_tc_full: bench_tc_full.cu common.h
-	$(NVCC) $(NVCC_FLAGS) $< -o $@
+	$(NVCC) $(NVCC_FLAGS) $< -o $@ -lcuda
 
 .PHONY: tc
 tc: bench_tc_simple bench_tc_full
