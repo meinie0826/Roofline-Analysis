@@ -164,42 +164,23 @@ struct CutlassRunner {
   }
 };
 
-template <int TileN, class StageCountTag>
-double dispatch_cutlass(const GemmOptions& options, const cutlass::KernelHardwareInfo& hw_info) {
-  using Runner1Sm = CutlassRunner<TileN, cutlass::gemm::KernelTmaWarpSpecialized1SmSm100, cutlass::epilogue::TmaWarpSpecialized1Sm, StageCountTag>;
-  using Runner2Sm = CutlassRunner<TileN, cutlass::gemm::KernelTmaWarpSpecialized2SmSm100, cutlass::epilogue::TmaWarpSpecialized2Sm, StageCountTag>;
-
+template <typename Runner>
+double measure_runner(Runner& runner, const GemmOptions& options, const cutlass::KernelHardwareInfo& hw_info) {
   cudaEvent_t start, stop;
   check_cuda(cudaEventCreate(&start), "cudaEventCreate start");
   check_cuda(cudaEventCreate(&stop), "cudaEventCreate stop");
 
   double total_ms = 0.0;
-  if (std::strcmp(options.mode, "1sm") == 0) {
-    Runner1Sm runner;
-    runner.initialize(options.m, options.n, options.k);
-    for (int i = 0; i < options.warmup_repeats; ++i) {
-      if (!runner.run_once(options, hw_info)) return -1.0;
-    }
-    for (int i = 0; i < options.repeats; ++i) {
-      check_cuda(cudaEventRecord(start), "cudaEventRecord start");
-      if (!runner.run_once(options, hw_info)) return -1.0;
-      check_cuda(cudaEventRecord(stop), "cudaEventRecord stop");
-      check_cuda(cudaEventSynchronize(stop), "cudaEventSynchronize");
-      total_ms += elapsed_ms(start, stop);
-    }
-  } else {
-    Runner2Sm runner;
-    runner.initialize(options.m, options.n, options.k);
-    for (int i = 0; i < options.warmup_repeats; ++i) {
-      if (!runner.run_once(options, hw_info)) return -1.0;
-    }
-    for (int i = 0; i < options.repeats; ++i) {
-      check_cuda(cudaEventRecord(start), "cudaEventRecord start");
-      if (!runner.run_once(options, hw_info)) return -1.0;
-      check_cuda(cudaEventRecord(stop), "cudaEventRecord stop");
-      check_cuda(cudaEventSynchronize(stop), "cudaEventSynchronize");
-      total_ms += elapsed_ms(start, stop);
-    }
+  runner.initialize(options.m, options.n, options.k);
+  for (int i = 0; i < options.warmup_repeats; ++i) {
+    if (!runner.run_once(options, hw_info)) return -1.0;
+  }
+  for (int i = 0; i < options.repeats; ++i) {
+    check_cuda(cudaEventRecord(start), "cudaEventRecord start");
+    if (!runner.run_once(options, hw_info)) return -1.0;
+    check_cuda(cudaEventRecord(stop), "cudaEventRecord stop");
+    check_cuda(cudaEventSynchronize(stop), "cudaEventSynchronize");
+    total_ms += elapsed_ms(start, stop);
   }
 
   check_cuda(cudaEventDestroy(start), "cudaEventDestroy start");
@@ -207,17 +188,31 @@ double dispatch_cutlass(const GemmOptions& options, const cutlass::KernelHardwar
   return total_ms / static_cast<double>(options.repeats);
 }
 
+template <int TileN, class StageCountTag>
+double dispatch_cutlass_1sm(const GemmOptions& options, const cutlass::KernelHardwareInfo& hw_info) {
+  using Runner = CutlassRunner<TileN, cutlass::gemm::KernelTmaWarpSpecialized1SmSm100, cutlass::epilogue::TmaWarpSpecialized1Sm, StageCountTag>;
+  Runner runner;
+  return measure_runner(runner, options, hw_info);
+}
+
+template <int TileN, class StageCountTag>
+double dispatch_cutlass_2sm(const GemmOptions& options, const cutlass::KernelHardwareInfo& hw_info) {
+  using Runner = CutlassRunner<TileN, cutlass::gemm::KernelTmaWarpSpecialized2SmSm100, cutlass::epilogue::TmaWarpSpecialized2Sm, StageCountTag>;
+  Runner runner;
+  return measure_runner(runner, options, hw_info);
+}
+
 template <class StageCountTag>
 double dispatch_cutlass_by_mode(const GemmOptions& options, const cutlass::KernelHardwareInfo& hw_info) {
   if (std::strcmp(options.mode, "1sm") == 0) {
-    if (options.tile_n == 64) return dispatch_cutlass<64, StageCountTag>(options, hw_info);
-    if (options.tile_n == 128) return dispatch_cutlass<128, StageCountTag>(options, hw_info);
+    if (options.tile_n == 64) return dispatch_cutlass_1sm<64, StageCountTag>(options, hw_info);
+    if (options.tile_n == 128) return dispatch_cutlass_1sm<128, StageCountTag>(options, hw_info);
     return -1.0;
   }
 
-  if (options.tile_n == 64) return dispatch_cutlass<64, StageCountTag>(options, hw_info);
-  if (options.tile_n == 128) return dispatch_cutlass<128, StageCountTag>(options, hw_info);
-  if (options.tile_n == 256) return dispatch_cutlass<256, StageCountTag>(options, hw_info);
+  if (options.tile_n == 64) return dispatch_cutlass_2sm<64, StageCountTag>(options, hw_info);
+  if (options.tile_n == 128) return dispatch_cutlass_2sm<128, StageCountTag>(options, hw_info);
+  if (options.tile_n == 256) return dispatch_cutlass_2sm<256, StageCountTag>(options, hw_info);
   return -1.0;
 }
 
