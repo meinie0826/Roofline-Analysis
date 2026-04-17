@@ -1,20 +1,34 @@
 /**
  * Correct 2SM comparison benchmark
- * 
- * Baseline: Two independent 1SM kernels (each loads B from HBM)
- * D1: Cluster kernel with software DSMEM sharing (CTA0 loads B, CTA1 copies)
- * D2: CUTLASS 2SM hardware sharing
  */
 
 #include "common.h"
 #include <iostream>
-#include <cutlass/cutlass.h>
-#include <cutlass/gemm/device/gemm_universal_adapter.h>
-#include <cutlass/gemm/kernel/default_gemm_universal.h>
-#include <cutlass/epilogue/collective/collective_builder.hpp>
-#include <cutlass/gemm/collective/collective_builder.hpp>
-#include <cutlass/gemm/dispatch_policy.hpp>
 
+#define CUTLASS_BLOCKFILL_GRID  256
+#define CUTLASS_BLOCKFILL_BLOCK 128
+
+#include "cute/tensor.hpp"
+
+#include "cutlass/cutlass.h"
+#include "cutlass/epilogue/collective/collective_builder.hpp"
+#include "cutlass/epilogue/dispatch_policy.hpp"
+#include "cutlass/epilogue/fusion/operations.hpp"
+#include "cutlass/gemm/collective/collective_builder.hpp"
+#include "cutlass/gemm/device/gemm_universal_adapter.h"
+#include "cutlass/gemm/dispatch_policy.hpp"
+#include "cutlass/gemm/kernel/gemm_universal.hpp"
+#include "cutlass/tensor_ref.h"
+#include "cutlass/util/device_memory.h"
+#include "cutlass/util/distribution.h"
+#include "cutlass/util/host_tensor.h"
+#include "cutlass/util/packed_stride.hpp"
+#include "cutlass/util/reference/device/tensor_compare.h"
+#include "cutlass/util/reference/device/tensor_fill.h"
+
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 using namespace cute;
 using namespace blackwell_dsmem_2sm;
 
@@ -22,20 +36,18 @@ using namespace blackwell_dsmem_2sm;
 // Tile shapes
 //=============================================================================
 
-template <int TileN>
-struct TileShapeForN;
+template <int TileN> struct TileShapeForN;
 template <> struct TileShapeForN<64> { using Type = Shape<_128, _64, _64>; };
 template <> struct TileShapeForN<128> { using Type = Shape<_128, _128, _64>; };
 template <> struct TileShapeForN<256> { using Type = Shape<_128, _256, _64>; };
 
-template <int TileN>
-struct TileShape2SmForN;
+template <int TileN> struct TileShape2SmForN;
 template <> struct TileShape2SmForN<64> { using Type = Shape<_256, _64, _64>; };
 template <> struct TileShape2SmForN<128> { using Type = Shape<_256, _128, _64>; };
 template <> struct TileShape2SmForN<256> { using Type = Shape<_256, _256, _64>; };
 
 //=============================================================================
-// CUTLASS Runner (reuse from bench_cutlass_2sm_gemm.cu)
+// CUTLASS Runner
 //=============================================================================
 
 template <int TileN, class MainloopSchedule, class EpilogueSchedule, class StageCountTag>
@@ -89,7 +101,6 @@ struct CutlassRunner {
   cutlass::DeviceAllocation<ElementA> A;
   cutlass::DeviceAllocation<ElementB> B;
   cutlass::DeviceAllocation<ElementC> C;
-  cutlass::DeviceAllocation<ElementD> D_ref;
   cutlass::DeviceAllocation<ElementD> D;
 
   StrideA strideA;
@@ -109,7 +120,6 @@ struct CutlassRunner {
     A.reset(static_cast<std::size_t>(m) * k);
     B.reset(static_cast<std::size_t>(k) * n);
     C.reset(static_cast<std::size_t>(m) * n);
-    D_ref.reset(static_cast<std::size_t>(m) * n);
     D.reset(static_cast<std::size_t>(m) * n);
   }
 
@@ -144,7 +154,7 @@ struct CutlassRunner {
 template <int kTileM, int kTileN, int kTileK, int kStages>
 struct D1Smem {
   alignas(128) half_t A[kStages][kTileM][kTileK];
-  align_as(128) half_t B[kStages][kTileN][kTileK];
+  alignas(128) half_t B[kStages][kTileN][kTileK];
 };
 
 template <int kTileM, int kTileN, int kTileK, int kStages>
@@ -154,8 +164,7 @@ void d1_cluster_gemm_kernel(
     half_t* __restrict__ B,
     half_t* __restrict__ C,
     int M, int N, int K,
-    int lda, int ldb, int ldc,
-    unsigned long long* timer_out)
+    int lda, int ldb, int ldc)
 {
   using Smem = D1Smem<kTileM, kTileN, kTileK, kStages>;
   extern __shared__ char smem_raw[];
@@ -164,106 +173,81 @@ void d1_cluster_gemm_kernel(
   cg::cluster_group cluster = cg::this_cluster();
   int rank = cluster.block_rank();
 
-  // Each cluster handles one M tile (2*kTileM rows)
   int m_tile = blockIdx.x;
   int n_tile = blockIdx.y;
 
-  // CTA0: rows [m_tile * 2*kTileM, m_tile * 2*kTileM + kTileM)
-  // CTA1: rows [m_tile * 2*kTileM + kTileM, m_tile * 2*kTileM + 2*kTileM)
   int m_start = m_tile * (2 * kTileM) + rank * kTileM;
   int n_start = n_tile * kTileN;
 
-  // Pointers
   half_t* gA = A + m_start * lda;
   half_t* gB = B + n_start * ldb;
   half_t* gC = C + m_start * ldc + n_start;
 
-  // Remote smem pointer
   Smem* remote_smem0 = cluster.map_shared_rank(smem, 0);
 
-  // Timer
-  unsigned long long start = 0, stop = 0;
-
-  // === K loop ===
   for (int k_offset = 0; k_offset < K; k_offset += kTileK) {
     int k_stage = (k_offset / kTileK) % kStages;
 
-    // --- Phase 1: Load A (each CTA loads its own) ---
-    for (int m = threadIdx.x; m < kTileM * kTileK; m += blockDim.x) {
-      int mi = m / kTileK;
-      int ki = m % kTileK;
+    // Load A
+    for (int i = threadIdx.x; i < kTileM * kTileK; i += blockDim.x) {
+      int mi = i / kTileK;
+      int ki = i % kTileK;
       if (m_start + mi < M && k_offset + ki < K) {
         smem->A[k_stage][mi][ki] = gA[mi * lda + k_offset + ki];
       }
     }
 
-    // --- Phase 2: Load B (CTA0 only from gmem) ---
+    // Load B (CTA0 only)
     if (rank == 0) {
-      for (int n = threadIdx.x; n < kTileN * kTileK; n += blockDim.x) {
-        int ni = n / kTileK;
-        int ki = n % kTileK;
+      for (int i = threadIdx.x; i < kTileN * kTileK; i += blockDim.x) {
+        int ni = i / kTileK;
+        int ki = i % kTileK;
         if (n_start + ni < N && k_offset + ki < K) {
           smem->B[k_stage][ni][ki] = gB[ni * ldb + k_offset + ki];
         }
       }
     }
 
-    cluster.sync();  // Ensure CTA0's B is ready
+    cluster.sync();
 
-    // --- Phase 3: CTA1 copies B from CTA0's DSMEM ---
+    // CTA1 copies B from CTA0
     if (rank == 1) {
-      if (k_offset == 0) start = clock64();
-
-      for (int n = threadIdx.x; n < kTileN * kTileK; n += blockDim.x) {
-        int ni = n / kTileK;
-        int ki = n % kTileK;
+      for (int i = threadIdx.x; i < kTileN * kTileK; i += blockDim.x) {
+        int ni = i / kTileK;
+        int ki = i % kTileK;
         smem->B[k_stage][ni][ki] = remote_smem0->B[k_stage][ni][ki];
       }
     }
 
     cluster.sync();
 
-    // --- Phase 4: Compute (simplified: just accumulate sum) ---
-    // NOTE: This is NOT real MMA, just placeholder to prevent optimization
+    // Minimal compute
     float sum = 0.0f;
     for (int i = threadIdx.x; i < kTileM * kTileN; i += blockDim.x) {
       int mi = i / kTileN;
       int ni = i % kTileN;
-      for (int ki = 0; ki < 4; ++ki) {  // Minimal compute
-        sum += static_cast<float>(smem->A[k_stage][mi][ki]) * 
-               static_cast<float>(smem->B[k_stage][ni][ki]);
-      }
+      sum += static_cast<float>(smem->A[k_stage][mi][0]) * 
+             static_cast<float>(smem->B[k_stage][ni][0]);
     }
-
-    // Write to C (minimal)
-    if (threadIdx.x == 0) {
-      if (m_start < M && n_start < N) {
-        gC[0] = static_cast<half_t>(sum);
-      }
+    if (threadIdx.x == 0 && m_start < M && n_start < N) {
+      gC[0] = static_cast<half_t>(sum);
     }
 
     __syncthreads();
   }
-
-  // Stop timer for CTA1
-  if (rank == 1) {
-    stop = clock64();
-    if (threadIdx.x == 0) {
-      *timer_out = stop - start;
-    }
-  }
 }
 
 //=============================================================================
-// Measurement functions
+// Measurement
 //=============================================================================
 
 template <typename Runner>
-double measure_cutlass(Runner& runner, int M, int N, int K, int repeats, int warmup) {
+double measure_cutlass(int M, int N, int K, int repeats, int warmup) {
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
+  Runner runner;
   runner.initialize(M, N, K);
 
   for (int w = 0; w < warmup; ++w) {
@@ -287,15 +271,13 @@ double measure_cutlass(Runner& runner, int M, int N, int K, int repeats, int war
 }
 
 double run_baseline(int M, int N, int K, int repeats, int warmup) {
-  // Baseline: Two independent 1SM kernels (run sequentially)
   using Runner = CutlassRunner<64, cutlass::gemm::KernelTmaWarpSpecialized1SmSm100,
                                cutlass::epilogue::TmaWarpSpecialized1Sm, cute::_2>;
-  Runner runner0, runner1;
   
-  double ms0 = measure_cutlass(runner0, M/2, N, K, repeats, warmup);
-  double ms1 = measure_cutlass(runner1, M/2, N, K, repeats, warmup);
+  double ms0 = measure_cutlass<Runner>(M/2, N, K, repeats, warmup);
+  double ms1 = measure_cutlass<Runner>(M/2, N, K, repeats, warmup);
   
-  return ms0 + ms1;  // Total time for both
+  return ms0 + ms1;
 }
 
 double run_d1(int M, int N, int K, int repeats, int warmup) {
@@ -304,7 +286,6 @@ double run_d1(int M, int N, int K, int repeats, int warmup) {
   constexpr int kTileK = 64;
   constexpr int kStages = 2;
 
-  // Allocate
   size_t A_size = M * K * sizeof(half_t);
   size_t B_size = K * N * sizeof(half_t);
   size_t C_size = M * N * sizeof(half_t);
@@ -318,10 +299,6 @@ double run_d1(int M, int N, int K, int repeats, int warmup) {
   cudaMemset(d_B, 1, B_size);
   cudaMemset(d_C, 0, C_size);
 
-  unsigned long long* d_timer;
-  cudaMalloc(&d_timer, sizeof(unsigned long long));
-
-  // Grid: each cluster handles 2*kTileM rows
   int clusters = (M + 2*kTileM - 1) / (2*kTileM);
   dim3 grid(clusters, (N + kTileN - 1) / kTileN);
   dim3 block(128);
@@ -339,14 +316,12 @@ double run_d1(int M, int N, int K, int repeats, int warmup) {
   config.attrs = attrs;
   config.numAttrs = 1;
 
-  // Warmup
   for (int w = 0; w < warmup; ++w) {
     cudaLaunchKernelEx(&config, d1_cluster_gemm_kernel<kTileM, kTileN, kTileK, kStages>,
-                       d_A, d_B, d_C, M, N, K, K, K, N, d_timer);
+                       d_A, d_B, d_C, M, N, K, K, K, N);
     cudaDeviceSynchronize();
   }
 
-  // Measure
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
@@ -355,7 +330,7 @@ double run_d1(int M, int N, int K, int repeats, int warmup) {
   for (int r = 0; r < repeats; ++r) {
     cudaEventRecord(start);
     cudaLaunchKernelEx(&config, d1_cluster_gemm_kernel<kTileM, kTileN, kTileK, kStages>,
-                       d_A, d_B, d_C, M, N, K, K, K, N, d_timer);
+                       d_A, d_B, d_C, M, N, K, K, K, N);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     total_ms += elapsed_ms(start, stop);
@@ -366,17 +341,14 @@ double run_d1(int M, int N, int K, int repeats, int warmup) {
   cudaFree(d_A);
   cudaFree(d_B);
   cudaFree(d_C);
-  cudaFree(d_timer);
 
   return total_ms / repeats;
 }
 
 double run_d2(int M, int N, int K, int repeats, int warmup) {
-  // D2: CUTLASS 2SM kernel
   using Runner = CutlassRunner<64, cutlass::gemm::KernelTmaWarpSpecialized2SmSm100,
                                cutlass::epilogue::TmaWarpSpecialized2Sm, cute::_2>;
-  Runner runner;
-  return measure_cutlass(runner, M, N, K, repeats, warmup);
+  return measure_cutlass<Runner>(M, N, K, repeats, warmup);
 }
 
 //=============================================================================
@@ -399,7 +371,7 @@ int main(int argc, char** argv) {
                mode, M, N, K, repeats, warmup, gpu_name().c_str());
 
   double avg_ms = -1.0;
-  
+
   if (std::strcmp(mode, "baseline") == 0) {
     avg_ms = run_baseline(M, N, K, repeats, warmup);
   } else if (std::strcmp(mode, "d1") == 0) {
