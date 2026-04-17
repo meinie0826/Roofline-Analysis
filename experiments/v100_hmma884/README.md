@@ -16,8 +16,8 @@
 |---|---|---|---:|---|
 | `bench_empty` | none | `empty` | 0 | 匹配 loop skeleton 的空基准 |
 | `bench_mma_f16_dep` | `m8n8k4 row.col f16,f16,f16,f16` | `dep` | 1 | 单依赖链 latency 代理 |
-| `bench_mma_f16_indep` | `m8n8k4 row.col f16,f16,f16,f16` | `indep` | 2/4/8 | 吞吐上限近似 |
-| `bench_mma_f32acc` | `m8n8k4 row.col f32,f16,f16,f16` | `fixedc` / `fixedc_indep` | 1/2/4/8 | mixed path lowering 与多 stream 对比 |
+| `bench_mma_f16_indep` | `m8n8k4 row.col f16,f16,f16,f16` | `indep` | 2/4/8 | 吞吐上限近似（编译期固定 streams） |
+| `bench_mma_f32acc` | `m8n8k4 row.col f32,f16,f16,f16` | `fixedc` / `fixedc_indep` | 1/2/4/8 | mixed path lowering 与多 stream 对比（编译期固定 streams） |
 
 ## 文件说明
 
@@ -38,7 +38,7 @@
 
 ### 2. 为什么要调 `streams`
 
-对于 `indep` 类 benchmark：
+对于 `indep` 类 benchmark（`bench_mma_f16_indep` 与 `bench_mma_f32acc`），当前实现会在 host 侧按 `streams` 分派到模板实例化的 kernel，计时区内不再包含运行时 `for (s < streams)` 分支：
 
 - `streams=2`：轻度打散依赖
 - `streams=4`：更接近 steady-state issue
@@ -71,6 +71,8 @@ cd experiments/v100_hmma884
 bash run.sh
 ```
 
+默认会 sweep 多个 `unroll`：`UNROLL_LIST=1,2,4,8,16`，并对 `f16/f32` 的 stream 组合做全矩阵运行。
+
 显式指定工具：
 
 ```bash
@@ -80,7 +82,9 @@ NVCC=/usr/local/corex/bin/nvcc CUOBJDUMP=cuobjdump bash run.sh
 指定参数：
 
 ```bash
-REPEATS=20 LOOP_ITERS=8192 UNROLL=8 WARMUP_ITERS=128 WARMUP_LAUNCHES=5 bash run.sh
+REPEATS=20 LOOP_ITERS=8192 WARMUP_ITERS=128 WARMUP_LAUNCHES=5 \
+UNROLL_LIST=1,2,4,8,16 F16_STREAMS_LIST=2,4,8 F32_STREAMS_LIST=1,2,4,8 \
+bash run.sh
 ```
 
 指定结果目录：
@@ -104,7 +108,7 @@ results/<timestamp>/
 - `metadata.json`：GPU / nvcc / git commit / 参数等元数据
 - `run.log`：整次运行的终端日志
 - `sass_*.txt`：每个 binary 的完整 SASS dump
-- `bench_*.txt`：每个 benchmark 的单独 stdout 记录
+- `bench_*_u*_s*.txt`：每个 benchmark 每组参数的单独 stdout 记录
 
 ### `results_raw.csv` 字段
 
@@ -130,11 +134,13 @@ results/<timestamp>/
 - `loop_iters`
 - `unroll`
 - `repeats`
+- `hmma_steps_per_mma`
 - `mean_cycles_per_mma`
 - `median_cycles_per_mma`
 - `stddev_cycles_per_mma`
 - `min_cycles_per_mma`
 - `max_cycles_per_mma`
+- `mean_cycles_per_hmma_step`：按 dtype 自动归一化后的均值（`f16` 用 2 step，`f32acc` 用 4 step）
 
 ## 建议检查顺序
 

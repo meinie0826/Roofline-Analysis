@@ -29,21 +29,34 @@ __device__ __forceinline__ void mma_f32_once(unsigned a0, unsigned a1, unsigned 
     acc.x[7] = d7;
 }
 
-__global__ void bench_mma_f32acc_kernel(DeviceResult* out, int warmup_iters, int loop_iters, int unroll, int streams) {
+template <int STREAMS>
+__device__ __forceinline__ void mma_f32_streams_once(
+    unsigned a0,
+    unsigned a1,
+    unsigned b0,
+    unsigned b1,
+    unsigned (&c)[STREAMS][4],
+    F32Acc (&acc)[STREAMS]) {
+#pragma unroll
+    for (int s = 0; s < STREAMS; ++s) {
+        mma_f32_once(a0, a1, b0, b1, c[s][0], c[s][1], c[s][2], c[s][3], acc[s]);
+    }
+}
+
+template <int STREAMS>
+__global__ void bench_mma_f32acc_kernel(DeviceResult* out, int warmup_iters, int loop_iters, int unroll) {
     if (threadIdx.x >= kThreadsPerBlock) return;
 
     unsigned a0 = 0x3c003c00u;
     unsigned a1 = 0x3c003c00u;
     unsigned b0 = 0x3c003c00u;
     unsigned b1 = 0x3c003c00u;
-    unsigned c[8][4] = {};
-    F32Acc acc[8] = {};
+    unsigned c[STREAMS][4] = {};
+    F32Acc acc[STREAMS] = {};
 
     #pragma unroll 1
     for (int i = 0; i < warmup_iters; ++i) {
-        for (int s = 0; s < streams; ++s) {
-            mma_f32_once(a0, a1, b0, b1, c[s][0], c[s][1], c[s][2], c[s][3], acc[s]);
-        }
+        mma_f32_streams_once<STREAMS>(a0, a1, b0, b1, c, acc);
     }
 
     __syncthreads();
@@ -51,10 +64,17 @@ __global__ void bench_mma_f32acc_kernel(DeviceResult* out, int warmup_iters, int
 
     #pragma unroll 1
     for (int i = 0; i < loop_iters; ++i) {
-        for (int u = 0; u < unroll; ++u) {
-            for (int s = 0; s < streams; ++s) {
-                mma_f32_once(a0, a1, b0, b1, c[s][0], c[s][1], c[s][2], c[s][3], acc[s]);
-            }
+        if (unroll >= 1) mma_f32_streams_once<STREAMS>(a0, a1, b0, b1, c, acc);
+        if (unroll >= 2) mma_f32_streams_once<STREAMS>(a0, a1, b0, b1, c, acc);
+        if (unroll >= 4) {
+            mma_f32_streams_once<STREAMS>(a0, a1, b0, b1, c, acc);
+            mma_f32_streams_once<STREAMS>(a0, a1, b0, b1, c, acc);
+        }
+        if (unroll >= 8) {
+            for (int j = 0; j < 4; ++j) mma_f32_streams_once<STREAMS>(a0, a1, b0, b1, c, acc);
+        }
+        if (unroll >= 16) {
+            for (int j = 0; j < 8; ++j) mma_f32_streams_once<STREAMS>(a0, a1, b0, b1, c, acc);
         }
     }
 
@@ -63,7 +83,8 @@ __global__ void bench_mma_f32acc_kernel(DeviceResult* out, int warmup_iters, int
     if (threadIdx.x == 0) {
         unsigned long long lo = 0;
         unsigned long long hi = 0;
-        for (int s = 0; s < streams; ++s) {
+#pragma unroll
+        for (int s = 0; s < STREAMS; ++s) {
             lo ^= (static_cast<unsigned long long>(__float_as_uint(acc[s].x[1])) << 32) | __float_as_uint(acc[s].x[0]);
             hi ^= (static_cast<unsigned long long>(__float_as_uint(acc[s].x[3])) << 32) | __float_as_uint(acc[s].x[2]);
             lo ^= (static_cast<unsigned long long>(__float_as_uint(acc[s].x[5])) << 32) | __float_as_uint(acc[s].x[4]);
@@ -100,13 +121,25 @@ int main(int argc, char** argv) {
     print_options("bench_mma_f32acc", options);
 
     for (int i = 0; i < options.warmup_launches; ++i) {
-        bench_mma_f32acc_kernel<<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll, options.streams);
+        switch (options.streams) {
+            case 1: bench_mma_f32acc_kernel<1><<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll); break;
+            case 2: bench_mma_f32acc_kernel<2><<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll); break;
+            case 4: bench_mma_f32acc_kernel<4><<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll); break;
+            case 8: bench_mma_f32acc_kernel<8><<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll); break;
+            default: std::fprintf(stderr, "Unsupported streams=%d\n", options.streams); return 1;
+        }
         check_kernel("bench_mma_f32acc warmup");
     }
 
     const unsigned long long total_mma = static_cast<unsigned long long>(options.loop_iters) * static_cast<unsigned long long>(options.unroll) * static_cast<unsigned long long>(options.streams);
     for (int repeat = 0; repeat < options.repeats; ++repeat) {
-        bench_mma_f32acc_kernel<<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll, options.streams);
+        switch (options.streams) {
+            case 1: bench_mma_f32acc_kernel<1><<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll); break;
+            case 2: bench_mma_f32acc_kernel<2><<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll); break;
+            case 4: bench_mma_f32acc_kernel<4><<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll); break;
+            case 8: bench_mma_f32acc_kernel<8><<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll); break;
+            default: std::fprintf(stderr, "Unsupported streams=%d\n", options.streams); return 1;
+        }
         check_kernel("bench_mma_f32acc");
         const DeviceResult result = fetch_result(d_result);
         print_result_line("bench_mma_f32acc", options.dtype, options.mode, options.streams, repeat, options.loop_iters, options.unroll, total_mma, result);

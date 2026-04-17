@@ -11,7 +11,9 @@ REPEATS=${REPEATS:-10}
 LOOP_ITERS=${LOOP_ITERS:-4096}
 WARMUP_ITERS=${WARMUP_ITERS:-64}
 WARMUP_LAUNCHES=${WARMUP_LAUNCHES:-3}
-UNROLL=${UNROLL:-8}
+UNROLL_LIST=${UNROLL_LIST:-1,2,4,8,16}
+F16_STREAMS_LIST=${F16_STREAMS_LIST:-2,4,8}
+F32_STREAMS_LIST=${F32_STREAMS_LIST:-1,2,4,8}
 
 if [[ -z "${OUTDIR:-}" ]]; then
   TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
@@ -52,7 +54,9 @@ metadata = {
   "warmup_iters": $WARMUP_ITERS,
   "warmup_launches": $WARMUP_LAUNCHES,
   "repeats": $REPEATS,
-  "unroll": $UNROLL,
+  "unroll_list": "$UNROLL_LIST",
+  "f16_streams_list": "$F16_STREAMS_LIST",
+  "f32_streams_list": "$F32_STREAMS_LIST",
 }
 with open("$METADATA_JSON", "w") as f:
     json.dump(metadata, f, indent=2)
@@ -114,12 +118,20 @@ PY
 
 run_case() {
   local name="$1"
+  local unroll="$2"
   shift
-  local log="$OUTDIR/${name}.txt"
+  shift
+  local suffix="u${unroll}"
+  for arg in "$@"; do
+    if [[ "$arg" == --streams=* ]]; then
+      suffix="${suffix}_s${arg#--streams=}"
+    fi
+  done
+  local log="$OUTDIR/${name}_${suffix}.txt"
   echo "==============================================="
-  echo "Running $name"
+  echo "Running $name --unroll=$unroll $*"
   echo "==============================================="
-  "./$name" --loop-iters="$LOOP_ITERS" --warmup-iters="$WARMUP_ITERS" --warmup-launches="$WARMUP_LAUNCHES" --repeats="$REPEATS" --unroll="$UNROLL" "$@" | tee "$log"
+  "./$name" --loop-iters="$LOOP_ITERS" --warmup-iters="$WARMUP_ITERS" --warmup-launches="$WARMUP_LAUNCHES" --repeats="$REPEATS" --unroll="$unroll" "$@" | tee "$log"
   append_results "$log"
 }
 
@@ -132,15 +144,20 @@ dump_sass bench_mma_f16_dep
 dump_sass bench_mma_f16_indep
 dump_sass bench_mma_f32acc
 
-run_case bench_empty
-run_case bench_mma_f16_dep
-run_case bench_mma_f16_indep --streams=2
-run_case bench_mma_f16_indep --streams=4
-run_case bench_mma_f16_indep --streams=8
-run_case bench_mma_f32acc --streams=1
-run_case bench_mma_f32acc --streams=2
-run_case bench_mma_f32acc --streams=4
-run_case bench_mma_f32acc --streams=8
+IFS=',' read -r -a UNROLL_VALUES <<< "$UNROLL_LIST"
+IFS=',' read -r -a F16_STREAM_VALUES <<< "$F16_STREAMS_LIST"
+IFS=',' read -r -a F32_STREAM_VALUES <<< "$F32_STREAMS_LIST"
+
+for unroll in "${UNROLL_VALUES[@]}"; do
+  run_case bench_empty "$unroll"
+  run_case bench_mma_f16_dep "$unroll"
+  for streams in "${F16_STREAM_VALUES[@]}"; do
+    run_case bench_mma_f16_indep "$unroll" --streams="$streams"
+  done
+  for streams in "${F32_STREAM_VALUES[@]}"; do
+    run_case bench_mma_f32acc "$unroll" --streams="$streams"
+  done
+done
 
 python3 - "$RAW_CSV" "$SUMMARY_CSV" <<'PY'
 import csv
@@ -149,6 +166,14 @@ import sys
 from collections import defaultdict
 
 raw_path, summary_path = sys.argv[1], sys.argv[2]
+
+def hmma_steps_per_mma(dtype):
+    if dtype == "f16_f16_f16_f16":
+        return 2
+    if dtype == "f32_f16_f16_f16":
+        return 4
+    return 0
+
 groups = defaultdict(list)
 with open(raw_path, newline='') as f:
     reader = csv.DictReader(f)
@@ -160,20 +185,27 @@ with open(summary_path, 'w', newline='') as f:
     writer = csv.writer(f)
     writer.writerow([
         'benchmark', 'dtype', 'mode', 'streams', 'loop_iters', 'unroll', 'repeats',
+        'hmma_steps_per_mma',
         'mean_cycles_per_mma', 'median_cycles_per_mma', 'stddev_cycles_per_mma',
-        'min_cycles_per_mma', 'max_cycles_per_mma'
+        'min_cycles_per_mma', 'max_cycles_per_mma',
+        'mean_cycles_per_hmma_step'
     ])
     for key in sorted(groups):
         values = groups[key]
         stddev = statistics.pstdev(values) if len(values) > 1 else 0.0
+        steps = hmma_steps_per_mma(key[1])
+        mean_cycles = statistics.mean(values)
+        mean_per_step = (mean_cycles / steps) if steps else 0.0
         writer.writerow([
             *key,
             len(values),
-            f"{statistics.mean(values):.8f}",
+            steps,
+            f"{mean_cycles:.8f}",
             f"{statistics.median(values):.8f}",
             f"{stddev:.8f}",
             f"{min(values):.8f}",
             f"{max(values):.8f}",
+            f"{mean_per_step:.8f}",
         ])
 PY
 

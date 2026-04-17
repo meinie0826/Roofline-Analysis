@@ -26,7 +26,21 @@ __device__ __forceinline__ void mma_f16_once(
     c3 = d3;
 }
 
-__global__ void bench_mma_f16_indep_kernel(DeviceResult* out, int warmup_iters, int loop_iters, int unroll, int streams) {
+template <int STREAMS>
+__device__ __forceinline__ void mma_f16_streams_once(
+    unsigned a0,
+    unsigned a1,
+    unsigned b0,
+    unsigned b1,
+    unsigned (&c)[STREAMS][4]) {
+#pragma unroll
+    for (int s = 0; s < STREAMS; ++s) {
+        mma_f16_once(a0, a1, b0, b1, c[s][0], c[s][1], c[s][2], c[s][3]);
+    }
+}
+
+template <int STREAMS>
+__global__ void bench_mma_f16_indep_kernel(DeviceResult* out, int warmup_iters, int loop_iters, int unroll) {
     if (threadIdx.x >= kThreadsPerBlock) return;
 
     unsigned a0 = 0x3c003c00u;
@@ -34,13 +48,11 @@ __global__ void bench_mma_f16_indep_kernel(DeviceResult* out, int warmup_iters, 
     unsigned b0 = 0x3c003c00u;
     unsigned b1 = 0x3c003c00u;
 
-    unsigned c[8][4] = {};
+    unsigned c[STREAMS][4] = {};
 
     #pragma unroll 1
     for (int i = 0; i < warmup_iters; ++i) {
-        for (int s = 0; s < streams; ++s) {
-            mma_f16_once(a0, a1, b0, b1, c[s][0], c[s][1], c[s][2], c[s][3]);
-        }
+        mma_f16_streams_once<STREAMS>(a0, a1, b0, b1, c);
     }
 
     __syncthreads();
@@ -48,10 +60,17 @@ __global__ void bench_mma_f16_indep_kernel(DeviceResult* out, int warmup_iters, 
 
     #pragma unroll 1
     for (int i = 0; i < loop_iters; ++i) {
-        for (int u = 0; u < unroll; ++u) {
-            for (int s = 0; s < streams; ++s) {
-                mma_f16_once(a0, a1, b0, b1, c[s][0], c[s][1], c[s][2], c[s][3]);
-            }
+        if (unroll >= 1) mma_f16_streams_once<STREAMS>(a0, a1, b0, b1, c);
+        if (unroll >= 2) mma_f16_streams_once<STREAMS>(a0, a1, b0, b1, c);
+        if (unroll >= 4) {
+            mma_f16_streams_once<STREAMS>(a0, a1, b0, b1, c);
+            mma_f16_streams_once<STREAMS>(a0, a1, b0, b1, c);
+        }
+        if (unroll >= 8) {
+            for (int j = 0; j < 4; ++j) mma_f16_streams_once<STREAMS>(a0, a1, b0, b1, c);
+        }
+        if (unroll >= 16) {
+            for (int j = 0; j < 8; ++j) mma_f16_streams_once<STREAMS>(a0, a1, b0, b1, c);
         }
     }
 
@@ -60,7 +79,8 @@ __global__ void bench_mma_f16_indep_kernel(DeviceResult* out, int warmup_iters, 
     if (threadIdx.x == 0) {
         unsigned long long lo = 0;
         unsigned long long hi = 0;
-        for (int s = 0; s < streams; ++s) {
+#pragma unroll
+        for (int s = 0; s < STREAMS; ++s) {
             lo ^= (static_cast<unsigned long long>(c[s][1]) << 32) | c[s][0];
             hi ^= (static_cast<unsigned long long>(c[s][3]) << 32) | c[s][2];
         }
@@ -94,13 +114,23 @@ int main(int argc, char** argv) {
     print_options("bench_mma_f16_indep", options);
 
     for (int i = 0; i < options.warmup_launches; ++i) {
-        bench_mma_f16_indep_kernel<<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll, options.streams);
+        switch (options.streams) {
+            case 2: bench_mma_f16_indep_kernel<2><<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll); break;
+            case 4: bench_mma_f16_indep_kernel<4><<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll); break;
+            case 8: bench_mma_f16_indep_kernel<8><<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll); break;
+            default: std::fprintf(stderr, "Unsupported streams=%d for indep benchmark\n", options.streams); return 1;
+        }
         check_kernel("bench_mma_f16_indep warmup");
     }
 
     const unsigned long long total_mma = static_cast<unsigned long long>(options.loop_iters) * static_cast<unsigned long long>(options.unroll) * static_cast<unsigned long long>(options.streams);
     for (int repeat = 0; repeat < options.repeats; ++repeat) {
-        bench_mma_f16_indep_kernel<<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll, options.streams);
+        switch (options.streams) {
+            case 2: bench_mma_f16_indep_kernel<2><<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll); break;
+            case 4: bench_mma_f16_indep_kernel<4><<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll); break;
+            case 8: bench_mma_f16_indep_kernel<8><<<kBlocks, kThreadsPerBlock>>>(d_result, options.warmup_iters, options.loop_iters, options.unroll); break;
+            default: std::fprintf(stderr, "Unsupported streams=%d for indep benchmark\n", options.streams); return 1;
+        }
         check_kernel("bench_mma_f16_indep");
         const DeviceResult result = fetch_result(d_result);
         print_result_line("bench_mma_f16_indep", options.dtype, options.mode, options.streams, repeat, options.loop_iters, options.unroll, total_mma, result);
