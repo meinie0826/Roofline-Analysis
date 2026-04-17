@@ -16,8 +16,10 @@
 |---|---|---|---:|---|
 | `bench_empty` | none | `empty` | 0 | 匹配 loop skeleton 的空基准 |
 | `bench_empty_matched_dep` | none | `empty_matched_dep` | 1 | 与 `bench_mma_f16_dep` 同骨架的 matched-empty（显式标量 ALU 指令，用于 subtraction） |
+| `bench_empty_matched_f32dep` | none | `empty_matched_f32dep` | 1 | 与 `bench_mma_f32_dep` 同骨架的 matched-empty（显式标量 ALU 指令，用于 subtraction） |
 | `bench_empty_matched_f32acc` | none | `empty_matched_f32acc` | 1/2/4/8 | 与 `bench_mma_f32acc` 同骨架的 matched-empty（显式标量 ALU 指令，用于 subtraction） |
 | `bench_mma_f16_dep` | `m8n8k4 row.col f16,f16,f16,f16` | `dep` | 1 | 单依赖链 latency 代理 |
+| `bench_mma_f32_dep` | `m8n8k4 row.col f32,f16,f16,f32` | `dep` | 1 | 与 `fp16 dep` 同口径的 FP32 accumulator 单链依赖 |
 | `bench_mma_f16_indep` | `m8n8k4 row.col f16,f16,f16,f16` | `indep` | 2/4/8 | 吞吐上限近似（编译期固定 streams） |
 | `bench_mma_f32acc` | `m8n8k4 row.col f32,f16,f16,f16` | `fixedc` / `fixedc_indep` | 1/2/4/8 | mixed path lowering 与多 stream 对比（编译期固定 streams） |
 
@@ -26,8 +28,10 @@
 - [common.h](common.h)：共享参数解析、结果结构、打印格式、CUDA 检查逻辑
 - [bench_empty.cu](bench_empty.cu)：matched empty baseline
 - [bench_empty_matched_dep.cu](bench_empty_matched_dep.cu)：与 `bench_mma_f16_dep` 同构、且不会被优化为空的 subtraction baseline
+- [bench_empty_matched_f32dep.cu](bench_empty_matched_f32dep.cu)：与 `bench_mma_f32_dep` 同构、且不会被优化为空的 subtraction baseline
 - [bench_empty_matched_f32acc.cu](bench_empty_matched_f32acc.cu)：与 `bench_mma_f32acc` 同构、且不会被优化为空的 subtraction baseline
 - [bench_mma_f16_dep.cu](bench_mma_f16_dep.cu)：FP16 path 单链依赖
+- [bench_mma_f32_dep.cu](bench_mma_f32_dep.cu)：FP32 accumulator 真依赖链
 - [bench_mma_f16_indep.cu](bench_mma_f16_indep.cu)：FP16 path 多独立链
 - [bench_mma_f32acc.cu](bench_mma_f32acc.cu)：mixed path，多 stream 版本
 - [run.sh](run.sh)：统一编译、反汇编、运行、写 raw/summary/metadata
@@ -65,6 +69,14 @@ mma.sync.aligned.m8n8k4.row.col.f32.f16.f16.f16
 - 比较 single-stream 与 multi-stream 的 steady-state 差异
 
 不要把它和 `bench_mma_f16_dep` 当成完全同口径的“真依赖链 latency”结果。
+
+如果你想和 `bench_mma_f16_dep` 直接对齐，请优先看 `bench_mma_f32_dep`。它使用：
+
+```ptx
+mma.sync.aligned.m8n8k4.row.col.f32.f16.f16.f32
+```
+
+这样 `C/D` 都是 `f32` accumulator，下一条可以直接吃上一条输出，更接近真正的单链依赖延迟口径。
 
 ## 运行方式
 

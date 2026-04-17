@@ -152,13 +152,17 @@ run_case() {
 
 compile bench_empty.cu bench_empty
 compile bench_empty_matched_dep.cu bench_empty_matched_dep
+compile bench_empty_matched_f32dep.cu bench_empty_matched_f32dep
 compile bench_empty_matched_f32acc.cu bench_empty_matched_f32acc
 compile bench_mma_f16_dep.cu bench_mma_f16_dep
+compile bench_mma_f32_dep.cu bench_mma_f32_dep
 compile bench_mma_f16_indep.cu bench_mma_f16_indep
 compile bench_mma_f32acc.cu bench_mma_f32acc
 
 dump_sass bench_mma_f16_dep
 dump_sass bench_empty_matched_dep
+dump_sass bench_mma_f32_dep
+dump_sass bench_empty_matched_f32dep
 dump_sass bench_mma_f16_indep
 dump_sass bench_empty_matched_f32acc
 dump_sass bench_mma_f32acc
@@ -171,6 +175,8 @@ for unroll in "${UNROLL_VALUES[@]}"; do
   run_case bench_empty "$unroll"
   run_case bench_empty_matched_dep "$unroll"
   run_case bench_mma_f16_dep "$unroll"
+  run_case bench_empty_matched_f32dep "$unroll"
+  run_case bench_mma_f32_dep "$unroll"
   for streams in "${F32_STREAM_VALUES[@]}"; do
     run_case bench_empty_matched_f32acc "$unroll" --streams="$streams"
   done
@@ -194,6 +200,8 @@ def hmma_steps_per_mma(dtype):
     if dtype == "f16_f16_f16_f16":
         return 2
     if dtype == "f32_f16_f16_f16":
+        return 4
+    if dtype == "f32_f16_f16_f32":
         return 4
     return 0
 
@@ -248,7 +256,9 @@ summary_path, derived_path = sys.argv[1], sys.argv[2]
 matched_f16 = {}
 dep_f16 = {}
 matched_f32 = {}
+matched_f32_dep = {}
 mma_f32 = {}
+mma_f32_dep = {}
 with open(summary_path, newline='') as f:
     reader = csv.DictReader(f)
     for row in reader:
@@ -258,6 +268,12 @@ with open(summary_path, newline='') as f:
         elif row["benchmark"] == "bench_mma_f16_dep":
             key = (row["loop_iters"], row["unroll"], row["streams"])
             dep_f16[key] = row
+        elif row["benchmark"] == "bench_empty_matched_f32dep":
+            key = (row["loop_iters"], row["unroll"], row["streams"])
+            matched_f32_dep[key] = row
+        elif row["benchmark"] == "bench_mma_f32_dep":
+            key = (row["loop_iters"], row["unroll"], row["streams"])
+            mma_f32_dep[key] = row
         elif row["benchmark"] == "bench_empty_matched_f32acc":
             key = (row["loop_iters"], row["unroll"], row["streams"])
             matched_f32[key] = row
@@ -305,6 +321,30 @@ with open(derived_path, "w", newline="") as f:
             f"{delta:.8f}",
             f"{(delta / 2.0):.8f}",
         ])
+    for key in sorted(mma_f32_dep):
+        if key not in matched_f32_dep:
+            continue
+        mma_row = mma_f32_dep[key]
+        empty_row = matched_f32_dep[key]
+        mma_mean = float(mma_row["mean_cycles_per_mma"])
+        empty_mean = float(empty_row["mean_cycles_per_mma"])
+        mma_cycles = float(mma_row["mean_cycles"])
+        empty_cycles = float(empty_row["mean_cycles"])
+        delta = mma_mean - empty_mean
+        writer.writerow([
+            mma_row["benchmark"],
+            mma_row["mode"],
+            key[0],
+            key[1],
+            key[2],
+            f"{mma_cycles:.2f}",
+            f"{empty_cycles:.2f}",
+            f"{(mma_cycles - empty_cycles):.2f}",
+            f"{mma_mean:.8f}",
+            f"{empty_mean:.8f}",
+            f"{delta:.8f}",
+            f"{(delta / 4.0):.8f}",
+        ])
     for key in sorted(mma_f32):
         if key not in matched_f32:
             continue
@@ -339,7 +379,9 @@ summary_path, compare_path = sys.argv[1], sys.argv[2]
 bench_empty = {}
 bench_empty_matched_dep = {}
 bench_empty_matched_f32acc = {}
+bench_empty_matched_f32dep = {}
 bench_mma_f16_dep = {}
+bench_mma_f32_dep = {}
 bench_mma_f32acc = {}
 
 with open(summary_path, newline='') as f:
@@ -352,8 +394,12 @@ with open(summary_path, newline='') as f:
             bench_empty_matched_dep[key] = row
         elif row["benchmark"] == "bench_empty_matched_f32acc":
             bench_empty_matched_f32acc[key] = row
+        elif row["benchmark"] == "bench_empty_matched_f32dep":
+            bench_empty_matched_f32dep[key] = row
         elif row["benchmark"] == "bench_mma_f16_dep":
             bench_mma_f16_dep[key] = row
+        elif row["benchmark"] == "bench_mma_f32_dep":
+            bench_mma_f32_dep[key] = row
         elif row["benchmark"] == "bench_mma_f32acc":
             bench_mma_f32acc[key] = row
 
@@ -405,6 +451,12 @@ with open(compare_path, "w", newline="") as f:
         empty_row = bench_empty.get((row["loop_iters"], row["unroll"]))
         matched_row = bench_empty_matched_dep.get(key)
         write_row(writer, row, empty_row, matched_row, 2.0)
+
+    for key in sorted(bench_mma_f32_dep):
+        row = bench_mma_f32_dep[key]
+        empty_row = bench_empty.get((row["loop_iters"], row["unroll"]))
+        matched_row = bench_empty_matched_f32dep.get(key)
+        write_row(writer, row, empty_row, matched_row, 4.0)
 
     for key in sorted(bench_mma_f32acc):
         row = bench_mma_f32acc[key]
