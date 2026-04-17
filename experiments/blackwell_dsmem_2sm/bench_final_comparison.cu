@@ -9,23 +9,21 @@
 #include <cooperative_groups.h>
 #include <cuda_fp16.h>
 #include <cstdio>
-#include <chrono>
 
-#include <cutlass/cutlass.h>
-#include <cutlass/gemm/device/gemm_universal_adapter.h>
-#include <cutlass/gemm/kernel/gemm_universal.hpp>
-#include <cutlass/gemm/collective/collective_mma.hpp>
-#include <cutlass/gemm/kernel/default_gemm_universal.hpp>
-#include <cutlass/layout/matrix.h>
-#include <cutlass/util/packed_stride.hpp>
+#include "cute/tensor.hpp"
+#include "cutlass/cutlass.h"
+#include "cutlass/epilogue/collective/collective_builder.hpp"
+#include "cutlass/gemm/collective/collective_builder.hpp"
+#include "cutlass/gemm/device/gemm_universal_adapter.h"
+#include "cutlass/gemm/kernel/gemm_universal.hpp"
+#include "cutlass/util/packed_stride.hpp"
 
 namespace cg = cooperative_groups;
 using namespace blackwell_dsmem_2sm;
 
 //=============================================================================
-// CUTLASS kernel wrappers
+// CUTLASS type aliases
 //=============================================================================
-
 using ElementA = cutlass::half_t;
 using ElementB = cutlass::half_t;
 using ElementC = cutlass::half_t;
@@ -35,29 +33,9 @@ using LayoutA = cutlass::layout::RowMajor;
 using LayoutB = cutlass::layout::ColumnMajor;
 using LayoutC = cutlass::layout::ColumnMajor;
 
-template<int TileM, int TileN, int TileK, typename Schedule>
-struct CutlassGemm {
-  using CollectiveMma = cutlass::gemm::collective::CollectiveMma<
-    Schedule,
-    cutlass::gemm::GemmShape<TileM, TileN, TileK>,
-    ElementA, LayoutA,
-    ElementB, LayoutB,
-    ElementAccumulator, LayoutC
-  >;
-  
-  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-    cutlass::epilogue::TmaWarpSpecialized1Sm,
-    cutlass::gemm::GemmShape<TileM, TileN, TileK>,
-    ElementAccumulator, ElementC, LayoutC, ElementC, LayoutC
-  >;
-  
-  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-    CollectiveMma, CollectiveEpilogue
-  >;
-  
-  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
-};
-
+//=============================================================================
+// Helper to run CUTLASS kernel
+//=============================================================================
 template<typename Gemm>
 double run_cutlass(const half* d_A, const half* d_B, half* d_C,
                    int M, int N, int K, int repeats, int warmup) {
@@ -129,7 +107,6 @@ void d1_cluster_gemm_kernel(
   cg::cluster_group cluster = cg::this_cluster();
   int rank = cluster.block_rank();
   
-  // CTA0 handles rows 0-63, CTA1 handles rows 64-127
   int m_start = blockIdx.x * 128 + rank * 64;
   int n_start = blockIdx.y * 64;
   
@@ -144,7 +121,7 @@ void d1_cluster_gemm_kernel(
     int stage = (k_offset / 32) % 2;
     int k_tiles = min(32, K - k_offset);
     
-    // Each CTA loads its portion of A
+    // Load A
     for (int i = tid; i < 64 * 32; i += 128) {
       int m = i / 32, k = i % 32;
       if (m_start + m < M && k_offset + k < K) {
@@ -154,7 +131,7 @@ void d1_cluster_gemm_kernel(
       }
     }
     
-    // Only CTA0 loads B from HBM
+    // Load B (CTA0 only)
     if (rank == 0) {
       for (int i = tid; i < 64 * 32; i += 128) {
         int n = i / 32, k = i % 32;
@@ -168,7 +145,7 @@ void d1_cluster_gemm_kernel(
     
     cluster.sync();
     
-    // CTA1 copies B from CTA0's DSMEM
+    // CTA1 copies B from CTA0
     if (rank == 1) {
       for (int i = tid; i < 64 * 32; i += 128) {
         int n = i / 32, k = i % 32;
@@ -239,10 +216,22 @@ int main(int argc, char** argv) {
   
   // Baseline: CUTLASS 1SM (tile 128×64)
   if (std::strcmp(mode, "all") == 0 || std::strcmp(mode, "baseline") == 0) {
-    using Gemm1SM = CutlassGemm<
-      128, 64, 32,
-      cutlass::gemm::KernelTmaWarpSpecialized1SmSm100
-    >::Gemm;
+    using Gemm1SM = cutlass::gemm::device::GemmUniversalAdapter<
+      cutlass::gemm::kernel::GemmUniversal<
+        cutlass::gemm::collective::CollectiveMma<
+          cutlass::gemm::KernelTmaWarpSpecialized1SmSm100,
+          cutlass::gemm::GemmShape<128, 64, 32>,
+          ElementA, LayoutA,
+          ElementB, LayoutB,
+          ElementAccumulator, LayoutC
+        >,
+        cutlass::epilogue::collective::CollectiveEpilogue<
+          cutlass::epilogue::TmaWarpSpecialized1Sm,
+          cutlass::gemm::GemmShape<128, 64, 32>,
+          ElementAccumulator, ElementC, LayoutC, ElementC, LayoutC
+        >
+      >
+    >;
     
     double ms = run_cutlass<Gemm1SM>(d_A, d_B, d_C, M, N, K, repeats, warmup);
     if (ms > 0) {
@@ -288,15 +277,25 @@ int main(int argc, char** argv) {
   
   // D2: CUTLASS 2SM (tile 256×64, real mma.2sm)
   if (std::strcmp(mode, "all") == 0 || std::strcmp(mode, "d2") == 0) {
-    using Gemm2SM = CutlassGemm<
-      256, 64, 32,
-      cutlass::gemm::KernelTmaWarpSpecialized2SmSm100
-    >::Gemm;
+    using Gemm2SM = cutlass::gemm::device::GemmUniversalAdapter<
+      cutlass::gemm::kernel::GemmUniversal<
+        cutlass::gemm::collective::CollectiveMma<
+          cutlass::gemm::KernelTmaWarpSpecialized2SmSm100,
+          cutlass::gemm::GemmShape<256, 64, 32>,
+          ElementA, LayoutA,
+          ElementB, LayoutB,
+          ElementAccumulator, LayoutC
+        >,
+        cutlass::epilogue::collective::CollectiveEpilogue<
+          cutlass::epilogue::TmaWarpSpecialized2Sm,
+          cutlass::gemm::GemmShape<256, 64, 32>,
+          ElementAccumulator, ElementC, LayoutC, ElementC, LayoutC
+        >
+      >
+    >;
     
     double ms = run_cutlass<Gemm2SM>(d_A, d_B, d_C, M, N, K, repeats, warmup);
     if (ms > 0) {
-      // Note: D2 tile is 2× larger, so we need to adjust GFLOPS for fair comparison
-      // Or just report the raw performance
       std::fprintf(stdout, "RESULT mode=d2 elapsed_ms=%.6f gflops=%.2f\n", ms, gflops / ms);
     }
   }
