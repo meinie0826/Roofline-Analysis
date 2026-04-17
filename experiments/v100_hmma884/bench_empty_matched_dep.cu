@@ -13,8 +13,14 @@ __device__ __forceinline__ void fake_mma_f16_once(
     unsigned& c1,
     unsigned& c2,
     unsigned& c3) {
-    // Keep the same dataflow shape as mma_f16_once, but execute no real compute instruction.
-    asm volatile("" : "+r"(c0), "+r"(c1), "+r"(c2), "+r"(c3) : "r"(a0), "r"(a1), "r"(b0), "r"(b1));
+    // Use real ALU instructions so the matched-empty cannot be optimized into nothing.
+    asm volatile(
+        "add.u32 %0, %0, %4;\n\t"
+        "xor.b32 %1, %1, %5;\n\t"
+        "add.u32 %2, %2, %6;\n\t"
+        "xor.b32 %3, %3, %7;\n\t"
+        : "+r"(c0), "+r"(c1), "+r"(c2), "+r"(c3)
+        : "r"(a0), "r"(a1), "r"(b0), "r"(b1));
 }
 
 __global__ void bench_empty_matched_dep_kernel(DeviceResult* out, int warmup_iters, int loop_iters, int unroll) {

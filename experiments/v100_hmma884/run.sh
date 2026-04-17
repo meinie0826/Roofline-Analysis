@@ -157,7 +157,9 @@ compile bench_mma_f16_indep.cu bench_mma_f16_indep
 compile bench_mma_f32acc.cu bench_mma_f32acc
 
 dump_sass bench_mma_f16_dep
+dump_sass bench_empty_matched_dep
 dump_sass bench_mma_f16_indep
+dump_sass bench_empty_matched_f32acc
 dump_sass bench_mma_f32acc
 
 IFS=',' read -r -a UNROLL_VALUES <<< "$UNROLL_LIST"

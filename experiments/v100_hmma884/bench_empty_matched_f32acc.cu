@@ -19,12 +19,33 @@ __device__ __forceinline__ void fake_mma_f32_once(
     unsigned c2,
     unsigned c3,
     F32Acc& acc) {
-    // Keep dataflow shape/register pressure similar to mma_f32_once without issuing HMMA.
+    const float fa0 = __uint_as_float(a0);
+    const float fa1 = __uint_as_float(a1);
+    const float fb0 = __uint_as_float(b0);
+    const float fb1 = __uint_as_float(b1);
+
+    // Use real scalar FP instructions to preserve register pressure and prevent elimination.
     asm volatile(
-        ""
+        "add.rn.f32 %0, %0, %8;\n\t"
+        "add.rn.f32 %1, %1, %9;\n\t"
+        "add.rn.f32 %2, %2, %10;\n\t"
+        "add.rn.f32 %3, %3, %11;\n\t"
+        "fma.rn.f32 %4, %4, %8, %10;\n\t"
+        "fma.rn.f32 %5, %5, %9, %11;\n\t"
+        "add.rn.f32 %6, %6, %4;\n\t"
+        "add.rn.f32 %7, %7, %5;\n\t"
         : "+f"(acc.x[0]), "+f"(acc.x[1]), "+f"(acc.x[2]), "+f"(acc.x[3]),
           "+f"(acc.x[4]), "+f"(acc.x[5]), "+f"(acc.x[6]), "+f"(acc.x[7])
-        : "r"(a0), "r"(a1), "r"(b0), "r"(b1), "r"(c0), "r"(c1), "r"(c2), "r"(c3));
+        : "f"(fa0), "f"(fa1), "f"(fb0), "f"(fb1),
+          "r"(c0), "r"(c1), "r"(c2), "r"(c3));
+
+    asm volatile(
+        "add.u32 %0, %0, %4;\n\t"
+        "xor.b32 %1, %1, %5;\n\t"
+        "add.u32 %2, %2, %6;\n\t"
+        "xor.b32 %3, %3, %7;\n\t"
+        : "+r"(c0), "+r"(c1), "+r"(c2), "+r"(c3)
+        : "r"(a0), "r"(a1), "r"(b0), "r"(b1));
 }
 
 template <int STREAMS>
