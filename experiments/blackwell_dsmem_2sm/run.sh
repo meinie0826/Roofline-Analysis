@@ -162,13 +162,14 @@ fi
 if [[ "$HAVE_CUTLASS" == "1" ]]; then
   SYNCLOG_PATCH="$ROOT_DIR/synclog_host_device.patch"
   patch -p1 -d "$CUTLASS_DIR" < "$SYNCLOG_PATCH"
-  COMPILE_ARCH="--generate-code arch=compute_100a,code=sm_100a" \
+  COMPILE_ARCH="--generate-code arch=compute_103a,code=sm_103a" \
   compile bench_cutlass_2sm_gemm.cu bench_cutlass_2sm_gemm \
     --expt-relaxed-constexpr \
     -I"$CUTLASS_DIR/include" \
     -I"$CUTLASS_DIR/tools/util/include" \
     -DCUTLASS_ARCH_MMA_SM100A_ENABLED \
-    -DCUTLASS_ARCH_MMA_SM100_ENABLED
+    -DCUTLASS_ARCH_MMA_SM100_ENABLED \
+    -DCUTLASS_ARCH_MMA_SM103A_ENABLED
   patch -p1 -R -d "$CUTLASS_DIR" < "$SYNCLOG_PATCH"
 else
   echo "WARNING: CUTLASS not found at $CUTLASS_DIR"
