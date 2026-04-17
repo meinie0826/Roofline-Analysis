@@ -23,6 +23,7 @@ mkdir -p "$OUTDIR"
 
 RAW_CSV="$OUTDIR/results_raw.csv"
 SUMMARY_CSV="$OUTDIR/results_summary.csv"
+DERIVED_CSV="$OUTDIR/results_derived.csv"
 METADATA_JSON="$OUTDIR/metadata.json"
 RUN_LOG="$OUTDIR/run.log"
 
@@ -136,6 +137,7 @@ run_case() {
 }
 
 compile bench_empty.cu bench_empty
+compile bench_empty_matched_dep.cu bench_empty_matched_dep
 compile bench_mma_f16_dep.cu bench_mma_f16_dep
 compile bench_mma_f16_indep.cu bench_mma_f16_indep
 compile bench_mma_f32acc.cu bench_mma_f32acc
@@ -150,6 +152,7 @@ IFS=',' read -r -a F32_STREAM_VALUES <<< "$F32_STREAMS_LIST"
 
 for unroll in "${UNROLL_VALUES[@]}"; do
   run_case bench_empty "$unroll"
+  run_case bench_empty_matched_dep "$unroll"
   run_case bench_mma_f16_dep "$unroll"
   for streams in "${F16_STREAM_VALUES[@]}"; do
     run_case bench_mma_f16_indep "$unroll" --streams="$streams"
@@ -209,6 +212,50 @@ with open(summary_path, 'w', newline='') as f:
         ])
 PY
 
+python3 - "$SUMMARY_CSV" "$DERIVED_CSV" <<'PY'
+import csv
+import sys
+
+summary_path, derived_path = sys.argv[1], sys.argv[2]
+matched = {}
+dep = {}
+with open(summary_path, newline='') as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        if row["benchmark"] == "bench_empty_matched_dep":
+            key = (row["loop_iters"], row["unroll"])
+            matched[key] = float(row["mean_cycles_per_mma"])
+        elif row["benchmark"] == "bench_mma_f16_dep":
+            key = (row["loop_iters"], row["unroll"])
+            dep[key] = float(row["mean_cycles_per_mma"])
+
+with open(derived_path, "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow([
+        "loop_iters",
+        "unroll",
+        "dep_mean_cycles_per_mma",
+        "matched_empty_mean_cycles_per_mma",
+        "dep_minus_matched_empty_cycles_per_mma",
+        "dep_minus_matched_empty_cycles_per_hmma_step",
+    ])
+    for key in sorted(dep):
+        if key not in matched:
+            continue
+        dep_mean = dep[key]
+        empty_mean = matched[key]
+        delta = dep_mean - empty_mean
+        writer.writerow([
+            key[0],
+            key[1],
+            f"{dep_mean:.8f}",
+            f"{empty_mean:.8f}",
+            f"{delta:.8f}",
+            f"{(delta / 2.0):.8f}",
+        ])
+PY
+
 echo "Saved raw results to $RAW_CSV"
 echo "Saved summary to $SUMMARY_CSV"
+echo "Saved derived results to $DERIVED_CSV"
 echo "Saved metadata to $METADATA_JSON"

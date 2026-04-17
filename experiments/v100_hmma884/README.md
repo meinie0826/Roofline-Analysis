@@ -15,6 +15,7 @@
 | binary | PTX form | mode | streams | 目的 |
 |---|---|---|---:|---|
 | `bench_empty` | none | `empty` | 0 | 匹配 loop skeleton 的空基准 |
+| `bench_empty_matched_dep` | none | `empty_matched_dep` | 1 | 与 `bench_mma_f16_dep` 同骨架的 matched-empty（用于 subtraction） |
 | `bench_mma_f16_dep` | `m8n8k4 row.col f16,f16,f16,f16` | `dep` | 1 | 单依赖链 latency 代理 |
 | `bench_mma_f16_indep` | `m8n8k4 row.col f16,f16,f16,f16` | `indep` | 2/4/8 | 吞吐上限近似（编译期固定 streams） |
 | `bench_mma_f32acc` | `m8n8k4 row.col f32,f16,f16,f16` | `fixedc` / `fixedc_indep` | 1/2/4/8 | mixed path lowering 与多 stream 对比（编译期固定 streams） |
@@ -23,6 +24,7 @@
 
 - [common.h](common.h)：共享参数解析、结果结构、打印格式、CUDA 检查逻辑
 - [bench_empty.cu](bench_empty.cu)：matched empty baseline
+- [bench_empty_matched_dep.cu](bench_empty_matched_dep.cu)：与 `bench_mma_f16_dep` 同构的 subtraction baseline
 - [bench_mma_f16_dep.cu](bench_mma_f16_dep.cu)：FP16 path 单链依赖
 - [bench_mma_f16_indep.cu](bench_mma_f16_indep.cu)：FP16 path 多独立链
 - [bench_mma_f32acc.cu](bench_mma_f32acc.cu)：mixed path，多 stream 版本
@@ -105,6 +107,7 @@ results/<timestamp>/
 
 - `results_raw.csv`：每次 repeat 一行原始结果
 - `results_summary.csv`：按 benchmark 聚合后的均值/中位数/stddev/min/max
+- `results_derived.csv`：自动派生 `bench_mma_f16_dep - bench_empty_matched_dep` 的差值
 - `metadata.json`：GPU / nvcc / git commit / 参数等元数据
 - `run.log`：整次运行的终端日志
 - `sass_*.txt`：每个 binary 的完整 SASS dump
@@ -142,6 +145,15 @@ results/<timestamp>/
 - `max_cycles_per_mma`
 - `mean_cycles_per_hmma_step`：按 dtype 自动归一化后的均值（`f16` 用 2 step，`f32acc` 用 4 step）
 
+### `results_derived.csv` 字段
+
+- `loop_iters`
+- `unroll`
+- `dep_mean_cycles_per_mma`
+- `matched_empty_mean_cycles_per_mma`
+- `dep_minus_matched_empty_cycles_per_mma`
+- `dep_minus_matched_empty_cycles_per_hmma_step`
+
 ## 建议检查顺序
 
 ### 1. 先看 lowering
@@ -161,6 +173,7 @@ grep HMMA results/<timestamp>/sass_bench_mma_f32acc.txt
 
 重点看：
 
+- `bench_mma_f16_dep` vs `bench_empty_matched_dep`（是否得到稳定、正值的 subtraction）
 - `bench_mma_f16_dep` vs `bench_mma_f16_indep streams=8`
 - `bench_mma_f32acc streams=1` vs `streams=8`
 - `bench_empty` 是否异常接近 dependent case
@@ -170,6 +183,7 @@ grep HMMA results/<timestamp>/sass_bench_mma_f32acc.txt
 推荐口径：
 
 - `dep`：程序可见的链式 latency 代理
+- `dep - empty_matched_dep`：更接近“去除 loop/control 后”的链式 latency 代理
 - `indep8`：更接近 steady-state throughput 代理
 - `empty`：控制开销基线
 
