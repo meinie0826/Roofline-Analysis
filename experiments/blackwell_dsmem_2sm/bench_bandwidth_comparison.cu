@@ -1,10 +1,5 @@
 /**
- * Pure bandwidth comparison: HBM vs DSMEM vs mma.2sm
- * 
- * Measures tile loading bandwidth under three scenarios:
- * - baseline: Each CTA loads tile from HBM (2x traffic)
- * - dsmem: CTA0 loads, CTA1 copies from CTA0's smem
- * - mma2sm: Hardware mma.2sm operand exchange (if measurable)
+ * Simple bandwidth test: HBM vs DSMEM
  */
 
 #include "common.h"
@@ -14,47 +9,25 @@
 namespace cg = cooperative_groups;
 using namespace blackwell_dsmem_2sm;
 
-// Use char for byte-level access
-using byte_t = char;
-
 //=============================================================================
-// Baseline: Each CTA loads tile from HBM independently
+// Baseline: Each CTA loads from HBM independently
 //=============================================================================
 
-template <int TileBytes>
 __global__ void baseline_load_kernel(
-    const byte_t* __restrict__ src,
-    byte_t* __restrict__ dst,
-    int* __restrict__ cycles_out,
+    const char* __restrict__ src,
+    char* __restrict__ dst,
+    int tile_bytes,
     int iters)
 {
-  // Each CTA loads TileBytes from HBM
-  // Two CTAs -> 2 * TileBytes total traffic
-  
-  const char* gmem_in = reinterpret_cast<const char*>(src);
-  char* gmem_out = reinterpret_cast<char*>(dst);
-  
-  int tid = threadIdx.x;
   int cta_id = blockIdx.x;
-  int offset = cta_id * TileBytes;
-  
-  // Use ld.global.cg to bypass L1
-  unsigned long long start = clock64();
+  const char* gmem_in = src + cta_id * tile_bytes;
+  char* gmem_out = dst + cta_id * tile_bytes;
   
   for (int i = 0; i < iters; ++i) {
-    #pragma unroll
-    for (int j = tid; j < TileBytes; j += blockDim.x) {
-      unsigned int val;
-      asm volatile("ld.global.cg.b8 %0, [%1];" : "=r"(val) : "l"(reinterpret_cast<unsigned long long>(gmem_in + offset + j)));
-      gmem_out[offset + j] = static_cast<char>(val);
+    for (int j = threadIdx.x; j < tile_bytes; j += blockDim.x) {
+      gmem_out[j] = gmem_in[j];
     }
     __syncthreads();
-  }
-  
-  unsigned long long stop = clock64();
-  
-  if (tid == 0) {
-    atomicAdd(cycles_out, static_cast<int>(stop - start));
   }
 }
 
@@ -62,288 +35,197 @@ __global__ void baseline_load_kernel(
 // DSMEM: CTA0 loads, CTA1 copies from CTA0's smem
 //=============================================================================
 
-template <int TileBytes, int kStages>
 __global__ __cluster_dims__(2, 1, 1)
 void dsmem_copy_kernel(
-    const byte_t* __restrict__ src,
-    byte_t* __restrict__ dst,
-    int* __restrict__ cycles_out,
+    const char* __restrict__ src,
+    char* __restrict__ dst,
+    int tile_bytes,
     int iters)
 {
-  extern __shared__ char smem_raw[];
-  char (*smem)[TileBytes] = reinterpret_cast<char (*)[TileBytes]>(smem_raw);
+  extern __shared__ char smem[];
   
   cg::cluster_group cluster = cg::this_cluster();
   int rank = cluster.block_rank();
   
-  // Pointer to CTA0's smem
+  const char* gmem_in = src + rank * tile_bytes;
+  char* gmem_out = dst + rank * tile_bytes;
+  
   char* remote_smem = reinterpret_cast<char*>(cluster.map_shared_rank(smem, 0));
   
-  const char* gmem_in = reinterpret_cast<const char*>(src);
-  char* gmem_out = reinterpret_cast<char*>(dst);
-  
-  int tid = threadIdx.x;
-  
-  unsigned long long start = 0, stop = 0;
-  
   for (int i = 0; i < iters; ++i) {
-    // === Phase 1: CTA0 loads from HBM ===
+    // Phase 1: Both CTAs load their portion from HBM (or CTA0 loads, CTA1 zeros)
     if (rank == 0) {
-      for (int j = tid; j < TileBytes; j += blockDim.x) {
-        unsigned int val;
-        asm volatile("ld.global.cg.b8 %0, [%1];" : "=r"(val) : "l"(reinterpret_cast<unsigned long long>(gmem_in + j)));
-        smem[0][j] = static_cast<char>(val);
+      for (int j = threadIdx.x; j < tile_bytes; j += blockDim.x) {
+        smem[j] = gmem_in[j];
+      }
+    } else {
+      for (int j = threadIdx.x; j < tile_bytes; j += blockDim.x) {
+        smem[j] = 0;  // Will be overwritten
       }
     }
     
-    cluster.sync();  // Ensure CTA0's load is complete
+    cluster.sync();
     
-    // === Phase 2: CTA1 copies from CTA0's DSMEM ===
+    // Phase 2: CTA1 copies from CTA0's DSMEM
     if (rank == 1) {
-      if (i == 0) start = clock64();  // Start timing after warmup
-      
-      for (int j = tid; j < TileBytes; j += blockDim.x) {
-        smem[0][j] = remote_smem[j];
+      for (int j = threadIdx.x; j < tile_bytes; j += blockDim.x) {
+        smem[j] = remote_smem[j];
       }
     }
     
     cluster.sync();
     
-    // === Phase 3: Both CTAs write to HBM ===
-    for (int j = tid; j < TileBytes; j += blockDim.x) {
-      gmem_out[rank * TileBytes + j] = smem[0][j];
+    // Phase 3: Both CTAs write to HBM
+    for (int j = threadIdx.x; j < tile_bytes; j += blockDim.x) {
+      gmem_out[j] = smem[j];
     }
     
     cluster.sync();
-  }
-  
-  if (rank == 1 && tid == 0) {
-    stop = clock64();
-    atomicAdd(cycles_out, static_cast<int>(stop - start));
   }
 }
 
 //=============================================================================
-// Pure DSMEM bandwidth test (no HBM)
+// Pure DSMEM copy (no HBM)
 //=============================================================================
 
-template <int TileBytes>
 __global__ __cluster_dims__(2, 1, 1)
-void pure_dsmem_bandwidth_kernel(
-    int* __restrict__ cycles_out,
+void pure_dsmem_kernel(
+    int tile_bytes,
     int iters)
 {
-  extern __shared__ char smem_raw[];
-  char* smem_src = smem_raw;
-  char* smem_dst = smem_raw + TileBytes;
+  extern __shared__ char smem[];
+  char* smem_dst = smem;
+  char* smem_src = smem + tile_bytes;
   
   cg::cluster_group cluster = cg::this_cluster();
   int rank = cluster.block_rank();
   
-  // Pointer to CTA0's smem
+  // CTA0's source buffer, CTA1's destination buffer
   char* remote_src = reinterpret_cast<char*>(cluster.map_shared_rank(smem_src, 0));
   
-  // CTA0: producer, CTA1: consumer
+  // Initialize source
   if (rank == 0) {
-    // Initialize source
-    for (int j = threadIdx.x; j < TileBytes; j += blockDim.x) {
+    for (int j = threadIdx.x; j < tile_bytes; j += blockDim.x) {
       smem_src[j] = static_cast<char>(j);
     }
   }
   
   cluster.sync();
   
-  unsigned long long start = 0, stop = 0;
-  
-  // Measure pure DSMEM copy bandwidth
-  if (rank == 1) {
-    start = clock64();
-    
-    for (int i = 0; i < iters; ++i) {
-      #pragma unroll 4
-      for (int j = threadIdx.x; j < TileBytes; j += blockDim.x) {
+  // Measure pure DSMEM copy
+  for (int i = 0; i < iters; ++i) {
+    if (rank == 1) {
+      for (int j = threadIdx.x; j < tile_bytes; j += blockDim.x) {
         smem_dst[j] = remote_src[j];
       }
-      __syncthreads();
     }
-    
-    stop = clock64();
-    
-    if (threadIdx.x == 0) {
-      atomicAdd(cycles_out, static_cast<int>(stop - start));
-    }
+    cluster.sync();
   }
-}
-
-//=============================================================================
-// Launcher
-//=============================================================================
-
-struct BenchResult {
-  double elapsed_ms;
-  double bandwidth_gbps;
-  double bytes_transferred;
-};
-
-double measure_baseline(const byte_t* d_src, byte_t* d_dst, int tile_bytes, int iters, int warmup) {
-  int* d_cycles;
-  cudaMalloc(&d_cycles, sizeof(int));
-  cudaMemset(d_cycles, 0, sizeof(int));
-  
-  dim3 grid(2);
-  dim3 block(128);
-  
-  // Warmup
-  baseline_load_kernel<16384><<<grid, block>>>(d_src, d_dst, d_cycles, warmup);
-  cudaDeviceSynchronize();
-  cudaMemset(d_cycles, 0, sizeof(int));
-  
-  // Measure
-  if (tile_bytes == 16384) baseline_load_kernel<16384><<<grid, block>>>(d_src, d_dst, d_cycles, iters);
-  else if (tile_bytes == 32768) baseline_load_kernel<32768><<<grid, block>>>(d_src, d_dst, d_cycles, iters);
-  else if (tile_bytes == 65536) baseline_load_kernel<65536><<<grid, block>>>(d_src, d_dst, d_cycles, iters);
-  cudaDeviceSynchronize();
-  
-  int h_cycles;
-  cudaMemcpy(&h_cycles, d_cycles, sizeof(int), cudaMemcpyDeviceToHost);
-  cudaFree(d_cycles);
-  
-  int clock_khz;
-  cudaDeviceGetAttribute(&clock_khz, cudaDevAttrClockRate, 0);
-  double clock_ghz = clock_khz * 1e-6;
-  
-  return double(h_cycles) / clock_ghz / 1e6;  // ms
-}
-
-double measure_dsmem(const byte_t* d_src, byte_t* d_dst, int tile_bytes, int iters, int warmup) {
-  int* d_cycles;
-  cudaMalloc(&d_cycles, sizeof(int));
-  cudaMemset(d_cycles, 0, sizeof(int));
-  
-  dim3 grid(1);
-  dim3 block(128);
-  
-  size_t smem_bytes = tile_bytes;  // Only need one buffer per CTA
-  
-  cudaLaunchConfig_t config{};
-  config.gridDim = grid;
-  config.blockDim = block;
-  config.dynamicSmemBytes = smem_bytes;
-  
-  cudaLaunchAttribute attrs[1];
-  attrs[0].id = cudaLaunchAttributeClusterDimension;
-  attrs[0].val.clusterDim = {2, 1, 1};
-  config.attrs = attrs;
-  config.numAttrs = 1;
-  
-  // Warmup
-  if (tile_bytes == 16384) cudaLaunchKernelEx(&config, dsmem_copy_kernel<16384, 2>, d_src, d_dst, d_cycles, warmup);
-  else if (tile_bytes == 32768) cudaLaunchKernelEx(&config, dsmem_copy_kernel<32768, 2>, d_src, d_dst, d_cycles, warmup);
-  else if (tile_bytes == 65536) cudaLaunchKernelEx(&config, dsmem_copy_kernel<65536, 2>, d_src, d_dst, d_cycles, warmup);
-  cudaDeviceSynchronize();
-  cudaMemset(d_cycles, 0, sizeof(int));
-  
-  // Measure
-  if (tile_bytes == 16384) cudaLaunchKernelEx(&config, dsmem_copy_kernel<16384, 2>, d_src, d_dst, d_cycles, iters);
-  else if (tile_bytes == 32768) cudaLaunchKernelEx(&config, dsmem_copy_kernel<32768, 2>, d_src, d_dst, d_cycles, iters);
-  else if (tile_bytes == 65536) cudaLaunchKernelEx(&config, dsmem_copy_kernel<65536, 2>, d_src, d_dst, d_cycles, iters);
-  cudaDeviceSynchronize();
-  
-  int h_cycles;
-  cudaMemcpy(&h_cycles, d_cycles, sizeof(int), cudaMemcpyDeviceToHost);
-  cudaFree(d_cycles);
-  
-  int clock_khz;
-  cudaDeviceGetAttribute(&clock_khz, cudaDevAttrClockRate, 0);
-  double clock_ghz = clock_khz * 1e-6;
-  
-  return double(h_cycles) / clock_ghz / 1e6;  // ms
-}
-
-double measure_pure_dsmem(int tile_bytes, int iters) {
-  int* d_cycles;
-  cudaMalloc(&d_cycles, sizeof(int));
-  cudaMemset(d_cycles, 0, sizeof(int));
-  
-  dim3 grid(1);
-  dim3 block(128);
-  
-  cudaLaunchConfig_t config{};
-  config.gridDim = grid;
-  config.blockDim = block;
-  config.dynamicSmemBytes = 2 * tile_bytes;
-  
-  cudaLaunchAttribute attrs[1];
-  attrs[0].id = cudaLaunchAttributeClusterDimension;
-  attrs[0].val.clusterDim = {2, 1, 1};
-  config.attrs = attrs;
-  config.numAttrs = 1;
-  
-  if (tile_bytes == 16384) cudaLaunchKernelEx(&config, pure_dsmem_bandwidth_kernel<16384>, d_cycles, iters);
-  else if (tile_bytes == 32768) cudaLaunchKernelEx(&config, pure_dsmem_bandwidth_kernel<32768>, d_cycles, iters);
-  else if (tile_bytes == 65536) cudaLaunchKernelEx(&config, pure_dsmem_bandwidth_kernel<65536>, d_cycles, iters);
-  cudaDeviceSynchronize();
-  
-  int h_cycles;
-  cudaMemcpy(&h_cycles, d_cycles, sizeof(int), cudaMemcpyDeviceToHost);
-  cudaFree(d_cycles);
-  
-  int clock_khz;
-  cudaDeviceGetAttribute(&clock_khz, cudaDevAttrClockRate, 0);
-  double clock_ghz = clock_khz * 1e-6;
-  
-  return double(h_cycles) / clock_ghz / 1e6;  // ms
 }
 
 //=============================================================================
 int main(int argc, char** argv) {
   const char* mode = "all";
   int tile_bytes = 16384;
-  int iters = 1000;
-  int warmup = 100;
+  int iters = 100;
   
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if (arg.find("--mode=") == 0) mode = argv[i] + 7;
     else if (arg.find("--tile-bytes=") == 0) tile_bytes = std::atoi(argv[i] + 13);
     else if (arg.find("--iters=") == 0) iters = std::atoi(argv[i] + 8);
-    else if (arg.find("--warmup=") == 0) warmup = std::atoi(argv[i] + 9);
   }
   
-  std::fprintf(stdout, "CONFIG mode=%s tile_bytes=%d iters=%d warmup=%d gpu=\"%s\"\n",
-               mode, tile_bytes, iters, warmup, gpu_name().c_str());
+  std::fprintf(stdout, "CONFIG mode=%s tile_bytes=%d iters=%d gpu=\"%s\"\n",
+               mode, tile_bytes, iters, gpu_name().c_str());
   
   // Allocate
-  byte_t *d_src, *d_dst;
+  char *d_src, *d_dst;
   cudaMalloc(&d_src, 2 * tile_bytes);
   cudaMalloc(&d_dst, 2 * tile_bytes);
-  cudaMemset(d_src, 1, 2 * tile_bytes);
+  cudaMemset(d_src, 0xAB, 2 * tile_bytes);
   cudaMemset(d_dst, 0, 2 * tile_bytes);
   
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+  
+  // Baseline
   if (std::strcmp(mode, "all") == 0 || std::strcmp(mode, "baseline") == 0) {
-    double ms = measure_baseline(d_src, d_dst, tile_bytes, iters, warmup);
-    double bytes = 2.0 * tile_bytes * iters;  // Two CTAs, each loads tile_bytes
-    double bw = bytes / ms / 1e6;  // GB/s
+    cudaEventRecord(start);
+    baseline_load_kernel<<<2, 128>>>(d_src, d_dst, tile_bytes, iters);
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    
+    float ms = 0.0f;
+    cudaEventElapsedTime(&ms, start, stop);
+    double bytes = 2.0 * tile_bytes * iters;
+    double bw = bytes / ms / 1e6;
     std::fprintf(stdout, "RESULT mode=baseline elapsed_ms=%.6f bytes=%.0f bandwidth_gbps=%.2f\n", 
                  ms, bytes, bw);
   }
   
+  // DSMEM copy
   if (std::strcmp(mode, "all") == 0 || std::strcmp(mode, "dsmem") == 0) {
-    double ms = measure_dsmem(d_src, d_dst, tile_bytes, iters, warmup);
-    double bytes = 1.0 * tile_bytes * iters;  // Only CTA0 loads from HBM, CTA1 copies from DSMEM
-    double bw = bytes / ms / 1e6;  // GB/s
+    dim3 grid(1);
+    dim3 block(128);
+    
+    cudaLaunchConfig_t config{};
+    config.gridDim = grid;
+    config.blockDim = block;
+    config.dynamicSmemBytes = tile_bytes;
+    
+    cudaLaunchAttribute attrs[1];
+    attrs[0].id = cudaLaunchAttributeClusterDimension;
+    attrs[0].val.clusterDim = {2, 1, 1};
+    config.attrs = attrs;
+    config.numAttrs = 1;
+    
+    cudaEventRecord(start);
+    cudaLaunchKernelEx(&config, dsmem_copy_kernel, d_src, d_dst, tile_bytes, iters);
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    
+    float ms = 0.0f;
+    cudaEventElapsedTime(&ms, start, stop);
+    // HBM bytes: only CTA0 loads from HBM (CTA1 copies from DSMEM)
+    double bytes = 1.0 * tile_bytes * iters;
+    double bw = bytes / ms / 1e6;
     std::fprintf(stdout, "RESULT mode=dsmem elapsed_ms=%.6f bytes=%.0f bandwidth_gbps=%.2f\n", 
                  ms, bytes, bw);
   }
   
+  // Pure DSMEM
   if (std::strcmp(mode, "all") == 0 || std::strcmp(mode, "pure_dsmem") == 0) {
-    double ms = measure_pure_dsmem(tile_bytes, iters);
-    double bytes = 1.0 * tile_bytes * iters;  // CTA1 copies from CTA0's smem
-    double bw = bytes / ms / 1e6;  // GB/s
+    dim3 grid(1);
+    dim3 block(128);
+    
+    cudaLaunchConfig_t config{};
+    config.gridDim = grid;
+    config.blockDim = block;
+    config.dynamicSmemBytes = 2 * tile_bytes;
+    
+    cudaLaunchAttribute attrs[1];
+    attrs[0].id = cudaLaunchAttributeClusterDimension;
+    attrs[0].val.clusterDim = {2, 1, 1};
+    config.attrs = attrs;
+    config.numAttrs = 1;
+    
+    cudaEventRecord(start);
+    cudaLaunchKernelEx(&config, pure_dsmem_kernel, tile_bytes, iters);
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    
+    float ms = 0.0f;
+    cudaEventElapsedTime(&ms, start, stop);
+    double bytes = 1.0 * tile_bytes * iters;
+    double bw = bytes / ms / 1e6;
     std::fprintf(stdout, "RESULT mode=pure_dsmem elapsed_ms=%.6f bytes=%.0f bandwidth_gbps=%.2f\n", 
                  ms, bytes, bw);
   }
   
+  cudaEventDestroy(start);
+  cudaEventDestroy(stop);
   cudaFree(d_src);
   cudaFree(d_dst);
   
