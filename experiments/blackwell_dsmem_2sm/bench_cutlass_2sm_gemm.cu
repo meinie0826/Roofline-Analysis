@@ -176,12 +176,26 @@ struct CutlassRunner {
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 
     cutlass::Status status = gemm_op.can_implement(arguments);
-    if (status != cutlass::Status::kSuccess) return false;
+    if (status != cutlass::Status::kSuccess) {
+      std::fprintf(stderr, "can_implement failed: %s\n", cutlass::cutlassGetStatusString(status));
+      return false;
+    }
     status = gemm_op.initialize(arguments, workspace.get());
-    if (status != cutlass::Status::kSuccess) return false;
+    if (status != cutlass::Status::kSuccess) {
+      std::fprintf(stderr, "initialize failed: %s\n", cutlass::cutlassGetStatusString(status));
+      return false;
+    }
     status = gemm_op.run();
-    if (status != cutlass::Status::kSuccess) return false;
-    return cudaDeviceSynchronize() == cudaSuccess;
+    if (status != cutlass::Status::kSuccess) {
+      std::fprintf(stderr, "run failed: %s\n", cutlass::cutlassGetStatusString(status));
+      return false;
+    }
+    cudaError_t err = cudaDeviceSynchronize();
+    if (err != cudaSuccess) {
+      std::fprintf(stderr, "cudaDeviceSynchronize failed: %s\n", cudaGetErrorString(err));
+      return false;
+    }
+    return true;
   }
 };
 
