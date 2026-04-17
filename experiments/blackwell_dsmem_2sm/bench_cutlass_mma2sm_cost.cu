@@ -51,7 +51,7 @@ struct TileShape2SmForN<128> { using Type = Shape<_256, _128, _64>; };
 template <>
 struct TileShape2SmForN<256> { using Type = Shape<_256, _256, _64>; };
 
-template <int TileN, class MainloopSchedule, class EpilogueSchedule, class StageCountTag>
+template <int TileN, bool Use2Sm, class StageCountTag>
 struct CutlassRunner {
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::ColumnMajor;
@@ -65,12 +65,9 @@ struct CutlassRunner {
   using ElementAccumulator = float;
   using ElementCompute = float;
 
-  static constexpr bool kUse2Sm =
-      std::is_same_v<MainloopSchedule, cutlass::gemm::KernelTmaWarpSpecialized2SmSm100>;
-
-  using ClusterShapeMNK = Shape<_2, _1, _1>;
+  using ClusterShapeMNK = cute::conditional_t<Use2Sm, Shape<_2, _1, _1>, Shape<_1, _1, _1>>;
   using TileShape = std::conditional_t<
-      kUse2Sm,
+      Use2Sm,
       typename TileShape2SmForN<TileN>::Type,
       typename TileShapeForN<TileN>::Type>;
 
@@ -93,7 +90,7 @@ struct CutlassRunner {
       ElementD,
       LayoutD,
       AlignmentD,
-      EpilogueSchedule>::CollectiveOp;
+      cutlass::epilogue::collective::EpilogueScheduleAuto>::CollectiveOp;
 
   using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
       cutlass::arch::Sm100,
@@ -107,8 +104,11 @@ struct CutlassRunner {
       ElementAccumulator,
       TileShape,
       ClusterShapeMNK,
-      StageCountTag,
-      MainloopSchedule>::CollectiveOp;
+      cute::conditional_t<
+          cute::is_same_v<StageCountTag, cutlass::gemm::collective::StageCountAuto>,
+          cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
+          StageCountTag>,
+      cutlass::gemm::collective::KernelScheduleAuto>::CollectiveOp;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
       Shape<int, int, int, int>,
@@ -296,11 +296,7 @@ template <int TileN, class StageCountTag>
 KernelMetrics dispatch_cutlass_1sm(
     const GemmOptions& options,
     const cutlass::KernelHardwareInfo& hw_info) {
-  using Runner = CutlassRunner<
-      TileN,
-      cutlass::gemm::KernelTmaWarpSpecialized1SmSm100,
-      cutlass::epilogue::TmaWarpSpecialized1Sm,
-      StageCountTag>;
+  using Runner = CutlassRunner<TileN, false, StageCountTag>;
   Runner runner;
   return measure_runner(runner, options, hw_info, 128, TileN);
 }
@@ -309,11 +305,7 @@ template <int TileN, class StageCountTag>
 KernelMetrics dispatch_cutlass_2sm(
     const GemmOptions& options,
     const cutlass::KernelHardwareInfo& hw_info) {
-  using Runner = CutlassRunner<
-      TileN,
-      cutlass::gemm::KernelTmaWarpSpecialized2SmSm100,
-      cutlass::epilogue::TmaWarpSpecialized2Sm,
-      StageCountTag>;
+  using Runner = CutlassRunner<TileN, true, StageCountTag>;
   Runner runner;
   return measure_runner(runner, options, hw_info, 256, TileN);
 }
