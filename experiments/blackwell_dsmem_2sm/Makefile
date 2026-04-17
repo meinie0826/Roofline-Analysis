@@ -8,14 +8,14 @@ NVCC_FLAGS = -std=c++17 -O3 -arch=$(ARCH) --expt-relaxed-constexpr -Xcudafe --di
 CUTLASS_PATH ?= ../../cutlass
 CUTLASS_INCLUDES = -I$(CUTLASS_PATH)/include -I$(CUTLASS_PATH)/tools/util/include
 
-# CUTLASS benchmarks
-CUTLASS_BENCHMARKS = bench_cutlass_2sm_gemm bench_cutlass_mma2sm_cost bench_d1_only
+# Benchmarks
+BENCHMARKS = bench_cutlass_2sm_gemm bench_cutlass_mma2sm_cost bench_d1_only bench_umma_1sm_2sm_cost
 
 .PHONY: all clean cutlass
 
 all: cutlass
 
-cutlass: $(CUTLASS_BENCHMARKS)
+cutlass: $(BENCHMARKS)
 
 # CUTLASS benchmarks
 bench_cutlass_2sm_gemm: bench_cutlass_2sm_gemm.cu common.h
@@ -27,5 +27,8 @@ bench_cutlass_mma2sm_cost: bench_cutlass_mma2sm_cost.cu common.h
 bench_d1_only: bench_d1_only.cu common.h
 	$(NVCC) $(NVCC_FLAGS) $(CUTLASS_INCLUDES) $< -o $@
 
+bench_umma_1sm_2sm_cost: bench_umma_1sm_2sm_cost.cu common.h
+	$(NVCC) $(NVCC_FLAGS) $< -o $@
+
 clean:
-	rm -f $(CUTLASS_BENCHMARKS)
+	rm -f $(BENCHMARKS)

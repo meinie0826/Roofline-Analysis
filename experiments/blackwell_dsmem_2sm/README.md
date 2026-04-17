@@ -40,6 +40,7 @@ This experiment investigates whether Distributed Shared Memory (DSMEM) can provi
 | `bench_cutlass_2sm_gemm.cu` | CUTLASS 1SM/2SM comparison |
 | `bench_cutlass_mma2sm_cost.cu` | Controlled 1SM vs 2SM benchmark with summary ratios |
 | `bench_d1_only.cu` | CUTLASS-based baseline around D1 / DSMEM-related flow |
+| `bench_umma_1sm_2sm_cost.cu` | Instruction-level BF16 UMMA 1SM/2SM cost baseline |
 | `common.h` | Shared utilities |
 
 ## Usage
@@ -52,6 +53,7 @@ make all
 make cutlass      # CUTLASS benchmarks
 make bench_cutlass_2sm_gemm
 make bench_cutlass_mma2sm_cost
+make bench_umma_1sm_2sm_cost
 
 # Override architecture when needed
 make ARCH=sm_100a bench_cutlass_2sm_gemm      # B200
@@ -60,6 +62,7 @@ make ARCH=sm_103a bench_cutlass_2sm_gemm      # B300
 # Run benchmarks
 ./bench_cutlass_2sm_gemm --mode=1sm --m=8192 --n=8192 --k=8192
 ./bench_cutlass_mma2sm_cost --mode=compare --m=8192 --n=8192 --k=8192 --tile-n=128 --stages=2
+./bench_umma_1sm_2sm_cost --mode=compare --tile-n=128 --depth=256 --iters=1000
 ```
 
 ## `bench_cutlass_mma2sm_cost`
@@ -100,6 +103,34 @@ Notes:
 - `tile_n=64` or `128` is supported in the current compare path.
 - `stages=2` or `4` is supported.
 - The reported `est_b_*` values are analytic estimates derived from tile geometry, not hardware counter reads.
+
+## `bench_umma_1sm_2sm_cost`
+
+This benchmark strips the comparison down to the BF16 UMMA instruction itself:
+
+- `1sm`: `M=128, N=tile_n, K=16`
+- `2sm`: `M=256, N=tile_n, K=16`
+- SS layout only
+
+It is meant to answer the instruction-level version of the same question as the CUTLASS benchmark:
+
+- does `2sm` cost more or less cycles per MMA issue
+- after normalizing by total FLOPs, is `2sm` actually more efficient
+
+Important summary fields:
+
+- `cycles_per_mma_ratio`: raw instruction cost ratio
+- `cycles_per_flop_ratio`: normalized cost ratio
+- `flops_per_cycle_ratio`: normalized throughput ratio
+
+Example:
+
+```bash
+make bench_umma_1sm_2sm_cost
+./bench_umma_1sm_2sm_cost --mode=compare --tile-n=128 --depth=256 --iters=1000
+./bench_umma_1sm_2sm_cost --mode=1sm --tile-n=64 --depth=128 --iters=2000
+./bench_umma_1sm_2sm_cost --mode=2sm --tile-n=64 --depth=128 --iters=2000
+```
 
 ## Technical Details
 
