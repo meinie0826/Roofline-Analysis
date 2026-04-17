@@ -179,6 +179,8 @@ else
   echo "Set CUTLASS_DIR=/path/to/cutlass to enable the hardware 1SM/2SM comparison."
 fi
 
+# 只有在非 ONLY_CUTLASS 模式下才运行实验
+if [[ "$ONLY_CUTLASS" != "1" ]]; then
 IFS=',' read -r -a ALIGN_VALUES <<< "$ALIGN_LIST"
 IFS=',' read -r -a VEC_VALUES <<< "$VEC_LIST"
 IFS=',' read -r -a SOFT_TILE_VALUES <<< "$SOFT_TILE_N_LIST"
@@ -233,5 +235,6 @@ if [[ "$HAVE_CUTLASS" == "1" ]]; then
     done
   done
 fi
+fi  # ONLY_CUTLASS guard
 
 echo "Results written to $OUTDIR"
