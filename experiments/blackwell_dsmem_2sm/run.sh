@@ -257,6 +257,7 @@ if [[ "$HAVE_CUTLASS" == "1" ]]; then
       --repeats="$REPEATS" --warmup="$WARMUP_REPEATS" | tee "$log"
   done
 fi
+
 fi  # ONLY_CUTLASS guard
 
 echo "Results written to $OUTDIR"
