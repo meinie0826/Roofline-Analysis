@@ -1,17 +1,11 @@
 /**
  * Fair comparison: 1SM vs 2SM with identical tile shape
- * 
- * Tile shape: 128×64×64 (fixed)
- * Problem: Each pair of CTAs processes 256 rows × 64 cols of C
- * 
- * Baseline: Two independent 1SM CTAs, each loads B from HBM
- * D1: Two CTAs in a cluster, CTA0 loads B, CTA1 copies from DSMEM
- * D2: Hardware mma.2sm (if we can trigger it)
+ * Uses CUDA built-in half type
  */
 
 #include "common.h"
 #include <cooperative_groups.h>
-#include <cooperative_groups/memcpy_async.h>
+#include <cuda_fp16.h>
 
 namespace cg = cooperative_groups;
 using namespace blackwell_dsmem_2sm;
@@ -28,8 +22,8 @@ constexpr int kStages = 2;
 // Shared memory layout
 //=============================================================================
 struct GmemTile {
-  alignas(128) half_t A[kStages][kTileM][kTileK];
-  alignas(128) half_t B[kStages][kTileN][kTileK];
+  alignas(128) half A[kStages][kTileM][kTileK];
+  alignas(128) half B[kStages][kTileN][kTileK];
 };
 
 //=============================================================================
@@ -37,9 +31,9 @@ struct GmemTile {
 //=============================================================================
 
 __global__ void baseline_gemm_kernel(
-    const half_t* __restrict__ A,
-    const half_t* __restrict__ B,
-    half_t* __restrict__ C,
+    const half* __restrict__ A,
+    const half* __restrict__ B,
+    half* __restrict__ C,
     int M, int N, int K,
     int lda, int ldb, int ldc)
 {
@@ -53,14 +47,13 @@ __global__ void baseline_gemm_kernel(
   int m_start = pair_id * (2 * kTileM) + rank * kTileM;
   int n_start = blockIdx.y * kTileN;
   
-  const half_t* gA = A + m_start * lda;
-  const half_t* gB = B + n_start * ldb;
-  half_t* gC = C + m_start * ldc + n_start;
+  const half* gA = A + m_start * lda;
+  const half* gB = B + n_start * ldb;
+  half* gC = C + m_start * ldc + n_start;
   
   int tid = threadIdx.x;
   
-  // Accumulator (simplified: just use registers)
-  float acc[kTileM/128][kTileN/64][16] = {0};  // Minimal accumulation
+  float acc[16] = {0};
   
   for (int k_offset = 0; k_offset < K; k_offset += kTileK) {
     int stage = (k_offset / kTileK) % kStages;
@@ -85,26 +78,21 @@ __global__ void baseline_gemm_kernel(
     
     __syncthreads();
     
-    // === MMA (simplified: just do minimal compute) ===
-    // This is NOT real MMA, just placeholder to ensure tile is used
-    #pragma unroll
-    for (int m = 0; m < 1; ++m) {
-      #pragma unroll
-      for (int n = 0; n < 1; ++n) {
-        float sum = 0.0f;
-        for (int k = 0; k < 4; ++k) {
-          sum += static_cast<float>(tile.A[stage][tid % kTileM][k]) *
-                 static_cast<float>(tile.B[stage][tid % kTileN][k]);
-        }
-        acc[m][n][0] += sum;
+    // === Minimal MMA placeholder ===
+    for (int i = 0; i < 4; ++i) {
+      float sum = 0.0f;
+      for (int k = 0; k < 4; ++k) {
+        sum += __half2float(tile.A[stage][(tid + i) % kTileM][k]) *
+               __half2float(tile.B[stage][(tid + i) % kTileN][k]);
       }
+      acc[i] += sum;
     }
   }
   
   // Write result (minimal)
   if (m_start < M && n_start < N && tid < 128) {
     gC[tid % kTileM * ldc + (tid / kTileM) % kTileN] = 
-        static_cast<half_t>(acc[0][0][0]);
+        __float2half(acc[0]);
   }
 }
 
@@ -114,9 +102,9 @@ __global__ void baseline_gemm_kernel(
 
 __global__ __cluster_dims__(2, 1, 1)
 void d1_cluster_gemm_kernel(
-    const half_t* __restrict__ A,
-    const half_t* __restrict__ B,
-    half_t* __restrict__ C,
+    const half* __restrict__ A,
+    const half* __restrict__ B,
+    half* __restrict__ C,
     int M, int N, int K,
     int lda, int ldb, int ldc)
 {
@@ -129,16 +117,16 @@ void d1_cluster_gemm_kernel(
   int m_start = pair_id * (2 * kTileM) + rank * kTileM;
   int n_start = blockIdx.y * kTileN;
   
-  const half_t* gA = A + m_start * lda;
-  const half_t* gB = B + n_start * ldb;
-  half_t* gC = C + m_start * ldc + n_start;
+  const half* gA = A + m_start * lda;
+  const half* gB = B + n_start * ldb;
+  half* gC = C + m_start * ldc + n_start;
   
   // Pointer to CTA0's smem
   GmemTile* remote_tile0 = reinterpret_cast<GmemTile*>(cluster.map_shared_rank(&tile, 0));
   
   int tid = threadIdx.x;
   
-  float acc[1][1][16] = {0};
+  float acc[16] = {0};
   
   for (int k_offset = 0; k_offset < K; k_offset += kTileK) {
     int stage = (k_offset / kTileK) % kStages;
@@ -177,23 +165,19 @@ void d1_cluster_gemm_kernel(
     cluster.sync();
     
     // === MMA (same as baseline) ===
-    #pragma unroll
-    for (int m = 0; m < 1; ++m) {
-      #pragma unroll
-      for (int n = 0; n < 1; ++n) {
-        float sum = 0.0f;
-        for (int k = 0; k < 4; ++k) {
-          sum += static_cast<float>(tile.A[stage][tid % kTileM][k]) *
-                 static_cast<float>(tile.B[stage][tid % kTileN][k]);
-        }
-        acc[m][n][0] += sum;
+    for (int i = 0; i < 4; ++i) {
+      float sum = 0.0f;
+      for (int k = 0; k < 4; ++k) {
+        sum += __half2float(tile.A[stage][(tid + i) % kTileM][k]) *
+               __half2float(tile.B[stage][(tid + i) % kTileN][k]);
       }
+      acc[i] += sum;
     }
   }
   
   if (m_start < M && n_start < N && tid < 128) {
     gC[tid % kTileM * ldc + (tid / kTileM) % kTileN] = 
-        static_cast<half_t>(acc[0][0][0]);
+        __float2half(acc[0]);
   }
 }
 
@@ -201,10 +185,10 @@ void d1_cluster_gemm_kernel(
 // Benchmark harness
 //=============================================================================
 
-double measure_kernel(void (*kernel)(const half_t*, const half_t*, half_t*, int, int, int, int, int, int),
-                       const half_t* d_A, const half_t* d_B, half_t* d_C,
-                       int M, int N, int K, int repeats, int warmup,
-                       bool is_cluster = false) {
+template <typename Kernel>
+double measure_kernel(Kernel kernel,
+                       const half* d_A, const half* d_B, half* d_C,
+                       int M, int N, int K, int repeats, int warmup) {
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
@@ -235,8 +219,9 @@ double measure_kernel(void (*kernel)(const half_t*, const half_t*, half_t*, int,
   return total_ms / repeats;
 }
 
-double measure_cluster_kernel(void (*kernel)(const half_t*, const half_t*, half_t*, int, int, int, int, int, int),
-                               const half_t* d_A, const half_t* d_B, half_t* d_C,
+template <typename Kernel>
+double measure_cluster_kernel(Kernel kernel,
+                               const half* d_A, const half* d_B, half* d_C,
                                int M, int N, int K, int repeats, int warmup) {
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
@@ -299,11 +284,11 @@ int main(int argc, char** argv) {
                mode, M, N, K, repeats, warmup, gpu_name().c_str());
   
   // Allocate (minimal, single tile)
-  size_t A_size = M * K * sizeof(half_t);
-  size_t B_size = K * N * sizeof(half_t);
-  size_t C_size = M * N * sizeof(half_t);
+  size_t A_size = M * K * sizeof(half);
+  size_t B_size = K * N * sizeof(half);
+  size_t C_size = M * N * sizeof(half);
   
-  half_t *d_A, *d_B, *d_C;
+  half *d_A, *d_B, *d_C;
   cudaMalloc(&d_A, A_size);
   cudaMalloc(&d_B, B_size);
   cudaMalloc(&d_C, C_size);
