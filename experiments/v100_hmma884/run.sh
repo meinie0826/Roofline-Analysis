@@ -31,6 +31,19 @@ exec > >(tee "$RUN_LOG") 2>&1
 
 echo "Output directory: $OUTDIR"
 
+require_tool() {
+  local tool_name="$1"
+  local hint="$2"
+  if ! command -v "$tool_name" >/dev/null 2>&1; then
+    echo "ERROR: required tool '$tool_name' not found in PATH."
+    echo "Hint: $hint"
+    exit 1
+  fi
+}
+
+require_tool "$NVCC" "Set NVCC to your compiler path, e.g. NVCC=/usr/local/cuda/bin/nvcc bash run.sh"
+require_tool "$CUOBJDUMP" "Set CUOBJDUMP to your cuobjdump path, e.g. CUOBJDUMP=/usr/local/cuda/bin/cuobjdump bash run.sh"
+
 git_commit=$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || echo unknown)
 git_status=$(git -C "$ROOT_DIR" status --short 2>/dev/null || true)
 hostname_value=$(hostname)
@@ -138,6 +151,7 @@ run_case() {
 
 compile bench_empty.cu bench_empty
 compile bench_empty_matched_dep.cu bench_empty_matched_dep
+compile bench_empty_matched_f32acc.cu bench_empty_matched_f32acc
 compile bench_mma_f16_dep.cu bench_mma_f16_dep
 compile bench_mma_f16_indep.cu bench_mma_f16_indep
 compile bench_mma_f32acc.cu bench_mma_f32acc
@@ -154,6 +168,9 @@ for unroll in "${UNROLL_VALUES[@]}"; do
   run_case bench_empty "$unroll"
   run_case bench_empty_matched_dep "$unroll"
   run_case bench_mma_f16_dep "$unroll"
+  for streams in "${F32_STREAM_VALUES[@]}"; do
+    run_case bench_empty_matched_f32acc "$unroll" --streams="$streams"
+  done
   for streams in "${F16_STREAM_VALUES[@]}"; do
     run_case bench_mma_f16_indep "$unroll" --streams="$streams"
   done
@@ -178,16 +195,19 @@ def hmma_steps_per_mma(dtype):
     return 0
 
 groups = defaultdict(list)
+groups_cycles = defaultdict(list)
 with open(raw_path, newline='') as f:
     reader = csv.DictReader(f)
     for row in reader:
         key = (row['benchmark'], row['dtype'], row['mode'], row['streams'], row['loop_iters'], row['unroll'])
         groups[key].append(float(row['cycles_per_mma']))
+        groups_cycles[key].append(float(row['cycles']))
 
 with open(summary_path, 'w', newline='') as f:
     writer = csv.writer(f)
     writer.writerow([
         'benchmark', 'dtype', 'mode', 'streams', 'loop_iters', 'unroll', 'repeats',
+        'mean_cycles', 'median_cycles', 'stddev_cycles',
         'hmma_steps_per_mma',
         'mean_cycles_per_mma', 'median_cycles_per_mma', 'stddev_cycles_per_mma',
         'min_cycles_per_mma', 'max_cycles_per_mma',
@@ -195,13 +215,18 @@ with open(summary_path, 'w', newline='') as f:
     ])
     for key in sorted(groups):
         values = groups[key]
+        cycles_values = groups_cycles[key]
         stddev = statistics.pstdev(values) if len(values) > 1 else 0.0
+        cycles_stddev = statistics.pstdev(cycles_values) if len(cycles_values) > 1 else 0.0
         steps = hmma_steps_per_mma(key[1])
         mean_cycles = statistics.mean(values)
         mean_per_step = (mean_cycles / steps) if steps else 0.0
         writer.writerow([
             *key,
             len(values),
+            f"{statistics.mean(cycles_values):.2f}",
+            f"{statistics.median(cycles_values):.2f}",
+            f"{cycles_stddev:.2f}",
             steps,
             f"{mean_cycles:.8f}",
             f"{statistics.median(values):.8f}",
@@ -217,41 +242,89 @@ import csv
 import sys
 
 summary_path, derived_path = sys.argv[1], sys.argv[2]
-matched = {}
-dep = {}
+matched_f16 = {}
+dep_f16 = {}
+matched_f32 = {}
+mma_f32 = {}
 with open(summary_path, newline='') as f:
     reader = csv.DictReader(f)
     for row in reader:
         if row["benchmark"] == "bench_empty_matched_dep":
-            key = (row["loop_iters"], row["unroll"])
-            matched[key] = float(row["mean_cycles_per_mma"])
+            key = (row["loop_iters"], row["unroll"], row["streams"])
+            matched_f16[key] = row
         elif row["benchmark"] == "bench_mma_f16_dep":
-            key = (row["loop_iters"], row["unroll"])
-            dep[key] = float(row["mean_cycles_per_mma"])
+            key = (row["loop_iters"], row["unroll"], row["streams"])
+            dep_f16[key] = row
+        elif row["benchmark"] == "bench_empty_matched_f32acc":
+            key = (row["loop_iters"], row["unroll"], row["streams"])
+            matched_f32[key] = row
+        elif row["benchmark"] == "bench_mma_f32acc":
+            key = (row["loop_iters"], row["unroll"], row["streams"])
+            mma_f32[key] = row
 
 with open(derived_path, "w", newline="") as f:
     writer = csv.writer(f)
     writer.writerow([
+        "benchmark",
+        "mode",
         "loop_iters",
         "unroll",
+        "streams",
+        "mean_cycles",
+        "matched_empty_mean_cycles",
+        "delta_cycles",
         "dep_mean_cycles_per_mma",
         "matched_empty_mean_cycles_per_mma",
-        "dep_minus_matched_empty_cycles_per_mma",
-        "dep_minus_matched_empty_cycles_per_hmma_step",
+        "delta_cycles_per_mma",
+        "delta_cycles_per_hmma_step",
     ])
-    for key in sorted(dep):
-        if key not in matched:
+    for key in sorted(dep_f16):
+        if key not in matched_f16:
             continue
-        dep_mean = dep[key]
-        empty_mean = matched[key]
+        dep_row = dep_f16[key]
+        empty_row = matched_f16[key]
+        dep_mean = float(dep_row["mean_cycles_per_mma"])
+        empty_mean = float(empty_row["mean_cycles_per_mma"])
+        dep_cycles = float(dep_row["mean_cycles"])
+        empty_cycles = float(empty_row["mean_cycles"])
         delta = dep_mean - empty_mean
         writer.writerow([
+            dep_row["benchmark"],
+            dep_row["mode"],
             key[0],
             key[1],
+            key[2],
+            f"{dep_cycles:.2f}",
+            f"{empty_cycles:.2f}",
+            f"{(dep_cycles - empty_cycles):.2f}",
             f"{dep_mean:.8f}",
             f"{empty_mean:.8f}",
             f"{delta:.8f}",
             f"{(delta / 2.0):.8f}",
+        ])
+    for key in sorted(mma_f32):
+        if key not in matched_f32:
+            continue
+        mma_row = mma_f32[key]
+        empty_row = matched_f32[key]
+        mma_mean = float(mma_row["mean_cycles_per_mma"])
+        empty_mean = float(empty_row["mean_cycles_per_mma"])
+        mma_cycles = float(mma_row["mean_cycles"])
+        empty_cycles = float(empty_row["mean_cycles"])
+        delta = mma_mean - empty_mean
+        writer.writerow([
+            mma_row["benchmark"],
+            mma_row["mode"],
+            key[0],
+            key[1],
+            key[2],
+            f"{mma_cycles:.2f}",
+            f"{empty_cycles:.2f}",
+            f"{(mma_cycles - empty_cycles):.2f}",
+            f"{mma_mean:.8f}",
+            f"{empty_mean:.8f}",
+            f"{delta:.8f}",
+            f"{(delta / 4.0):.8f}",
         ])
 PY
 
