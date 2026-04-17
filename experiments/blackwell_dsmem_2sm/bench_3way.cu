@@ -170,8 +170,8 @@ void d1_kernel(const half* __restrict__ A,
 }
 
 //=============================================================================
-// D2: Cluster, CTA1 reads B directly from CTA0's DSMEM during compute (no copy)
-// This simulates mma.2sm hardware behavior: operand B fetched from peer smem
+// D2: Same as D1 for now - cross-CTA direct read causes launch failure on B300
+// TODO: Investigate Blackwell-specific cluster shared memory access requirements
 //=============================================================================
 __global__ __cluster_dims__(2, 1, 1) __launch_bounds__(128)
 void d2_kernel(const half* __restrict__ A,
@@ -187,9 +187,9 @@ void d2_kernel(const half* __restrict__ A,
   const int n0 = blockIdx.y * kTileN;
   if (m0 >= M || n0 >= N) return;
 
-  // Get pointer to CTA0's shared memory - use CUDA builtin, not inline PTX
-  SmemTile* sm0 = reinterpret_cast<SmemTile*>(cluster.map_shared_rank(&sm, 0));
-  const half* B0 = &sm0->B[0][0][0];
+  // Pointer into CTA0's B buffer (same as D1)
+  const half* remB = reinterpret_cast<SmemTile*>(
+      cluster.map_shared_rank(&sm, 0))->B[0][0];
 
   const int tid = threadIdx.x;
   const int rbase = (tid / 16) * 4;
@@ -208,7 +208,7 @@ void d2_kernel(const half* __restrict__ A,
                           : __float2half(0.f);
     }
 
-    // Only CTA0 loads B from HBM (no copy step for CTA1)
+    // Only CTA0 loads B from HBM
     if (rank == 0) {
       for (int i = tid; i < kTileN * kTileK; i += 128) {
         int n = i / kTileK, k = i % kTileK;
@@ -218,21 +218,21 @@ void d2_kernel(const half* __restrict__ A,
       }
     }
 
-    cluster.sync(); // wait for CTA0's B
+    cluster.sync();
 
-    // Compute: BOTH CTAs read B from CTA0's smem
-    // CTA0 reads local, CTA1 reads remote DSMEM
-    // Use direct pointer dereference - compiler will generate ld.shared::cluster
+    // Copy B from CTA0's DSMEM (same as D1)
+    for (int i = tid; i < kTileN * kTileK; i += 128) {
+      sm.B[stage][i / kTileK][i % kTileK] = remB[stage * kTileN * kTileK + i];
+    }
+
+    cluster.sync();
+
+    // Compute from LOCAL smem
     for (int k = 0; k < kt; ++k) {
-      for (int r = 0; r < 4; ++r) {
-        for (int c = 0; c < 4; ++c) {
-          // Direct access to remote shared memory
-          // nvcc should handle this correctly for cluster kernels
-          half b_val = B0[stage * kTileN * kTileK + (cbase + c) * kTileK + k];
+      for (int r = 0; r < 4; ++r)
+        for (int c = 0; c < 4; ++c)
           acc[r*4+c] += __half2float(sm.A[stage][rbase+r][k])
-                      * __half2float(b_val);
-        }
-      }
+                      * __half2float(sm.B[stage][cbase+c][k]);
     }
   }
 
