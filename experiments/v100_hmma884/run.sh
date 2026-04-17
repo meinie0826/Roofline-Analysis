@@ -24,6 +24,7 @@ mkdir -p "$OUTDIR"
 RAW_CSV="$OUTDIR/results_raw.csv"
 SUMMARY_CSV="$OUTDIR/results_summary.csv"
 DERIVED_CSV="$OUTDIR/results_derived.csv"
+BASELINE_COMPARE_CSV="$OUTDIR/results_baseline_compare.csv"
 METADATA_JSON="$OUTDIR/metadata.json"
 RUN_LOG="$OUTDIR/run.log"
 
@@ -330,7 +331,90 @@ with open(derived_path, "w", newline="") as f:
         ])
 PY
 
+python3 - "$SUMMARY_CSV" "$BASELINE_COMPARE_CSV" <<'PY'
+import csv
+import sys
+
+summary_path, compare_path = sys.argv[1], sys.argv[2]
+bench_empty = {}
+bench_empty_matched_dep = {}
+bench_empty_matched_f32acc = {}
+bench_mma_f16_dep = {}
+bench_mma_f32acc = {}
+
+with open(summary_path, newline='') as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        key = (row["loop_iters"], row["unroll"], row["streams"])
+        if row["benchmark"] == "bench_empty":
+            bench_empty[(row["loop_iters"], row["unroll"])] = row
+        elif row["benchmark"] == "bench_empty_matched_dep":
+            bench_empty_matched_dep[key] = row
+        elif row["benchmark"] == "bench_empty_matched_f32acc":
+            bench_empty_matched_f32acc[key] = row
+        elif row["benchmark"] == "bench_mma_f16_dep":
+            bench_mma_f16_dep[key] = row
+        elif row["benchmark"] == "bench_mma_f32acc":
+            bench_mma_f32acc[key] = row
+
+def write_row(writer, row, empty_row, matched_row, steps):
+    mean_cycles = float(row["mean_cycles"])
+    empty_cycles = float(empty_row["mean_cycles"]) if empty_row else 0.0
+    matched_cycles = float(matched_row["mean_cycles"]) if matched_row else 0.0
+    total_mma = float(row["loop_iters"]) * float(row["unroll"]) * float(row["streams"])
+    delta_empty = mean_cycles - empty_cycles
+    delta_matched = mean_cycles - matched_cycles
+    writer.writerow([
+        row["benchmark"],
+        row["mode"],
+        row["loop_iters"],
+        row["unroll"],
+        row["streams"],
+        f"{mean_cycles:.2f}",
+        f"{empty_cycles:.2f}",
+        f"{delta_empty:.2f}",
+        f"{(delta_empty / total_mma):.8f}",
+        f"{(delta_empty / total_mma / steps):.8f}",
+        f"{matched_cycles:.2f}",
+        f"{delta_matched:.2f}",
+        f"{(delta_matched / total_mma):.8f}",
+        f"{(delta_matched / total_mma / steps):.8f}",
+    ])
+
+with open(compare_path, "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow([
+        "benchmark",
+        "mode",
+        "loop_iters",
+        "unroll",
+        "streams",
+        "mean_cycles",
+        "raw_empty_mean_cycles",
+        "delta_vs_raw_empty_cycles",
+        "delta_vs_raw_empty_cycles_per_mma",
+        "delta_vs_raw_empty_cycles_per_hmma_step",
+        "matched_empty_mean_cycles",
+        "delta_vs_matched_empty_cycles",
+        "delta_vs_matched_empty_cycles_per_mma",
+        "delta_vs_matched_empty_cycles_per_hmma_step",
+    ])
+
+    for key in sorted(bench_mma_f16_dep):
+        row = bench_mma_f16_dep[key]
+        empty_row = bench_empty.get((row["loop_iters"], row["unroll"]))
+        matched_row = bench_empty_matched_dep.get(key)
+        write_row(writer, row, empty_row, matched_row, 2.0)
+
+    for key in sorted(bench_mma_f32acc):
+        row = bench_mma_f32acc[key]
+        empty_row = bench_empty.get((row["loop_iters"], row["unroll"]))
+        matched_row = bench_empty_matched_f32acc.get(key)
+        write_row(writer, row, empty_row, matched_row, 4.0)
+PY
+
 echo "Saved raw results to $RAW_CSV"
 echo "Saved summary to $SUMMARY_CSV"
 echo "Saved derived results to $DERIVED_CSV"
+echo "Saved baseline comparison to $BASELINE_COMPARE_CSV"
 echo "Saved metadata to $METADATA_JSON"

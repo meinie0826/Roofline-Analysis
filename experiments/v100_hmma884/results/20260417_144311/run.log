@@ -1,0 +1,3 @@
+Output directory: /Users/meiziyuan/Roofline-Analysis/experiments/v100_hmma884/results/20260417_144311
+ERROR: required tool 'nvcc' not found in PATH.
+Hint: Set NVCC to your compiler path, e.g. NVCC=/usr/local/cuda/bin/nvcc bash run.sh

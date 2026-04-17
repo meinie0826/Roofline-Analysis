@@ -110,6 +110,7 @@ results/<timestamp>/
 - `results_raw.csv`：每次 repeat 一行原始结果
 - `results_summary.csv`：按 benchmark 聚合后的均值/中位数/stddev/min/max
 - `results_derived.csv`：自动派生 `f16 dep` 与 `f32acc` 相对各自 matched-empty 的差值
+- `results_baseline_compare.csv`：同时比较 `raw empty` 与 `matched empty` 两种减法口径
 - `metadata.json`：GPU / nvcc / git commit / 参数等元数据
 - `run.log`：整次运行的终端日志
 - `sass_*.txt`：每个 binary 的完整 SASS dump
@@ -164,6 +165,23 @@ results/<timestamp>/
 - `matched_empty_mean_cycles_per_mma`
 - `delta_cycles_per_mma`
 - `delta_cycles_per_hmma_step`
+
+### `results_baseline_compare.csv` 字段
+
+- `benchmark`
+- `mode`
+- `loop_iters`
+- `unroll`
+- `streams`
+- `mean_cycles`
+- `raw_empty_mean_cycles`
+- `delta_vs_raw_empty_cycles`
+- `delta_vs_raw_empty_cycles_per_mma`
+- `delta_vs_raw_empty_cycles_per_hmma_step`
+- `matched_empty_mean_cycles`
+- `delta_vs_matched_empty_cycles`
+- `delta_vs_matched_empty_cycles_per_mma`
+- `delta_vs_matched_empty_cycles_per_hmma_step`
 
 ## 建议检查顺序
 
