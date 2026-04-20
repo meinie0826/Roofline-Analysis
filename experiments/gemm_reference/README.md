@@ -26,6 +26,7 @@ gemm_reference/
 ├── step2_tcgen05_mma_gemm.cu # 步骤 2: Hopper-style warp MMA GEMM
 ├── step3_hopper_tma_gemm.cu  # 步骤 3: TMA + Hopper warp MMA GEMM
 ├── step4_hopper_ws_tma_gemm.cu # 步骤 4: Warp Specialization + TMA + MMA
+├── step5_hopper_multistage_ws_tma_gemm.cu # 步骤 5: Multistage Warp Specialization + TMA + MMA
 ├── Makefile                  # 编译
 ├── run.sh                    # 批量 shape 跑 benchmark 并落盘
 ├── README.md                 # 说明
@@ -78,6 +79,16 @@ gemm_reference/
     - `filled[stage]`: producer -> consumer
     - `ready[stage]`: consumer -> producer
   - 通过 `parity` 重用 stage，避免 stage reuse 时死锁
+
+还有一个独立的步骤 5 程序：
+
+- `step5_hopper_multistage_ws_tma_gemm.cu`
+  - 保持步骤 4 的 `12 warps / 3 warpgroups` 分工不变
+  - 把 pipeline depth 从 `2-stage` 扩成 `4-stage`
+  - 仍然使用两套 `mbarrier`
+    - `filled[stage]`
+    - `ready[stage]`
+  - 目标是验证多级流水能不能进一步把 TMA 和 consumer MMA 更充分地重叠
 
 正确性默认拿 `cuBLAS` 输出当 reference，和自定义 kernel 做逐元素比较，输出：
 
@@ -191,6 +202,22 @@ make bench_step4_hopper_ws_tma ARCH=sm_100a
 ```bash
 cd /Users/meiziyuan/Roofline-Analysis/experiments/gemm_reference
 ./bench_step4_hopper_ws_tma --m=128 --n=256 --k=64 --warmup=5 --iters=20
+```
+
+## 步骤 5 运行
+
+编译：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis/experiments/gemm_reference
+make bench_step5_hopper_multistage_ws_tma ARCH=sm_100a
+```
+
+运行：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis/experiments/gemm_reference
+./bench_step5_hopper_multistage_ws_tma --m=128 --n=256 --k=64 --warmup=5 --iters=20
 ```
 
 ## 批量跑
