@@ -260,10 +260,13 @@ __host__ __device__ constexpr int canonical_k_major_index(int mn_dim,
 }
 
 __host__ __device__ constexpr uint32_t tmem_addr_f32_1sm(uint32_t base,
-                                                         int row,
+                                                         int warp_id,
                                                          int col) {
-  return base + (static_cast<uint32_t>(row) << 16) +
-         static_cast<uint32_t>(col * kTileM);
+  // tcgen05.ld.32x32b uses the lane's datapath implicitly.
+  // The explicit address should be warp-uniform and only select the 32-row
+  // warp block plus the starting column inside the TMEM tile.
+  return base + (static_cast<uint32_t>(warp_id * 32) << 16) +
+         static_cast<uint32_t>(col);
 }
 
 constexpr std::size_t kPackedABytes =
@@ -398,7 +401,7 @@ __global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
     const int row = warp_id * 32 + lane_id;
     for (int col = 0; col < kTileN; ++col) {
       float value = 0.0f;
-      uint32_t tmem_ptr = tmem_addr_f32_1sm(tmem_d, row, col);
+      uint32_t tmem_ptr = tmem_addr_f32_1sm(tmem_d, warp_id, col);
       tcgen05_ld_1x32(value, tmem_ptr);
       tcgen05_wait_ld();
       D[(tile_m + row) * N + (tile_n + col)] = value;
