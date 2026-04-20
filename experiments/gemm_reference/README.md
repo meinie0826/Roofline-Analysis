@@ -52,8 +52,8 @@ gemm_reference/
 
 - `step2_tcgen05_mma_gemm.cu`
   - 基于 Blackwell `tcgen05.mma + tcgen05.ld`
-  - 参考 CUTLASS tutorial 01 的最小路径
-  - 用 `half` 输入、`float` 输出
+  - 直接用 inline PTX，绕开高层 CUTLASS/CuTe copy/TMA 模板
+  - 用 `bf16` 输入、`float` 输出
   - 初始化成小整数值，和 `cublasGemmEx(..., CUBLAS_COMPUTE_32F_PEDANTIC)` 做精确对拍
   - 目标是 `max_abs=0`
 
@@ -128,15 +128,15 @@ make bench_step2_tcgen05_mma ARCH=sm_100a
 
 ```bash
 cd /Users/meiziyuan/Roofline-Analysis/experiments/gemm_reference
-./bench_step2_tcgen05_mma --m=128 --n=256 --k=64 --warmup=5 --iters=20
+./bench_step2_tcgen05_mma --m=128 --n=64 --k=32 --warmup=5 --iters=20
 ```
 
 当前步骤 2 约束：
 
 ```bash
 m % 128 == 0
-n % 256 == 0
-k % 64 == 0
+n % 64 == 0
+k % 32 == 0
 ```
 
 ## 批量跑

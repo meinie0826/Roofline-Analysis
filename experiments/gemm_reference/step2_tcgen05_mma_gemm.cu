@@ -1,23 +1,8 @@
 #include "gemm_reference_common.h"
 
-#include <thrust/device_ptr.h>
-#include <thrust/device_vector.h>
-#include <thrust/host_vector.h>
+#include <cuda_bf16.h>
 
-#include <cute/arch/copy_sm90_desc.hpp>
-#include <cute/arch/copy_sm100.hpp>
-#include <cute/arch/cluster_sm90.hpp>
-#include <cute/arch/tmem_allocator_sm100.hpp>
-#include <cute/atom/copy_atom.hpp>
-#include <cute/atom/copy_traits_sm100.hpp>
-#include <cute/atom/mma_traits_sm100.hpp>
-#include <cute/numeric/integral_constant.hpp>
-#include <cute/tensor.hpp>
-
-#include <cutlass/arch/barrier.h>
-#include <cutlass/cluster_launch.hpp>
-#include <cutlass/half.h>
-
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <optional>
@@ -25,18 +10,26 @@
 #include <string_view>
 #include <vector>
 
-using namespace cute;
-
 namespace {
+
+constexpr int kThreads = 128;
+constexpr int kTileM = 128;
+constexpr int kTileN = 64;
+constexpr int kTileK = 32;
 
 struct Step2Options {
   int m = 128;
-  int n = 256;
-  int k = 64;
+  int n = 64;
+  int k = 32;
   int warmup = 5;
   int iters = 20;
   int seed = 2026;
 };
+
+template <typename T, typename U>
+__host__ __device__ constexpr auto align_up_local(T x, U boundary) {
+  return (x + boundary - 1) & ~(boundary - 1);
+}
 
 std::optional<std::string_view> maybe_value(const std::string& arg,
                                             const std::string& prefix) {
@@ -64,8 +57,8 @@ void print_usage(const char* argv0) {
   std::cerr
       << "Usage: " << argv0 << " [options]\n"
       << "  --m=<int>        GEMM M, multiple of 128\n"
-      << "  --n=<int>        GEMM N, multiple of 256\n"
-      << "  --k=<int>        GEMM K, multiple of 64\n"
+      << "  --n=<int>        GEMM N, multiple of 64\n"
+      << "  --k=<int>        GEMM K, multiple of 32\n"
       << "  --warmup=<int>   Warmup iterations\n"
       << "  --iters=<int>    Timed iterations\n"
       << "  --seed=<int>     Deterministic exact init seed\n";
@@ -103,44 +96,25 @@ Step2Options parse_options(int argc, char** argv) {
   if (options.warmup < 0 || options.iters <= 0) {
     throw std::runtime_error("warmup must be >= 0 and iters must be > 0");
   }
-  if (options.m % 128 != 0 || options.n % 256 != 0 || options.k % 64 != 0) {
+  if (options.m % kTileM != 0 || options.n % kTileN != 0 ||
+      options.k % kTileK != 0) {
     throw std::runtime_error(
-        "step2 currently requires m multiple of 128, n multiple of 256, k multiple of 64");
+        "step2 currently requires m multiple of 128, n multiple of 64, k multiple of 32");
   }
   return options;
 }
 
-template <class Tensor>
-void initialize_exact_tensor(Tensor& tensor, int seed) {
-  using DataType = typename Tensor::element_type;
-  for (int i = 0; i < cute::size(tensor); ++i) {
-    int value = ((i * 17 + seed * 13) % 5) - 2;
-    tensor(i) = DataType(value);
-  }
-}
-
-template <class Tensor>
-void zero_tensor(Tensor& tensor) {
-  using DataType = typename Tensor::element_type;
-  for (int i = 0; i < cute::size(tensor); ++i) {
-    tensor(i) = DataType(0);
-  }
-}
-
-template <int NumThreads, class SrcTensor, class DstTensor>
-CUTE_DEVICE void cooperative_copy_fallback(uint32_t tid,
-                                           const SrcTensor& src,
-                                           DstTensor& dst) {
-  static_assert(NumThreads > 0, "NumThreads must be positive");
-  for (int i = tid; i < size(dst); i += NumThreads) {
-    dst(i) = src(i);
+void initialize_exact_tensor(std::vector<nv_bfloat16>& tensor, int seed) {
+  for (std::size_t i = 0; i < tensor.size(); ++i) {
+    int value = ((static_cast<int>(i) * 17 + seed * 13) % 5) - 2;
+    tensor[i] = __float2bfloat16(static_cast<float>(value));
   }
 }
 
 void run_cublas_reference(cublasHandle_t handle,
                           const Step2Options& options,
-                          const cutlass::half_t* d_a,
-                          const cutlass::half_t* d_b,
+                          const nv_bfloat16* d_a,
+                          const nv_bfloat16* d_b,
                           float* d_d) {
   const float alpha = 1.0f;
   const float beta = 0.0f;
@@ -152,10 +126,10 @@ void run_cublas_reference(cublasHandle_t handle,
                             options.k,
                             &alpha,
                             d_b,
-                            CUDA_R_16F,
+                            CUDA_R_16BF,
                             options.k,
                             d_a,
-                            CUDA_R_16F,
+                            CUDA_R_16BF,
                             options.k,
                             &beta,
                             d_d,
@@ -165,219 +139,214 @@ void run_cublas_reference(cublasHandle_t handle,
                             CUBLAS_GEMM_DEFAULT));
 }
 
-#if defined(CUTLASS_ARCH_MMA_SM100_SUPPORTED)
+__device__ __forceinline__ uint32_t elect_sync() {
+  uint32_t pred = 0;
+  asm volatile(
+      "{\n\t"
+      ".reg .pred %%px;\n\t"
+      "elect.sync _|%%px, %1;\n\t"
+      "@%%px mov.s32 %0, 1;\n\t"
+      "}"
+      : "+r"(pred)
+      : "r"(0xFFFFFFFF));
+  return pred;
+}
 
-template <class TypeA, class TypeB, class ASmemLayout, class BSmemLayout>
-struct SharedStorageStep2 {
-  alignas(128) cute::ArrayEngine<TypeA, cute::cosize_v<ASmemLayout>> A;
-  alignas(128) cute::ArrayEngine<TypeB, cute::cosize_v<BSmemLayout>> B;
-  alignas(16) cute::uint64_t mma_barrier;
-  alignas(16) cute::uint32_t tmem_base_ptr;
+__device__ __forceinline__ void mbarrier_init(uint32_t addr, uint32_t count) {
+  asm volatile("mbarrier.init.shared::cta.b64 [%0], %1;"
+               :
+               : "r"(addr), "r"(count)
+               : "memory");
+}
 
-  CUTE_DEVICE constexpr auto tensor_sA() {
-    return make_tensor(make_smem_ptr(A.begin()), ASmemLayout{});
+__device__ __forceinline__ void mbarrier_wait(uint32_t addr, uint32_t phase) {
+  asm volatile(
+      "{\n\t"
+      ".reg .pred P1;\n\t"
+      "LAB_WAIT:\n\t"
+      "mbarrier.try_wait.parity.acquire.cta.shared::cta.b64 P1, [%0], %1;\n\t"
+      "@P1 bra.uni DONE;\n\t"
+      "bra.uni LAB_WAIT;\n\t"
+      "DONE:\n\t"
+      "}"
+      :
+      : "r"(addr), "r"(phase)
+      : "memory");
+}
+
+__device__ __forceinline__ void tcgen05_alloc(uint32_t addr_ptr,
+                                              uint32_t num_cols) {
+  asm volatile("tcgen05.alloc.cta_group::1.sync.aligned.shared::cta.b32 [%0], %1;"
+               :
+               : "r"(addr_ptr), "r"(num_cols)
+               : "memory");
+}
+
+__device__ __forceinline__ void tcgen05_dealloc(uint32_t tmem_addr,
+                                                uint32_t num_cols) {
+  asm volatile("tcgen05.dealloc.cta_group::1.sync.aligned.b32 %0, %1;"
+               :
+               : "r"(tmem_addr), "r"(num_cols)
+               : "memory");
+}
+
+__device__ __forceinline__ void tcgen05_commit(uint32_t mbar_addr) {
+  asm volatile(
+      "tcgen05.commit.cta_group::1.mbarrier::arrive::one.shared::cluster.b64 [%0];"
+      :
+      : "r"(mbar_addr)
+      : "memory");
+}
+
+__device__ __forceinline__ void tcgen05_fence_after_thread_sync() {
+  asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
+}
+
+__device__ __forceinline__ void tcgen05_wait_ld() {
+  asm volatile("tcgen05.wait::ld.sync.aligned;" ::: "memory");
+}
+
+__device__ __forceinline__ void tcgen05_ld_4x32(float& d0,
+                                                float& d1,
+                                                float& d2,
+                                                float& d3,
+                                                uint32_t addr) {
+  asm volatile("tcgen05.ld.sync.aligned.32x32b.x4.b32 {%0, %1, %2, %3}, [%4];"
+               : "=f"(d0), "=f"(d1), "=f"(d2), "=f"(d3)
+               : "r"(addr));
+}
+
+__device__ __forceinline__ uint64_t make_smem_desc(uint32_t addr,
+                                                   uint32_t sbo_bytes,
+                                                   uint32_t swizzle) {
+  return (static_cast<uint64_t>(addr >> 4)) |
+         (static_cast<uint64_t>(sbo_bytes) << 32) |
+         (static_cast<uint64_t>(swizzle) << 61);
+}
+
+__device__ __forceinline__ uint32_t make_i_desc_f16bf16() {
+  return (1U << 4) | (1U << 7) | (1U << 10) | ((kTileN >> 3) << 17) |
+         (8U << 24);
+}
+
+__device__ __forceinline__ void tcgen05_mma_bf16(uint32_t tmem_d,
+                                                 uint64_t a_desc,
+                                                 uint64_t b_desc,
+                                                 uint32_t i_desc,
+                                                 int accumulate) {
+  asm volatile(
+      "{\n\t"
+      ".reg .pred p;\n\t"
+      "setp.ne.b32 p, %4, 0;\n\t"
+      "tcgen05.mma.cta_group::1.kind::f16 [%0], %1, %2, %3, p;\n\t"
+      "}\n"
+      :
+      : "r"(tmem_d), "l"(a_desc), "l"(b_desc), "r"(i_desc), "r"(accumulate)
+      : "memory");
+}
+
+__global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
+    const nv_bfloat16* __restrict__ A,
+    const nv_bfloat16* __restrict__ B,
+    float* __restrict__ D,
+    int M,
+    int N,
+    int K) {
+  extern __shared__ __align__(128) unsigned char smem[];
+  auto* sA = reinterpret_cast<nv_bfloat16*>(smem);
+  auto* sB =
+      reinterpret_cast<nv_bfloat16*>(smem + kTileM * kTileK * sizeof(nv_bfloat16));
+
+  __shared__ uint64_t mbar;
+  __shared__ int tmem_addr;
+
+  const int tid = threadIdx.x;
+  const int warp_id = tid / 32;
+  const int tile_m = blockIdx.y * kTileM;
+  const int tile_n = blockIdx.x * kTileN;
+
+  if (tile_m >= M || tile_n >= N) {
+    return;
   }
 
-  CUTE_DEVICE constexpr auto tensor_sB() {
-    return make_tensor(make_smem_ptr(B.begin()), BSmemLayout{});
-  }
-};
-
-template <class SharedStorage, class ATensor, class BTensor, class CTensor,
-          class DTensor, class MmaTiler_MNK, class TiledMMA,
-          class ClusterShape_MNK, class Alpha, class Beta>
-__global__ static void gemm_device_step2(
-    ATensor mA,
-    BTensor mB,
-    CTensor mC,
-    DTensor mD,
-    MmaTiler_MNK mma_tiler,
-    TiledMMA tiled_mma,
-    ClusterShape_MNK cluster_shape,
-    Alpha alpha,
-    Beta beta) {
-  Layout cluster_layout_vmnk = tiled_divide(
-      make_layout(cluster_shape),
-      make_tile(typename TiledMMA::AtomThrID{}));
-
-  auto mma_coord_vmnk = make_coord(blockIdx.x % size<0>(cluster_layout_vmnk),
-                                   blockIdx.x / size<0>(cluster_layout_vmnk),
-                                   blockIdx.y,
-                                   _);
-  auto mma_coord = select<1, 2, 3>(mma_coord_vmnk);
-
-  Tensor gA = local_tile(mA, mma_tiler, mma_coord, Step<_1, X, _1>{});
-  Tensor gB = local_tile(mB, mma_tiler, mma_coord, Step< X, _1, _1>{});
-  Tensor gC = local_tile(mC, mma_tiler, mma_coord, Step<_1, _1, X>{});
-  Tensor gD = local_tile(mD, mma_tiler, mma_coord, Step<_1, _1, X>{});
-
-  extern __shared__ char shared_memory[];
-  auto& shared_storage = *reinterpret_cast<SharedStorage*>(shared_memory);
-
-  Tensor tCsA = shared_storage.tensor_sA();
-  Tensor tCsB = shared_storage.tensor_sB();
-
-  auto mma_v = get<0>(mma_coord_vmnk);
-  ThrMMA cta_mma = tiled_mma.get_slice(mma_v);
-  Tensor tCgA = cta_mma.partition_A(gA);
-  Tensor tCgB = cta_mma.partition_B(gB);
-  Tensor tCgC = cta_mma.partition_C(gC);
-  Tensor tCgD = cta_mma.partition_C(gD);
-
-  Tensor tCrA = cta_mma.make_fragment_A(tCsA);
-  Tensor tCrB = cta_mma.make_fragment_B(tCsB);
-  Tensor tCtAcc = cta_mma.make_fragment_C(tCgC);
-
-  uint32_t elect_one_thr = cute::elect_one_sync();
-  uint32_t elect_one_warp = (threadIdx.x / 32 == 0);
-
-  using TmemAllocator = cute::TMEM::Allocator1Sm;
-  TmemAllocator tmem_allocator{};
-  if (elect_one_warp) {
-    tmem_allocator.allocate(TmemAllocator::Sm100TmemCapacityColumns,
-                            &shared_storage.tmem_base_ptr);
+  const uint32_t mbar_addr =
+      static_cast<uint32_t>(__cvta_generic_to_shared(&mbar));
+  if (tid == 0) {
+    mbarrier_init(mbar_addr, 1);
+    uint32_t tmem_addr_smem =
+        static_cast<uint32_t>(__cvta_generic_to_shared(&tmem_addr));
+    tcgen05_alloc(tmem_addr_smem, align_up_local(kTileN, 32));
   }
   __syncthreads();
-  tCtAcc.data() = shared_storage.tmem_base_ptr;
 
-  if (elect_one_warp && elect_one_thr) {
-    cute::initialize_barrier(shared_storage.mma_barrier, 1);
-  }
-  int mma_barrier_phase_bit = 0;
-  __syncthreads();
+  const uint32_t tmem_d = static_cast<uint32_t>(tmem_addr);
+  const uint32_t sA_addr = static_cast<uint32_t>(__cvta_generic_to_shared(sA));
+  const uint32_t sB_addr = static_cast<uint32_t>(__cvta_generic_to_shared(sB));
+  const uint64_t a_desc = make_smem_desc(sA_addr, 8 * kTileK * sizeof(nv_bfloat16), 0);
+  const uint64_t b_desc = make_smem_desc(sB_addr, 8 * kTileK * sizeof(nv_bfloat16), 0);
+  const uint32_t i_desc = make_i_desc_f16bf16();
 
-  tiled_mma.accumulate_ = UMMA::ScaleOut::Zero;
-  for (int k_tile = 0; k_tile < size<3>(tCgA); ++k_tile) {
-    cooperative_copy_fallback<128>(threadIdx.x, tCgA(_, _, _, k_tile), tCsA);
-    cooperative_copy_fallback<128>(threadIdx.x, tCgB(_, _, _, k_tile), tCsB);
+  int phase = 0;
+  for (int k_base = 0; k_base < K; k_base += kTileK) {
+    for (int i = tid; i < kTileM * kTileK; i += blockDim.x) {
+      int row = i / kTileK;
+      int col = i % kTileK;
+      sA[i] = A[(tile_m + row) * K + (k_base + col)];
+    }
+    for (int i = tid; i < kTileN * kTileK; i += blockDim.x) {
+      int row = i / kTileK;
+      int col = i % kTileK;
+      sB[i] = B[(tile_n + row) * K + (k_base + col)];
+    }
     __syncthreads();
 
-    if (elect_one_warp) {
-      for (int k_block = 0; k_block < size<2>(tCrA); ++k_block) {
-        gemm(tiled_mma, tCrA(_, _, k_block), tCrB(_, _, k_block), tCtAcc);
-        tiled_mma.accumulate_ = UMMA::ScaleOut::One;
-      }
-      cutlass::arch::umma_arrive(&shared_storage.mma_barrier);
+    if (warp_id == 0 && elect_sync()) {
+      tcgen05_mma_bf16(tmem_d, a_desc, b_desc, i_desc, k_base != 0);
+      tcgen05_commit(mbar_addr);
     }
-    cute::wait_barrier(shared_storage.mma_barrier, mma_barrier_phase_bit);
-    mma_barrier_phase_bit ^= 1;
+    mbarrier_wait(mbar_addr, phase);
+    phase ^= 1;
+    __syncthreads();
   }
 
-  TiledCopy tiled_t2r_copy = make_tmem_copy(SM100_TMEM_LOAD_32dp32b1x{}, tCtAcc);
-  ThrCopy thr_t2r_copy = tiled_t2r_copy.get_slice(threadIdx.x);
+  tcgen05_fence_after_thread_sync();
+  __syncthreads();
 
-  Tensor tDgC = thr_t2r_copy.partition_D(tCgC);
-  Tensor tDrC = make_fragment_like(tDgC);
-  copy(tDgC, tDrC);
+  if (tid < kTileM) {
+    for (int col = 0; col < kTileN; col += 4) {
+      float v0 = 0.0f;
+      float v1 = 0.0f;
+      float v2 = 0.0f;
+      float v3 = 0.0f;
+      uint32_t tmem_ptr = (static_cast<uint32_t>(tid) << 16) | col;
+      tcgen05_ld_4x32(v0, v1, v2, v3, tmem_ptr);
+      tcgen05_wait_ld();
 
-  Tensor tDtAcc = thr_t2r_copy.partition_S(tCtAcc);
-  Tensor tDgD = thr_t2r_copy.partition_D(tCgD);
-  using AccType = typename decltype(tCtAcc)::value_type;
-  Tensor tDrAcc = make_tensor<AccType>(shape(tDgD));
-  copy(tiled_t2r_copy, tDtAcc, tDrAcc);
-
-  axpby(alpha, tDrAcc, beta, tDrC);
-  copy(tDrC, tDgD);
+      float vals[4] = {v0, v1, v2, v3};
+      for (int i = 0; i < 4; ++i) {
+        D[(tile_m + tid) * N + (tile_n + col + i)] = vals[i];
+      }
+    }
+  }
 
   __syncthreads();
-  if (elect_one_warp) {
-    tmem_allocator.release_allocation_lock();
-    tmem_allocator.free(shared_storage.tmem_base_ptr,
-                        TmemAllocator::Sm100TmemCapacityColumns);
+  if (tid == 0) {
+    tcgen05_dealloc(tmem_d, align_up_local(kTileN, 32));
   }
 }
 
-template <class TypeA, class LayoutA, class TypeB, class LayoutB, class TypeC,
-          class LayoutC, class TypeD, class LayoutD, class Alpha, class Beta>
-void launch_tcgen05_gemm(const TypeA* device_ptr_A,
-                         LayoutA layout_A,
-                         const TypeB* device_ptr_B,
-                         LayoutB layout_B,
-                         const TypeC* device_ptr_C,
-                         LayoutC layout_C,
-                         TypeD* device_ptr_D,
-                         LayoutD layout_D,
-                         Alpha alpha,
-                         Beta beta) {
-  if (shape<0>(layout_A) != shape<0>(layout_C) ||
-      shape<0>(layout_A) != shape<0>(layout_D) ||
-      shape<0>(layout_B) != shape<1>(layout_C) ||
-      shape<0>(layout_B) != shape<1>(layout_D) ||
-      shape<1>(layout_A) != shape<1>(layout_B)) {
-    throw std::runtime_error("step2 layout mismatch");
-  }
-
-  Tensor mA = make_tensor(make_gmem_ptr(device_ptr_A), layout_A);
-  Tensor mB = make_tensor(make_gmem_ptr(device_ptr_B), layout_B);
-  Tensor mC = make_tensor(make_gmem_ptr(device_ptr_C), layout_C);
-  Tensor mD = make_tensor(make_gmem_ptr(device_ptr_D), layout_D);
-
-  using TiledMMA = decltype(make_tiled_mma(
-      SM100_MMA_F16BF16_SS<TypeA, TypeB, TypeC, 128, 256, UMMA::Major::K,
-                           UMMA::Major::K>{}));
-  TiledMMA tiled_mma = make_tiled_mma(
-      SM100_MMA_F16BF16_SS<TypeA, TypeB, TypeC, 128, 256, UMMA::Major::K,
-                           UMMA::Major::K>{});
-
-  auto bM = tile_size<0>(tiled_mma);
-  auto bN = tile_size<1>(tiled_mma);
-  auto bK = tile_size<2>(tiled_mma) * Int<4>{};
-  auto mma_tiler = make_shape(bM, bN, bK);
-
-  if (!evenly_divides(shape(mma_tiler), tile_shape(tiled_mma))) {
-    throw std::runtime_error("step2 mma_tiler must evenly divide tiled_mma");
-  }
-  if (!evenly_divides(
-          make_shape(shape<0>(layout_A), shape<0>(layout_B), shape<1>(layout_A)),
-          mma_tiler)) {
-    throw std::runtime_error("step2 does not support OOB tiles");
-  }
-
-  using ASmemLayout = decltype(UMMA::tile_to_mma_shape(
-      UMMA::Layout_K_SW128_Atom<TypeA>{},
-      partition_shape_A(TiledMMA{}, make_shape(size<0>(mma_tiler), size<2>(mma_tiler)))));
-  using BSmemLayout = decltype(UMMA::tile_to_mma_shape(
-      UMMA::Layout_K_SW128_Atom<TypeB>{},
-      partition_shape_B(TiledMMA{}, make_shape(size<1>(mma_tiler), size<2>(mma_tiler)))));
-  using SharedStorage =
-      SharedStorageStep2<TypeA, TypeB, ASmemLayout, BSmemLayout>;
-
-  auto cluster_shape = make_shape(Int<1>{}, Int<1>{}, Int<1>{});
-  Layout cluster_layout_vmnk = tiled_divide(
-      make_layout(cluster_shape),
-      make_tile(typename TiledMMA::AtomThrID{}));
-
-  dim3 dimBlock(128);
-  dim3 dimCluster(size<0>(cluster_shape), size<1>(cluster_shape),
-                  size<2>(cluster_shape));
-  dim3 dimGrid(
-      size(ceil_div(shape<0>(layout_A), bM * size<1>(cluster_layout_vmnk))) *
-          dimCluster.x,
-      size(ceil_div(shape<0>(layout_B), bN * size<2>(cluster_layout_vmnk))) *
-          dimCluster.y);
-  int smemBytes = sizeof(SharedStorage);
-
-  auto* kernel_ptr = &gemm_device_step2<SharedStorage, decltype(mA), decltype(mB),
-                                        decltype(mC), decltype(mD),
-                                        decltype(mma_tiler), TiledMMA,
-                                        decltype(cluster_shape), Alpha, Beta>;
-
-  CUTE_CHECK_ERROR(cudaFuncSetAttribute(
-      kernel_ptr, cudaFuncAttributeMaxDynamicSharedMemorySize, smemBytes));
-
-  cutlass::ClusterLaunchParams params = {dimGrid, dimBlock, dimCluster,
-                                         smemBytes};
-  cutlass::Status status = cutlass::launch_kernel_on_cluster(
-      params, reinterpret_cast<void const*>(kernel_ptr), mA, mB, mC, mD,
-      mma_tiler, tiled_mma, cluster_shape, alpha, beta);
-  CUTE_CHECK_LAST();
-
-  if (status != cutlass::Status::kSuccess) {
-    throw std::runtime_error("Failed to launch tcgen05 step2 kernel");
-  }
+void launch_tcgen05_gemm(const nv_bfloat16* d_a,
+                         const nv_bfloat16* d_b,
+                         float* d_d,
+                         const Step2Options& options) {
+  dim3 block(kThreads);
+  dim3 grid(options.n / kTileN, options.m / kTileM);
+  std::size_t smem_bytes =
+      (kTileM + kTileN) * kTileK * sizeof(nv_bfloat16);
+  step2_tcgen05_kernel<<<grid, block, smem_bytes>>>(d_a, d_b, d_d, options.m,
+                                                    options.n, options.k);
+  CHECK_CUDA(cudaGetLastError());
 }
-
-#endif
 
 template <typename LaunchFn>
 TimingStats benchmark_kernel(const Step2Options& options,
@@ -470,73 +439,52 @@ int main(int argc, char** argv) {
       throw std::runtime_error("step2 requires Blackwell tcgen05 support");
     }
 
-#if !defined(CUTLASS_ARCH_MMA_SM100_SUPPORTED)
-    throw std::runtime_error(
-        "CUTLASS_ARCH_MMA_SM100_SUPPORTED is not enabled for this build");
-#else
-    using TypeA = cutlass::half_t;
-    using TypeB = cutlass::half_t;
-    using TypeC = float;
-    using TypeD = float;
+    const std::size_t a_elems =
+        static_cast<std::size_t>(options.m) * options.k;
+    const std::size_t b_elems =
+        static_cast<std::size_t>(options.n) * options.k;
+    const std::size_t d_elems =
+        static_cast<std::size_t>(options.m) * options.n;
 
-    auto layout_A = make_layout(make_shape(options.m, options.k),
-                                make_stride(options.k, Int<1>{}));
-    auto layout_B = make_layout(make_shape(options.n, options.k),
-                                make_stride(options.k, Int<1>{}));
-    auto layout_C = make_layout(make_shape(options.m, options.n),
-                                make_stride(options.n, Int<1>{}));
-    auto layout_D = make_layout(make_shape(options.m, options.n),
-                                make_stride(options.n, Int<1>{}));
+    std::vector<nv_bfloat16> host_A(a_elems);
+    std::vector<nv_bfloat16> host_B(b_elems);
+    initialize_exact_tensor(host_A, options.seed);
+    initialize_exact_tensor(host_B, options.seed + 1);
 
-    thrust::host_vector<TypeA> host_A(options.m * options.k);
-    thrust::host_vector<TypeB> host_B(options.n * options.k);
-    thrust::host_vector<TypeC> host_C(options.m * options.n);
-
-    auto host_tensor_A = make_tensor(host_A.data(), layout_A);
-    auto host_tensor_B = make_tensor(host_B.data(), layout_B);
-    auto host_tensor_C = make_tensor(host_C.data(), layout_C);
-    initialize_exact_tensor(host_tensor_A, options.seed);
-    initialize_exact_tensor(host_tensor_B, options.seed + 1);
-    zero_tensor(host_tensor_C);
-
-    thrust::device_vector<TypeA> device_A = host_A;
-    thrust::device_vector<TypeB> device_B = host_B;
-    thrust::device_vector<TypeC> device_C = host_C;
-    thrust::device_vector<TypeD> device_tcgen05_D(options.m * options.n);
-    thrust::device_vector<TypeD> device_cublas_D(options.m * options.n);
+    nv_bfloat16* device_A = nullptr;
+    nv_bfloat16* device_B = nullptr;
+    float* device_tcgen05_D = nullptr;
+    float* device_cublas_D = nullptr;
+    CHECK_CUDA(cudaMalloc(&device_A, a_elems * sizeof(nv_bfloat16)));
+    CHECK_CUDA(cudaMalloc(&device_B, b_elems * sizeof(nv_bfloat16)));
+    CHECK_CUDA(cudaMalloc(&device_tcgen05_D, d_elems * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&device_cublas_D, d_elems * sizeof(float)));
+    CHECK_CUDA(cudaMemcpy(device_A, host_A.data(), a_elems * sizeof(nv_bfloat16),
+                          cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(device_B, host_B.data(), b_elems * sizeof(nv_bfloat16),
+                          cudaMemcpyHostToDevice));
 
     cublasHandle_t handle{};
     CHECK_CUBLAS(cublasCreate(&handle));
     CHECK_CUBLAS(cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_HOST));
 
     auto tcgen05_launch = [&] {
-      launch_tcgen05_gemm(
-          thrust::raw_pointer_cast(device_A.data()), layout_A,
-          thrust::raw_pointer_cast(device_B.data()), layout_B,
-          thrust::raw_pointer_cast(device_C.data()), layout_C,
-          thrust::raw_pointer_cast(device_tcgen05_D.data()), layout_D, 1.0f, 0.0f);
+      launch_tcgen05_gemm(device_A, device_B, device_tcgen05_D, options);
     };
     auto cublas_launch = [&] {
-      run_cublas_reference(handle, options,
-                           thrust::raw_pointer_cast(device_A.data()),
-                           thrust::raw_pointer_cast(device_B.data()),
-                           thrust::raw_pointer_cast(device_cublas_D.data()));
+      run_cublas_reference(handle, options, device_A, device_B, device_cublas_D);
     };
 
     tcgen05_launch();
     cublas_launch();
     CHECK_CUDA(cudaDeviceSynchronize());
 
-    std::vector<float> host_tcgen05_D(options.m * options.n, 0.0f);
-    std::vector<float> host_cublas_D(options.m * options.n, 0.0f);
-    CHECK_CUDA(cudaMemcpy(host_tcgen05_D.data(),
-                          thrust::raw_pointer_cast(device_tcgen05_D.data()),
-                          host_tcgen05_D.size() * sizeof(float),
-                          cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaMemcpy(host_cublas_D.data(),
-                          thrust::raw_pointer_cast(device_cublas_D.data()),
-                          host_cublas_D.size() * sizeof(float),
-                          cudaMemcpyDeviceToHost));
+    std::vector<float> host_tcgen05_D(d_elems, 0.0f);
+    std::vector<float> host_cublas_D(d_elems, 0.0f);
+    CHECK_CUDA(cudaMemcpy(host_tcgen05_D.data(), device_tcgen05_D,
+                          d_elems * sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(host_cublas_D.data(), device_cublas_D,
+                          d_elems * sizeof(float), cudaMemcpyDeviceToHost));
 
     const CompareStats compare = compare_exact(host_cublas_D, host_tcgen05_D);
     std::cout << std::scientific << std::setprecision(6)
@@ -554,19 +502,20 @@ int main(int argc, char** argv) {
       throw std::runtime_error("tcgen05 output does not exactly match cuBLAS");
     }
 
-    TimingStats tcgen05_stats = benchmark_kernel(
-        options, tcgen05_launch, thrust::raw_pointer_cast(device_tcgen05_D.data()),
-        host_tcgen05_D);
-    TimingStats cublas_stats = benchmark_kernel(
-        options, cublas_launch, thrust::raw_pointer_cast(device_cublas_D.data()),
-        host_cublas_D);
+    TimingStats tcgen05_stats =
+        benchmark_kernel(options, tcgen05_launch, device_tcgen05_D, host_tcgen05_D);
+    TimingStats cublas_stats =
+        benchmark_kernel(options, cublas_launch, device_cublas_D, host_cublas_D);
 
     print_step2_result_line(options, "tcgen05_mma", tcgen05_stats);
     print_step2_result_line(options, "cublas", cublas_stats);
 
     CHECK_CUBLAS(cublasDestroy(handle));
+    CHECK_CUDA(cudaFree(device_A));
+    CHECK_CUDA(cudaFree(device_B));
+    CHECK_CUDA(cudaFree(device_tcgen05_D));
+    CHECK_CUDA(cudaFree(device_cublas_D));
     return 0;
-#endif
   } catch (const std::exception& e) {
     std::cerr << "ERROR " << e.what() << '\n';
     return 1;
