@@ -1,9 +1,13 @@
 # GEMM Reference Harness
 
-这个目录是一个独立的“步骤 0”测试设施，先把最基础的 reference 和 benchmark 骨架搭好：
+这个目录是一个独立的 GEMM 基础设施目录，现在已经把 driver 和 backend 文件拆开了，方便后面逐步往里加 kernel：
 
 - 一个最朴素的 row-major CUDA naive GEMM
 - 一个 cuBLAS `sgemm` reference
+- 一个步骤 1 的 `SIMT GEMM`
+  - `cp.async` 读取 A/B tile 到 shared memory
+  - double buffer
+  - 先保证正确和结构清楚，不追求复杂 thread mapping
 - 正确性校验
 - benchmark loop
 - 批量 shape 运行和结果落盘
@@ -14,8 +18,12 @@
 
 ```text
 gemm_reference/
-├── bench_gemm_reference.cu   # naive + cuBLAS + correctness + benchmark
-├── Makefile                  # 单目标编译
+├── gemm_reference_common.h   # 公共选项、检查宏、统计/输出工具
+├── bench_gemm_reference.cu   # benchmark driver / correctness driver
+├── naive_gemm.cu             # 暴力 naive GEMM
+├── cublas_reference.cu       # cuBLAS reference
+├── simt_gemm_cp_async.cu     # 步骤 1: SIMT GEMM with cp.async + double buffer
+├── Makefile                  # 编译
 ├── run.sh                    # 批量 shape 跑 benchmark 并落盘
 ├── README.md                 # 说明
 └── results/                  # 输出目录
@@ -23,16 +31,23 @@ gemm_reference/
 
 ## 主程序行为
 
-`bench_gemm_reference.cu` 里现在有两个 backend：
+现在有三个 backend：
 
 - `naive`
   - 每个线程算一个 `C[row, col]`
   - 完全暴力三重循环，没有 tiling、shared memory、vectorize
+- `simt`
+  - 单独的 `simt_gemm_cp_async.cu`
+  - `16x16` 线程块
+  - `16x16x16` tile
+  - `cp.async` 读 A/B tile 到 shared memory
+  - 两级 double buffer
+  - 每个线程负责一个输出元素
 - `cublas`
   - 用 `cublasSgemm`
   - 通过 row-major / column-major 转置关系直接复用同一份 row-major 输入
 
-正确性默认拿 `cuBLAS` 输出当 reference，和 `naive` 做逐元素比较，输出：
+正确性默认拿 `cuBLAS` 输出当 reference，和自定义 kernel 做逐元素比较，输出：
 
 - `max_abs`
 - `max_rel`
@@ -74,6 +89,7 @@ cd /Users/meiziyuan/Roofline-Analysis/experiments/gemm_reference
 
 ```bash
 ./bench_gemm_reference --m=512 --n=512 --k=512 --backend=naive
+./bench_gemm_reference --m=512 --n=512 --k=512 --backend=simt
 ./bench_gemm_reference --m=512 --n=512 --k=512 --backend=cublas
 ```
 
@@ -81,6 +97,12 @@ cd /Users/meiziyuan/Roofline-Analysis/experiments/gemm_reference
 
 ```bash
 ./bench_gemm_reference --m=512 --n=512 --k=512 --check=0
+```
+
+`simt` backend 现在要求：
+
+```bash
+--block-m=16 --block-n=16
 ```
 
 ## 批量跑
@@ -131,4 +153,5 @@ runner 就是靠这两种行来抽取 CSV/JSON 的，所以后面你要加新 ba
 
 - 现在先固定是 `float` / `sgemm`，目的是先把设施搭稳。
 - `beta != 0` 也支持，benchmark 时会在计时外恢复初始 `C`。
-- 这个目录更偏“测试骨架”，不是性能实现；`naive` 很慢是预期行为。
+- `naive` 很慢是预期行为。
+- `simt` 是步骤 1 的结构化版本，重点是 `cp.async + shared memory + double buffer` 路线先立住。

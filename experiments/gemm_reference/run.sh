@@ -83,7 +83,7 @@ with open("$METADATA_JSON", "w") as f:
 PY
 
 printf 'backend,m,n,k,warmup,iters,avg_ms,median_ms,min_ms,gflops,tflops,checksum\n' > "$BENCHMARK_CSV"
-printf 'm,n,k,pass,atol,rtol,max_abs,max_rel,l2_rel,fail_count\n' > "$CORRECTNESS_CSV"
+printf 'backend,m,n,k,pass,atol,rtol,max_abs,max_rel,l2_rel,fail_count\n' > "$CORRECTNESS_CSV"
 
 echo "==============================================="
 echo "Compiling bench_gemm_reference.cu"
@@ -136,6 +136,7 @@ for line in log_path.read_text().splitlines():
     with correctness_csv.open("a", newline="") as f:
       writer = csv.writer(f)
       writer.writerow([
+        fields["backend"],
         fields["m"],
         fields["n"],
         fields["k"],
