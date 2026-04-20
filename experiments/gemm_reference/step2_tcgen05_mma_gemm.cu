@@ -60,8 +60,8 @@ T parse_number(std::string_view text, const char* name) {
 void print_usage(const char* argv0) {
   std::cerr
       << "Usage: " << argv0 << " [options]\n"
-      << "  --m=<int>        GEMM M, multiple of 16\n"
-      << "  --n=<int>        GEMM N, multiple of 16\n"
+      << "  --m=<int>        GEMM M, multiple of 64\n"
+      << "  --n=<int>        GEMM N, multiple of 32\n"
       << "  --k=<int>        GEMM K, multiple of 16\n"
       << "  --warmup=<int>   Warmup iterations\n"
       << "  --iters=<int>    Timed iterations\n"
@@ -100,10 +100,10 @@ Step2Options parse_options(int argc, char** argv) {
   if (options.warmup < 0 || options.iters <= 0) {
     throw std::runtime_error("warmup must be >= 0 and iters must be > 0");
   }
-  if (options.m % kWarpTileM != 0 || options.n % kWarpTileN != 0 ||
+  if (options.m % kTileM != 0 || options.n % kTileN != 0 ||
       options.k % kWarpTileK != 0) {
     throw std::runtime_error(
-        "step2 hopper mma currently requires m/n/k all be multiples of 16");
+        "step2 hopper mma currently requires m multiple of 64, n multiple of 32, k multiple of 16");
   }
   return options;
 }
@@ -159,7 +159,6 @@ __global__ __launch_bounds__(kThreads) void step2_hopper_mma_kernel(
 
   const int tid = threadIdx.x;
   const int warp_id = tid / kWarpSize;
-  const int lane_id = tid % kWarpSize;
   const int block_m = blockIdx.y * kTileM;
   const int block_n = blockIdx.x * kTileN;
   const int warp_m = warp_id / kWarpsPerBlockN;
@@ -209,14 +208,8 @@ __global__ __launch_bounds__(kThreads) void step2_hopper_mma_kernel(
     __syncthreads();
   }
 
-  alignas(16) float warp_out[kWarpTileM * kWarpTileN];
-  wmma::store_matrix_sync(warp_out, acc_frag, kWarpTileN, wmma::mem_row_major);
-
-  for (int idx = lane_id; idx < kWarpTileM * kWarpTileN; idx += kWarpSize) {
-    const int row = idx / kWarpTileN;
-    const int col = idx % kWarpTileN;
-    D[(warp_row + row) * N + (warp_col + col)] = warp_out[idx];
-  }
+  wmma::store_matrix_sync(D + warp_row * N + warp_col, acc_frag, N,
+                          wmma::mem_row_major);
 }
 
 void launch_hopper_mma_gemm(const nv_bfloat16* d_a,
