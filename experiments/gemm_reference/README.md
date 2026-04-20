@@ -23,6 +23,7 @@ gemm_reference/
 ├── naive_gemm.cu             # 暴力 naive GEMM
 ├── cublas_reference.cu       # cuBLAS reference
 ├── simt_gemm_cp_async.cu     # 步骤 1: SIMT GEMM with cp.async + double buffer
+├── step2_tcgen05_mma_gemm.cu # 步骤 2: tcgen05.mma warp-level GEMM
 ├── Makefile                  # 编译
 ├── run.sh                    # 批量 shape 跑 benchmark 并落盘
 ├── README.md                 # 说明
@@ -46,6 +47,15 @@ gemm_reference/
 - `cublas`
   - 用 `cublasSgemm`
   - 通过 row-major / column-major 转置关系直接复用同一份 row-major 输入
+
+另外有一个独立的步骤 2 程序：
+
+- `step2_tcgen05_mma_gemm.cu`
+  - 基于 Blackwell `tcgen05.mma + tcgen05.ld`
+  - 参考 CUTLASS tutorial 01 的最小路径
+  - 用 `half` 输入、`float` 输出
+  - 初始化成小整数值，和 `cublasGemmEx(..., CUBLAS_COMPUTE_32F_PEDANTIC)` 做精确对拍
+  - 目标是 `max_abs=0`
 
 正确性默认拿 `cuBLAS` 输出当 reference，和自定义 kernel 做逐元素比较，输出：
 
@@ -103,6 +113,30 @@ cd /Users/meiziyuan/Roofline-Analysis/experiments/gemm_reference
 
 ```bash
 --block-m=16 --block-n=16
+```
+
+## 步骤 2 运行
+
+编译：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis/experiments/gemm_reference
+make bench_step2_tcgen05_mma ARCH=sm_100a
+```
+
+运行：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis/experiments/gemm_reference
+./bench_step2_tcgen05_mma --m=128 --n=256 --k=64 --warmup=5 --iters=20
+```
+
+当前步骤 2 约束：
+
+```bash
+m % 128 == 0
+n % 256 == 0
+k % 64 == 0
 ```
 
 ## 批量跑
