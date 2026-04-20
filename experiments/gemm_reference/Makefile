@@ -47,7 +47,10 @@ $(STEP6_TARGET): step6_hopper_swizzle_ws_tma_gemm.cu gemm_reference_common.h
 	$(NVCC) -std=c++17 -O3 -lineinfo --expt-relaxed-constexpr $(STEP2_GENCODE) $< -o $@ $(LDFLAGS) -lcuda
 
 $(STEP7_TARGET): step7_tcgen05_umma_gemm.cu gemm_reference_common.h
-	$(NVCC) -std=c++17 -O3 -lineinfo --expt-relaxed-constexpr $(STEP2_GENCODE) $< -o $@ $(LDFLAGS)
+	$(NVCC) -std=c++17 -O3 -lineinfo --expt-relaxed-constexpr $(STEP2_GENCODE) \
+		-I../../cutlass/include \
+		-DCUTLASS_ARCH_MMA_SM100_ENABLED -DCUTLASS_ARCH_MMA_SM100A_ENABLED -DCUTLASS_ARCH_MMA_SM103A_ENABLED \
+		$< -o $@ $(LDFLAGS) -lcuda
 
 clean:
 	rm -f $(TARGET) $(STEP2_TARGET) $(STEP3_TARGET) $(STEP4_TARGET) $(STEP5_TARGET) $(STEP6_TARGET) $(STEP7_TARGET)
