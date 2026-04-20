@@ -277,6 +277,7 @@ __global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
   __shared__ int tmem_addr;
 
   const int tid = threadIdx.x;
+  const int lane_id = tid & 31;
   const int warp_id = tid / 32;
   const int tile_m = blockIdx.y * kTileM;
   const int tile_n = blockIdx.x * kTileN;
@@ -346,19 +347,20 @@ __global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
 
   tcgen05_fence_after_thread_sync();
 
-  if (tid < kTileM) {
+  if (warp_id < (kTileM / 32)) {
+    const int row = warp_id * 32 + lane_id;
     for (int col = 0; col < kTileN; col += 4) {
       float v0 = 0.0f;
       float v1 = 0.0f;
       float v2 = 0.0f;
       float v3 = 0.0f;
-      uint32_t tmem_ptr = (static_cast<uint32_t>(tid) << 16) | col;
+      uint32_t tmem_ptr = static_cast<uint32_t>(warp_id * kTileN + col);
       tcgen05_ld_4x32(v0, v1, v2, v3, tmem_ptr);
       tcgen05_wait_ld();
 
       float vals[4] = {v0, v1, v2, v3};
       for (int i = 0; i < 4; ++i) {
-        D[(tile_m + tid) * N + (tile_n + col + i)] = vals[i];
+        D[(tile_m + row) * N + (tile_n + col + i)] = vals[i];
       }
     }
   }
