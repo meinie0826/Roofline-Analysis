@@ -162,9 +162,11 @@ if [[ "$ONLY_CUTLASS" != "1" ]]; then
 fi
 if [[ "$HAVE_CUTLASS" == "1" ]]; then
   SYNCLOG_PATCH="$ROOT_DIR/synclog_host_device.patch"
+  PATCH_APPLIED=0
   # Check if patch is already applied
   if patch -p1 -d "$CUTLASS_DIR" --dry-run < "$SYNCLOG_PATCH" &>/dev/null; then
     patch -p1 -d "$CUTLASS_DIR" < "$SYNCLOG_PATCH"
+    PATCH_APPLIED=1
   else
     echo "Patch already applied, skipping..."
   fi
@@ -184,8 +186,8 @@ if [[ "$HAVE_CUTLASS" == "1" ]]; then
     -DCUTLASS_ARCH_MMA_SM100A_ENABLED \
     -DCUTLASS_ARCH_MMA_SM100_ENABLED \
     -DCUTLASS_ARCH_MMA_SM103A_ENABLED
-  # Reverse patch if it was applied
-  if patch -p1 -d "$CUTLASS_DIR" --dry-run -R < "$SYNCLOG_PATCH" &>/dev/null; then
+  # Reverse patch only when this script applied it in this run.
+  if [[ "$PATCH_APPLIED" == "1" ]] && patch -p1 -d "$CUTLASS_DIR" --dry-run -R < "$SYNCLOG_PATCH" &>/dev/null; then
     patch -p1 -R -d "$CUTLASS_DIR" < "$SYNCLOG_PATCH"
   fi
 else
