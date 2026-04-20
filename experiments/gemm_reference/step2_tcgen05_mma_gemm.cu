@@ -4,16 +4,19 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
-#include <cute/algorithm/cooperative_copy.hpp>
+#include <cute/arch/copy_sm90_desc.hpp>
+#include <cute/arch/copy_sm100.hpp>
 #include <cute/arch/cluster_sm90.hpp>
 #include <cute/arch/tmem_allocator_sm100.hpp>
+#include <cute/atom/copy_atom.hpp>
+#include <cute/atom/copy_traits_sm100.hpp>
+#include <cute/atom/mma_traits_sm100.hpp>
 #include <cute/numeric/integral_constant.hpp>
 #include <cute/tensor.hpp>
 
 #include <cutlass/arch/barrier.h>
 #include <cutlass/cluster_launch.hpp>
 #include <cutlass/half.h>
-#include <cutlass/util/print_error.hpp>
 
 #include <cstdint>
 #include <cstdlib>
@@ -121,6 +124,16 @@ void zero_tensor(Tensor& tensor) {
   using DataType = typename Tensor::element_type;
   for (int i = 0; i < cute::size(tensor); ++i) {
     tensor(i) = DataType(0);
+  }
+}
+
+template <int NumThreads, class SrcTensor, class DstTensor>
+CUTE_DEVICE void cooperative_copy_fallback(uint32_t tid,
+                                           const SrcTensor& src,
+                                           DstTensor& dst) {
+  static_assert(NumThreads > 0, "NumThreads must be positive");
+  for (int i = tid; i < size(dst); i += NumThreads) {
+    dst(i) = src(i);
   }
 }
 
@@ -235,8 +248,8 @@ __global__ static void gemm_device_step2(
 
   tiled_mma.accumulate_ = UMMA::ScaleOut::Zero;
   for (int k_tile = 0; k_tile < size<3>(tCgA); ++k_tile) {
-    cooperative_copy<128>(threadIdx.x, tCgA(_, _, _, k_tile), tCsA);
-    cooperative_copy<128>(threadIdx.x, tCgB(_, _, _, k_tile), tCsB);
+    cooperative_copy_fallback<128>(threadIdx.x, tCgA(_, _, _, k_tile), tCsA);
+    cooperative_copy_fallback<128>(threadIdx.x, tCgB(_, _, _, k_tile), tCsB);
     __syncthreads();
 
     if (elect_one_warp) {
