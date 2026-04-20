@@ -48,16 +48,16 @@ prepare_cutlass_synclog:
 		echo "CUTLASS synclog patch already applied or not needed"; \
 	fi
 
-$(STEP3_TARGET): step3_hopper_tma_gemm.cu gemm_reference_common.h prepare_cutlass_synclog
+$(STEP3_TARGET): step3_hopper_tma_gemm.cu gemm_reference_common.h
 	$(NVCC) -std=c++17 -O3 -lineinfo --expt-relaxed-constexpr $(STEP2_GENCODE) $< -o $@ $(LDFLAGS) -lcuda
 
-$(STEP4_TARGET): step4_hopper_ws_tma_gemm.cu gemm_reference_common.h prepare_cutlass_synclog
+$(STEP4_TARGET): step4_hopper_ws_tma_gemm.cu gemm_reference_common.h
 	$(NVCC) -std=c++17 -O3 -lineinfo --expt-relaxed-constexpr $(STEP2_GENCODE) $< -o $@ $(LDFLAGS) -lcuda
 
-$(STEP5_TARGET): step5_hopper_multistage_ws_tma_gemm.cu gemm_reference_common.h prepare_cutlass_synclog
+$(STEP5_TARGET): step5_hopper_multistage_ws_tma_gemm.cu gemm_reference_common.h
 	$(NVCC) -std=c++17 -O3 -lineinfo --expt-relaxed-constexpr $(STEP2_GENCODE) $< -o $@ $(LDFLAGS) -lcuda
 
-$(STEP6_TARGET): step6_hopper_swizzle_ws_tma_gemm.cu gemm_reference_common.h prepare_cutlass_synclog
+$(STEP6_TARGET): step6_hopper_swizzle_ws_tma_gemm.cu gemm_reference_common.h
 	$(NVCC) -std=c++17 -O3 -lineinfo --expt-relaxed-constexpr $(STEP2_GENCODE) $< -o $@ $(LDFLAGS) -lcuda
 
 $(STEP7_TARGET): step7_tcgen05_umma_gemm.cu gemm_reference_common.h prepare_cutlass_synclog
