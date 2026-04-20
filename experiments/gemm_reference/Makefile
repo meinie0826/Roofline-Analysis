@@ -3,6 +3,14 @@ ARCH ?= sm_100a
 NVCC_FLAGS ?= -std=c++17 -O3 -lineinfo -arch=$(ARCH)
 LDFLAGS ?= -lcublas
 
+ifeq ($(ARCH),sm_100a)
+STEP2_GENCODE := -gencode arch=compute_100a,code=sm_100a
+else ifeq ($(ARCH),sm_103a)
+STEP2_GENCODE := -gencode arch=compute_103a,code=sm_103a
+else
+$(error step2 tcgen05 target only supports ARCH=sm_100a or ARCH=sm_103a)
+endif
+
 TARGET := bench_gemm_reference
 STEP2_TARGET := bench_step2_tcgen05_mma
 SOURCES := \
@@ -19,7 +27,7 @@ $(TARGET): $(SOURCES) gemm_reference_common.h
 	$(NVCC) $(NVCC_FLAGS) $(SOURCES) -o $@ $(LDFLAGS)
 
 $(STEP2_TARGET): step2_tcgen05_mma_gemm.cu gemm_reference_common.h
-	$(NVCC) $(NVCC_FLAGS) --expt-relaxed-constexpr $< -o $@ $(LDFLAGS)
+	$(NVCC) -std=c++17 -O3 -lineinfo --expt-relaxed-constexpr $(STEP2_GENCODE) $< -o $@ $(LDFLAGS)
 
 clean:
 	rm -f $(TARGET) $(STEP2_TARGET)
