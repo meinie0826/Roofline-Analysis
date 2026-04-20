@@ -333,8 +333,12 @@ __global__ __launch_bounds__(kThreads) void step3_hopper_tma_kernel(
                    wmma::col_major>
         b_frag;
 
-    wmma::load_matrix_sync(a_frag, &sA[warp_m * kWarpTileM][0], kWarpTileK);
-    wmma::load_matrix_sync(b_frag, &sB[warp_n * kWarpTileN][0], kWarpTileK);
+    const nv_bfloat16* warp_a_ptr =
+        sA + warp_m * kWarpTileM * kWarpTileK;
+    const nv_bfloat16* warp_b_ptr =
+        sB + warp_n * kWarpTileN * kWarpTileK;
+    wmma::load_matrix_sync(a_frag, warp_a_ptr, kWarpTileK);
+    wmma::load_matrix_sync(b_frag, warp_b_ptr, kWarpTileK);
     wmma::mma_sync(acc_frag, a_frag, b_frag, acc_frag);
     __syncthreads();
   }
