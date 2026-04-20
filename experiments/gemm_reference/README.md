@@ -23,7 +23,8 @@ gemm_reference/
 ├── naive_gemm.cu             # 暴力 naive GEMM
 ├── cublas_reference.cu       # cuBLAS reference
 ├── simt_gemm_cp_async.cu     # 步骤 1: SIMT GEMM with cp.async + double buffer
-├── step2_tcgen05_mma_gemm.cu # 步骤 2: tcgen05.mma warp-level GEMM
+├── step2_tcgen05_mma_gemm.cu # 步骤 2: Hopper-style warp MMA GEMM
+├── step3_hopper_tma_gemm.cu  # 步骤 3: TMA + Hopper warp MMA GEMM
 ├── Makefile                  # 编译
 ├── run.sh                    # 批量 shape 跑 benchmark 并落盘
 ├── README.md                 # 说明
@@ -56,6 +57,14 @@ gemm_reference/
   - 用 `bf16` 输入、`float` 输出
   - 初始化成小整数值，和 `cublasGemmEx(..., CUBLAS_COMPUTE_32F_PEDANTIC)` 做精确对拍
   - 目标是 `max_abs=0`
+
+还有一个独立的步骤 3 程序：
+
+- `step3_hopper_tma_gemm.cu`
+  - 继续沿用步骤 2 的 warp-level `wmma`
+  - 但把 A/B 的 global->shared 搬运替换成纯 CUDA `TMA + mbarrier`
+  - correctness baseline 仍然是 `cublas_pedantic`
+  - performance baseline 改成 `cublas_fast_16bf`
 
 正确性默认拿 `cuBLAS` 输出当 reference，和自定义 kernel 做逐元素比较，输出：
 
@@ -134,9 +143,25 @@ cd /Users/meiziyuan/Roofline-Analysis/experiments/gemm_reference
 当前步骤 2 约束：
 
 ```bash
-m % 128 == 0
-n % 64 == 0
-k % 32 == 0
+m % 64 == 0
+n % 32 == 0
+k % 16 == 0
+```
+
+## 步骤 3 运行
+
+编译：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis/experiments/gemm_reference
+make bench_step3_hopper_tma ARCH=sm_100a
+```
+
+运行：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis/experiments/gemm_reference
+./bench_step3_hopper_tma --m=128 --n=256 --k=64 --warmup=5 --iters=20
 ```
 
 ## 批量跑

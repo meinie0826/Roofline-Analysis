@@ -13,6 +13,7 @@ endif
 
 TARGET := bench_gemm_reference
 STEP2_TARGET := bench_step2_tcgen05_mma
+STEP3_TARGET := bench_step3_hopper_tma
 SOURCES := \
 	bench_gemm_reference.cu \
 	naive_gemm.cu \
@@ -29,5 +30,8 @@ $(TARGET): $(SOURCES) gemm_reference_common.h
 $(STEP2_TARGET): step2_tcgen05_mma_gemm.cu gemm_reference_common.h
 	$(NVCC) -std=c++17 -O3 -lineinfo --expt-relaxed-constexpr $(STEP2_GENCODE) $< -o $@ $(LDFLAGS)
 
+$(STEP3_TARGET): step3_hopper_tma_gemm.cu gemm_reference_common.h
+	$(NVCC) -std=c++17 -O3 -lineinfo --expt-relaxed-constexpr $(STEP2_GENCODE) $< -o $@ $(LDFLAGS) -lcuda
+
 clean:
-	rm -f $(TARGET) $(STEP2_TARGET)
+	rm -f $(TARGET) $(STEP2_TARGET) $(STEP3_TARGET)
