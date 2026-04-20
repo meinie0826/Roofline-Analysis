@@ -15,9 +15,10 @@ namespace {
 constexpr int kThreads = 128;
 constexpr int kTileM = 128;
 constexpr int kTileN = 64;
-constexpr int kTileK = 32;
 constexpr int kUmmaK = 16;
-constexpr uint32_t kUmmaLayoutSwizzle64B = 4;
+constexpr uint32_t kUmmaLayoutNone = 0;
+constexpr int kCanonicalInnerMn = 8;
+constexpr int kCanonicalInnerK = 8;
 
 struct Step2Options {
   int m = 128;
@@ -60,7 +61,7 @@ void print_usage(const char* argv0) {
       << "Usage: " << argv0 << " [options]\n"
       << "  --m=<int>        GEMM M, multiple of 128\n"
       << "  --n=<int>        GEMM N, multiple of 64\n"
-      << "  --k=<int>        GEMM K, multiple of 32\n"
+      << "  --k=<int>        GEMM K, multiple of 16\n"
       << "  --warmup=<int>   Warmup iterations\n"
       << "  --iters=<int>    Timed iterations\n"
       << "  --seed=<int>     Deterministic exact init seed\n";
@@ -212,15 +213,66 @@ __device__ __forceinline__ void tcgen05_wait_ld() {
   asm volatile("tcgen05.wait::ld.sync.aligned;" ::: "memory");
 }
 
-__device__ __forceinline__ void tcgen05_ld_4x32(float& d0,
-                                                float& d1,
-                                                float& d2,
-                                                float& d3,
-                                                uint32_t addr) {
-  asm volatile("tcgen05.ld.sync.aligned.32x32b.x4.b32 {%0, %1, %2, %3}, [%4];"
-               : "=f"(d0), "=f"(d1), "=f"(d2), "=f"(d3)
+__device__ __forceinline__ void tcgen05_ld_1x32(float& d0, uint32_t addr) {
+  asm volatile("tcgen05.ld.sync.aligned.32x32b.x1.b32 {%0}, [%1];"
+               : "=f"(d0)
                : "r"(addr));
 }
+
+__device__ __forceinline__ void tcgen05_relinquish_alloc_permit() {
+  asm volatile("tcgen05.relinquish_alloc_permit.cta_group::1.sync.aligned;"
+               :
+               :
+               : "memory");
+}
+
+__host__ __device__ constexpr int canonical_k_major_lbo_bytes(int mn_dim) {
+  return mn_dim * 16;
+}
+
+__host__ __device__ constexpr int canonical_k_major_sbo_bytes(int mn_dim) {
+  return mn_dim * 8;
+}
+
+__host__ __device__ constexpr int canonical_k_major_lbo_elems(int mn_dim) {
+  return canonical_k_major_lbo_bytes(mn_dim) / sizeof(nv_bfloat16);
+}
+
+__host__ __device__ constexpr int canonical_k_major_sbo_elems(int mn_dim) {
+  return canonical_k_major_sbo_bytes(mn_dim) / sizeof(nv_bfloat16);
+}
+
+__host__ __device__ constexpr int canonical_k_major_smem_elems(int mn_dim,
+                                                               int k_dim) {
+  return ((mn_dim / kCanonicalInnerMn - 1) * canonical_k_major_sbo_elems(mn_dim)) +
+         ((k_dim / kCanonicalInnerK - 1) * canonical_k_major_lbo_elems(mn_dim)) +
+         ((kCanonicalInnerMn - 1) * kCanonicalInnerK) +
+         (kCanonicalInnerK - 1) + 1;
+}
+
+__host__ __device__ constexpr int canonical_k_major_index(int mn_dim,
+                                                          int row,
+                                                          int col) {
+  return ((row & (kCanonicalInnerMn - 1)) * kCanonicalInnerK) +
+         ((row / kCanonicalInnerMn) * canonical_k_major_sbo_elems(mn_dim)) +
+         (col & (kCanonicalInnerK - 1)) +
+         ((col / kCanonicalInnerK) * canonical_k_major_lbo_elems(mn_dim));
+}
+
+__host__ __device__ constexpr uint32_t tmem_addr_f32_1sm(uint32_t base,
+                                                         int row,
+                                                         int col) {
+  return base + (static_cast<uint32_t>(row) << 16) +
+         static_cast<uint32_t>(col * kTileM);
+}
+
+constexpr std::size_t kPackedABytes =
+    canonical_k_major_smem_elems(kTileM, kUmmaK) * sizeof(nv_bfloat16);
+constexpr std::size_t kPackedBOffsetBytes = align_up_local(kPackedABytes, 128);
+constexpr std::size_t kPackedBBytes =
+    canonical_k_major_smem_elems(kTileN, kUmmaK) * sizeof(nv_bfloat16);
+constexpr std::size_t kStep2SmemBytes =
+    align_up_local(kPackedBOffsetBytes + kPackedBBytes, 128);
 
 __device__ __forceinline__ uint64_t make_smem_desc(uint32_t addr,
                                                    uint32_t leading_byte_offset,
@@ -270,8 +322,7 @@ __global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
     int K) {
   extern __shared__ __align__(128) unsigned char smem[];
   auto* sA = reinterpret_cast<nv_bfloat16*>(smem);
-  auto* sB =
-      reinterpret_cast<nv_bfloat16*>(smem + kTileM * kTileK * sizeof(nv_bfloat16));
+  auto* sB = reinterpret_cast<nv_bfloat16*>(smem + kPackedBOffsetBytes);
 
   __shared__ uint64_t mbar;
   __shared__ int tmem_addr;
@@ -304,40 +355,36 @@ __global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
   const uint32_t sB_addr = static_cast<uint32_t>(__cvta_generic_to_shared(sB));
   const uint64_t a_desc =
       make_smem_desc(sA_addr,
-                     0,
-                     8 * kTileK * sizeof(nv_bfloat16),
-                     kUmmaLayoutSwizzle64B);
+                     canonical_k_major_lbo_bytes(kTileM),
+                     canonical_k_major_sbo_bytes(kTileM),
+                     kUmmaLayoutNone);
   const uint64_t b_desc =
       make_smem_desc(sB_addr,
-                     0,
-                     8 * kTileK * sizeof(nv_bfloat16),
-                     kUmmaLayoutSwizzle64B);
+                     canonical_k_major_lbo_bytes(kTileN),
+                     canonical_k_major_sbo_bytes(kTileN),
+                     kUmmaLayoutNone);
   const uint32_t i_desc = make_i_desc_f16bf16();
 
   int phase = 0;
-  for (int k_base = 0; k_base < K; k_base += kTileK) {
-    for (int i = tid; i < kTileM * kTileK; i += blockDim.x) {
-      int row = i / kTileK;
-      int col = i % kTileK;
-      sA[i] = A[(tile_m + row) * K + (k_base + col)];
+  for (int k_base = 0; k_base < K; k_base += kUmmaK) {
+    // PTX K-major no-swizzle canonical layout:
+    // ((8, mn/8), (8, k/8*2)) : ((8, SBO), (1, LBO)) for bf16.
+    for (int i = tid; i < kTileM * kUmmaK; i += blockDim.x) {
+      int row = i / kUmmaK;
+      int col = i % kUmmaK;
+      int packed = canonical_k_major_index(kTileM, row, col);
+      sA[packed] = A[(tile_m + row) * K + (k_base + col)];
     }
-    for (int i = tid; i < kTileN * kTileK; i += blockDim.x) {
-      int row = i / kTileK;
-      int col = i % kTileK;
-      sB[i] = B[(tile_n + row) * K + (k_base + col)];
+    for (int i = tid; i < kTileN * kUmmaK; i += blockDim.x) {
+      int row = i / kUmmaK;
+      int col = i % kUmmaK;
+      int packed = canonical_k_major_index(kTileN, row, col);
+      sB[packed] = B[(tile_n + row) * K + (k_base + col)];
     }
     __syncthreads();
 
     if (warp_id == 0 && elect_sync()) {
-      for (int umma_k = 0; umma_k < kTileK; umma_k += kUmmaK) {
-        const uint64_t a_desc_k = a_desc + ((umma_k * sizeof(nv_bfloat16)) >> 4);
-        const uint64_t b_desc_k = b_desc + ((umma_k * sizeof(nv_bfloat16)) >> 4);
-        tcgen05_mma_bf16(tmem_d,
-                         a_desc_k,
-                         b_desc_k,
-                         i_desc,
-                         (k_base != 0) || (umma_k != 0));
-      }
+      tcgen05_mma_bf16(tmem_d, a_desc, b_desc, i_desc, k_base != 0);
       tcgen05_commit(mbar_addr);
     }
     mbarrier_wait(mbar_addr, phase);
@@ -349,19 +396,12 @@ __global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
 
   if (warp_id < (kTileM / 32)) {
     const int row = warp_id * 32 + lane_id;
-    for (int col = 0; col < kTileN; col += 4) {
-      float v0 = 0.0f;
-      float v1 = 0.0f;
-      float v2 = 0.0f;
-      float v3 = 0.0f;
-      uint32_t tmem_ptr = static_cast<uint32_t>(warp_id * kTileN + col);
-      tcgen05_ld_4x32(v0, v1, v2, v3, tmem_ptr);
+    for (int col = 0; col < kTileN; ++col) {
+      float value = 0.0f;
+      uint32_t tmem_ptr = tmem_addr_f32_1sm(tmem_d, row, col);
+      tcgen05_ld_1x32(value, tmem_ptr);
       tcgen05_wait_ld();
-
-      float vals[4] = {v0, v1, v2, v3};
-      for (int i = 0; i < 4; ++i) {
-        D[(tile_m + row) * N + (tile_n + col + i)] = vals[i];
-      }
+      D[(tile_m + row) * N + (tile_n + col)] = value;
     }
   }
 
@@ -369,6 +409,7 @@ __global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
   tcgen05_fence_after_thread_sync();
   __syncthreads();
   if (warp_id == 0) {
+    tcgen05_relinquish_alloc_permit();
     tcgen05_dealloc(tmem_d, align_up_local(kTileN, 32));
   }
 }
@@ -379,8 +420,7 @@ void launch_tcgen05_gemm(const nv_bfloat16* d_a,
                          const Step2Options& options) {
   dim3 block(kThreads);
   dim3 grid(options.n / kTileN, options.m / kTileM);
-  std::size_t smem_bytes =
-      (kTileM + kTileN) * kTileK * sizeof(nv_bfloat16);
+  std::size_t smem_bytes = kStep2SmemBytes;
   step2_tcgen05_kernel<<<grid, block, smem_bytes>>>(d_a, d_b, d_d, options.m,
                                                     options.n, options.k);
   CHECK_CUDA(cudaGetLastError());
