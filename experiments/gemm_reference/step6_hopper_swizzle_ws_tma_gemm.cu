@@ -25,7 +25,7 @@ namespace wmma = nvcuda::wmma;
 constexpr int kWarpSize = 32;
 constexpr int kWarpsPerWarpGroup = 4;
 constexpr int kProducerWarpGroups = 1;
-constexpr int kConsumerWarpGroups = 2;
+constexpr int kConsumerWarpGroups = 4;
 constexpr int kProducerWarps = kProducerWarpGroups * kWarpsPerWarpGroup;
 constexpr int kConsumerWarps = kConsumerWarpGroups * kWarpsPerWarpGroup;
 constexpr int kThreads = (kProducerWarps + kConsumerWarps) * kWarpSize;
@@ -35,7 +35,7 @@ constexpr int kWarpTileM = 16;
 constexpr int kWarpTileN = 16;
 constexpr int kWarpTileK = 16;
 constexpr int kWarpsPerBlockM = 4;
-constexpr int kWarpsPerBlockN = 2;
+constexpr int kWarpsPerBlockN = 4;
 constexpr int kTileM = kWarpsPerBlockM * kWarpTileM;
 constexpr int kTileN = kWarpsPerBlockN * kWarpTileN;
 constexpr int kL2BlockSwizzleGroupM = 8;
@@ -126,7 +126,7 @@ void print_usage(const char* argv0) {
   std::cerr
       << "Usage: " << argv0 << " [options]\n"
       << "  --m=<int>        GEMM M, multiple of 64\n"
-      << "  --n=<int>        GEMM N, multiple of 32\n"
+      << "  --n=<int>        GEMM N, multiple of 64\n"
       << "  --k=<int>        GEMM K, multiple of 16\n"
       << "  --warmup=<int>   Warmup iterations\n"
       << "  --iters=<int>    Timed iterations\n"
@@ -168,7 +168,7 @@ Step6Options parse_options(int argc, char** argv) {
   if (options.m % kTileM != 0 || options.n % kTileN != 0 ||
       options.k % kWarpTileK != 0) {
     throw std::runtime_error(
-        "step6 hopper swizzle ws tma currently requires m multiple of 64, n multiple of 32, k multiple of 16");
+        "step6 hopper swizzle ws tma currently requires m multiple of 64, n multiple of 64, k multiple of 16");
   }
   return options;
 }
