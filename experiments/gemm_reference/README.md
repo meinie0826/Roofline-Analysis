@@ -27,6 +27,7 @@ gemm_reference/
 ├── step3_hopper_tma_gemm.cu  # 步骤 3: TMA + Hopper warp MMA GEMM
 ├── step4_hopper_ws_tma_gemm.cu # 步骤 4: Warp Specialization + TMA + MMA
 ├── step5_hopper_multistage_ws_tma_gemm.cu # 步骤 5: Multistage Warp Specialization + TMA + MMA
+├── step6_hopper_swizzle_ws_tma_gemm.cu # 步骤 6: Shared-memory swizzle + L2 block swizzle
 ├── Makefile                  # 编译
 ├── run.sh                    # 批量 shape 跑 benchmark 并落盘
 ├── README.md                 # 说明
@@ -89,6 +90,16 @@ gemm_reference/
     - `filled[stage]`
     - `ready[stage]`
   - 目标是验证多级流水能不能进一步把 TMA 和 consumer MMA 更充分地重叠
+
+还有一个独立的步骤 6 程序：
+
+- `step6_hopper_swizzle_ws_tma_gemm.cu`
+  - 保持步骤 5 的 `4-stage` warp-specialized TMA pipeline 不变
+  - CTA 调度改成 grouped `L2 block swizzle`
+  - TMA 仍然先落到线性 staging buffer
+  - consumer warp 再把自己的 `16x16` A/B 子块搬到带 padding 的 shared scratch
+  - scratch slot 用简单 XOR 做 warp slot swizzle，配合更大的 leading dimension 降低 shared-memory 冲突
+  - TMA descriptor 同时把 `L2 promotion` 打开到 `L2_256B`
 
 正确性默认拿 `cuBLAS` 输出当 reference，和自定义 kernel 做逐元素比较，输出：
 
@@ -218,6 +229,22 @@ make bench_step5_hopper_multistage_ws_tma ARCH=sm_100a
 ```bash
 cd /Users/meiziyuan/Roofline-Analysis/experiments/gemm_reference
 ./bench_step5_hopper_multistage_ws_tma --m=128 --n=256 --k=64 --warmup=5 --iters=20
+```
+
+## 步骤 6 运行
+
+编译：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis/experiments/gemm_reference
+make bench_step6_hopper_swizzle_ws_tma ARCH=sm_100a
+```
+
+运行：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis/experiments/gemm_reference
+./bench_step6_hopper_swizzle_ws_tma --m=128 --n=256 --k=64 --warmup=5 --iters=20
 ```
 
 ## 批量跑
