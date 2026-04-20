@@ -16,6 +16,7 @@ constexpr int kThreads = 128;
 constexpr int kTileM = 128;
 constexpr int kTileN = 64;
 constexpr int kTileK = 32;
+constexpr int kUmmaK = 16;
 constexpr uint32_t kUmmaLayoutSwizzle64B = 4;
 
 struct Step2Options {
@@ -98,9 +99,9 @@ Step2Options parse_options(int argc, char** argv) {
     throw std::runtime_error("warmup must be >= 0 and iters must be > 0");
   }
   if (options.m % kTileM != 0 || options.n % kTileN != 0 ||
-      options.k % kTileK != 0) {
+      options.k % kUmmaK != 0) {
     throw std::runtime_error(
-        "step2 currently requires m multiple of 128, n multiple of 64, k multiple of 32");
+        "step2 currently requires m multiple of 128, n multiple of 64, k multiple of 16");
   }
   return options;
 }
@@ -327,7 +328,15 @@ __global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
     __syncthreads();
 
     if (warp_id == 0 && elect_sync()) {
-      tcgen05_mma_bf16(tmem_d, a_desc, b_desc, i_desc, k_base != 0);
+      for (int umma_k = 0; umma_k < kTileK; umma_k += kUmmaK) {
+        const uint64_t a_desc_k = a_desc + ((umma_k * sizeof(nv_bfloat16)) >> 4);
+        const uint64_t b_desc_k = b_desc + ((umma_k * sizeof(nv_bfloat16)) >> 4);
+        tcgen05_mma_bf16(tmem_d,
+                         a_desc_k,
+                         b_desc_k,
+                         i_desc,
+                         (k_base != 0) || (umma_k != 0));
+      }
       tcgen05_commit(mbar_addr);
     }
     mbarrier_wait(mbar_addr, phase);
