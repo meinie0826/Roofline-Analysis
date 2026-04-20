@@ -360,13 +360,13 @@ __global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
   const uint32_t sB_addr = static_cast<uint32_t>(__cvta_generic_to_shared(sB));
   const uint64_t a_desc =
       make_smem_desc(sA_addr,
-                     canonical_k_major_lbo_bytes(kTileM),
-                     canonical_k_major_sbo_bytes(kTileM),
+                     canonical_k_major_sbo_bytes(kTileM),  // leading_byte_offset_ = SBO (8-row group stride)
+                     canonical_k_major_lbo_bytes(kTileM),  // stride_byte_offset_  = LBO (K-block stride)
                      kUmmaLayoutNone);
   const uint64_t b_desc =
       make_smem_desc(sB_addr,
-                     canonical_k_major_lbo_bytes(kTileN),
-                     canonical_k_major_sbo_bytes(kTileN),
+                     canonical_k_major_sbo_bytes(kTileN),  // leading_byte_offset_ = SBO
+                     canonical_k_major_lbo_bytes(kTileN),  // stride_byte_offset_  = LBO
                      kUmmaLayoutNone);
   const uint32_t i_desc = make_i_desc_f16bf16();
 
