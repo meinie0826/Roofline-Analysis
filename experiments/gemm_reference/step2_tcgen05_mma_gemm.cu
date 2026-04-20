@@ -487,8 +487,10 @@ int main(int argc, char** argv) {
       run_cublas_reference(handle, options, device_A, device_B, device_cublas_D);
     };
 
-    tcgen05_launch();
     cublas_launch();
+    CHECK_CUDA(cudaDeviceSynchronize());
+
+    tcgen05_launch();
     CHECK_CUDA(cudaDeviceSynchronize());
 
     std::vector<float> host_tcgen05_D(d_elems, 0.0f);
