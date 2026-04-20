@@ -305,14 +305,16 @@ __device__ __forceinline__ void tcgen05_mma_bf16(uint32_t tmem_d,
                                                  uint64_t b_desc,
                                                  uint32_t i_desc,
                                                  int accumulate) {
+  uint32_t mask0 = 0, mask1 = 0, mask2 = 0, mask3 = 0;
   asm volatile(
       "{\n\t"
       ".reg .pred p;\n\t"
       "setp.ne.b32 p, %4, 0;\n\t"
-      "tcgen05.mma.cta_group::1.kind::f16 [%0], %1, %2, %3, p;\n\t"
+      "tcgen05.mma.cta_group::1.kind::f16 [%0], %1, %2, %3, {%5, %6, %7, %8}, p;\n\t"
       "}\n"
       :
-      : "r"(tmem_d), "l"(a_desc), "l"(b_desc), "r"(i_desc), "r"(accumulate)
+      : "r"(tmem_d), "l"(a_desc), "l"(b_desc), "r"(i_desc), "r"(accumulate),
+        "r"(mask0), "r"(mask1), "r"(mask2), "r"(mask3)
       : "memory");
 }
 
