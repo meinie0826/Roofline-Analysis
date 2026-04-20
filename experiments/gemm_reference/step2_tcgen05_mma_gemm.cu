@@ -1,24 +1,30 @@
 #include "gemm_reference_common.h"
 
 #include <cuda_bf16.h>
+#include <mma.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace {
 
-constexpr int kThreads = 128;
-constexpr int kTileM = 128;
-constexpr int kTileN = 64;
-constexpr int kUmmaK = 16;
-constexpr uint32_t kUmmaLayoutNone = 0;
-constexpr int kCanonicalInnerMn = 8;
-constexpr int kCanonicalInnerK = 8;
+namespace wmma = nvcuda::wmma;
+
+constexpr int kWarpSize = 32;
+constexpr int kWarpsPerBlockM = 4;
+constexpr int kWarpsPerBlockN = 2;
+constexpr int kWarpTileM = 16;
+constexpr int kWarpTileN = 16;
+constexpr int kWarpTileK = 16;
+constexpr int kTileM = kWarpsPerBlockM * kWarpTileM;
+constexpr int kTileN = kWarpsPerBlockN * kWarpTileN;
+constexpr int kThreads = kWarpsPerBlockM * kWarpsPerBlockN * kWarpSize;
 
 struct Step2Options {
   int m = 128;
@@ -28,11 +34,6 @@ struct Step2Options {
   int iters = 20;
   int seed = 2026;
 };
-
-template <typename T, typename U>
-__host__ __device__ constexpr auto align_up_local(T x, U boundary) {
-  return (x + boundary - 1) & ~(boundary - 1);
-}
 
 std::optional<std::string_view> maybe_value(const std::string& arg,
                                             const std::string& prefix) {
@@ -59,8 +60,8 @@ T parse_number(std::string_view text, const char* name) {
 void print_usage(const char* argv0) {
   std::cerr
       << "Usage: " << argv0 << " [options]\n"
-      << "  --m=<int>        GEMM M, multiple of 128\n"
-      << "  --n=<int>        GEMM N, multiple of 64\n"
+      << "  --m=<int>        GEMM M, multiple of 16\n"
+      << "  --n=<int>        GEMM N, multiple of 16\n"
       << "  --k=<int>        GEMM K, multiple of 16\n"
       << "  --warmup=<int>   Warmup iterations\n"
       << "  --iters=<int>    Timed iterations\n"
@@ -99,10 +100,10 @@ Step2Options parse_options(int argc, char** argv) {
   if (options.warmup < 0 || options.iters <= 0) {
     throw std::runtime_error("warmup must be >= 0 and iters must be > 0");
   }
-  if (options.m % kTileM != 0 || options.n % kTileN != 0 ||
-      options.k % kUmmaK != 0) {
+  if (options.m % kWarpTileM != 0 || options.n % kWarpTileN != 0 ||
+      options.k % kWarpTileK != 0) {
     throw std::runtime_error(
-        "step2 currently requires m multiple of 128, n multiple of 64, k multiple of 16");
+        "step2 hopper mma currently requires m/n/k all be multiples of 16");
   }
   return options;
 }
@@ -142,292 +143,90 @@ void run_cublas_reference(cublasHandle_t handle,
                             CUBLAS_GEMM_DEFAULT));
 }
 
-__device__ __forceinline__ uint32_t elect_sync() {
-  uint32_t pred = 0;
-  asm volatile(
-      "{\n\t"
-      ".reg .pred %%px;\n\t"
-      "elect.sync _|%%px, %1;\n\t"
-      "@%%px mov.s32 %0, 1;\n\t"
-      "}"
-      : "+r"(pred)
-      : "r"(0xFFFFFFFF));
-  return pred;
-}
+struct SharedStorage {
+  nv_bfloat16 a[kTileM][kWarpTileK];
+  nv_bfloat16 b[kTileN][kWarpTileK];
+};
 
-__device__ __forceinline__ void mbarrier_init(uint32_t addr, uint32_t count) {
-  asm volatile("mbarrier.init.shared::cta.b64 [%0], %1;"
-               :
-               : "r"(addr), "r"(count)
-               : "memory");
-}
-
-__device__ __forceinline__ void fence_mbarrier_init_release_cluster() {
-  asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
-}
-
-__device__ __forceinline__ void mbarrier_wait(uint32_t addr, uint32_t phase) {
-  asm volatile(
-      "{\n\t"
-      ".reg .pred P1;\n\t"
-      "LAB_WAIT:\n\t"
-      "mbarrier.try_wait.parity.acquire.cta.shared::cta.b64 P1, [%0], %1;\n\t"
-      "@P1 bra.uni DONE;\n\t"
-      "bra.uni LAB_WAIT;\n\t"
-      "DONE:\n\t"
-      "}"
-      :
-      : "r"(addr), "r"(phase)
-      : "memory");
-}
-
-__device__ __forceinline__ void tcgen05_alloc(uint32_t addr_ptr,
-                                              uint32_t num_cols) {
-  asm volatile("tcgen05.alloc.cta_group::1.sync.aligned.shared::cta.b32 [%0], %1;"
-               :
-               : "r"(addr_ptr), "r"(num_cols)
-               : "memory");
-}
-
-__device__ __forceinline__ void tcgen05_dealloc(uint32_t tmem_addr,
-                                                uint32_t num_cols) {
-  asm volatile("tcgen05.dealloc.cta_group::1.sync.aligned.b32 %0, %1;"
-               :
-               : "r"(tmem_addr), "r"(num_cols)
-               : "memory");
-}
-
-__device__ __forceinline__ void tcgen05_commit(uint32_t mbar_addr) {
-  asm volatile(
-      "tcgen05.commit.cta_group::1.mbarrier::arrive::one.shared::cluster.b64 [%0];"
-      :
-      : "r"(mbar_addr)
-      : "memory");
-}
-
-__device__ __forceinline__ void tcgen05_fence_after_thread_sync() {
-  asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
-}
-
-__device__ __forceinline__ void tcgen05_wait_ld() {
-  asm volatile("tcgen05.wait::ld.sync.aligned;" ::: "memory");
-}
-
-__device__ __forceinline__ void tcgen05_ld_1x32(float& d0, uint32_t addr) {
-  asm volatile("tcgen05.ld.sync.aligned.32x32b.x1.b32 {%0}, [%1];"
-               : "=f"(d0)
-               : "r"(addr));
-}
-
-__device__ __forceinline__ void tcgen05_relinquish_alloc_permit() {
-  asm volatile("tcgen05.relinquish_alloc_permit.cta_group::1.sync.aligned;"
-               :
-               :
-               : "memory");
-}
-
-__host__ __device__ constexpr int canonical_k_major_lbo_bytes(int mn_dim) {
-  return mn_dim * 16;
-}
-
-__host__ __device__ constexpr int canonical_k_major_sbo_bytes(int mn_dim) {
-  return mn_dim * 8;
-}
-
-__host__ __device__ constexpr int canonical_k_major_lbo_elems(int mn_dim) {
-  return canonical_k_major_lbo_bytes(mn_dim) / sizeof(nv_bfloat16);
-}
-
-__host__ __device__ constexpr int canonical_k_major_sbo_elems(int mn_dim) {
-  return canonical_k_major_sbo_bytes(mn_dim) / sizeof(nv_bfloat16);
-}
-
-__host__ __device__ constexpr int canonical_k_major_smem_elems(int mn_dim,
-                                                               int k_dim) {
-  return ((mn_dim / kCanonicalInnerMn - 1) * canonical_k_major_sbo_elems(mn_dim)) +
-         ((k_dim / kCanonicalInnerK - 1) * canonical_k_major_lbo_elems(mn_dim)) +
-         ((kCanonicalInnerMn - 1) * kCanonicalInnerK) +
-         (kCanonicalInnerK - 1) + 1;
-}
-
-__host__ __device__ constexpr int canonical_k_major_index(int mn_dim,
-                                                          int row,
-                                                          int col) {
-  return ((row & (kCanonicalInnerMn - 1)) * kCanonicalInnerK) +
-         ((row / kCanonicalInnerMn) * canonical_k_major_sbo_elems(mn_dim)) +
-         (col & (kCanonicalInnerK - 1)) +
-         ((col / kCanonicalInnerK) * canonical_k_major_lbo_elems(mn_dim));
-}
-
-__host__ __device__ constexpr uint32_t tmem_addr_f32_1sm(uint32_t base,
-                                                         int warp_id,
-                                                         int col) {
-  // tcgen05.ld.32x32b uses the lane's datapath implicitly.
-  // The explicit address should be warp-uniform and only select the 32-row
-  // warp block plus the starting column inside the TMEM tile.
-  return base + (static_cast<uint32_t>(warp_id * 32) << 16) +
-         static_cast<uint32_t>(col);
-}
-
-constexpr std::size_t kPackedABytes =
-    canonical_k_major_smem_elems(kTileM, kUmmaK) * sizeof(nv_bfloat16);
-constexpr std::size_t kPackedBOffsetBytes = align_up_local(kPackedABytes, 128);
-constexpr std::size_t kPackedBBytes =
-    canonical_k_major_smem_elems(kTileN, kUmmaK) * sizeof(nv_bfloat16);
-constexpr std::size_t kStep2SmemBytes =
-    align_up_local(kPackedBOffsetBytes + kPackedBBytes, 128);
-
-__device__ __forceinline__ uint64_t make_smem_desc(uint32_t addr,
-                                                   uint32_t leading_byte_offset,
-                                                   uint32_t stride_byte_offset,
-                                                   uint32_t layout_type) {
-  uint64_t desc = 0;
-  desc |= static_cast<uint64_t>((addr >> 4) & 0x3FFF);
-  desc |= static_cast<uint64_t>((leading_byte_offset >> 4) & 0x3FFF) << 16;
-  desc |= static_cast<uint64_t>((stride_byte_offset >> 4) & 0x3FFF) << 32;
-  desc |= 1ULL << 46;  // version = 1
-  desc |= static_cast<uint64_t>(layout_type & 0x7) << 61;
-  return desc;
-}
-
-__device__ __forceinline__ uint32_t make_i_desc_f16bf16() {
-  uint32_t desc = 0;
-  desc |= 1U << 4;                       // c_format = F32
-  desc |= 1U << 7;                       // a_format = BF16
-  desc |= 1U << 10;                      // b_format = BF16
-  desc |= (kTileN >> 3) << 17;           // n_dim
-  desc |= (kTileM >> 4) << 24;           // m_dim
-  return desc;
-}
-
-__device__ __forceinline__ void tcgen05_mma_bf16(uint32_t tmem_d,
-                                                 uint64_t a_desc,
-                                                 uint64_t b_desc,
-                                                 uint32_t i_desc,
-                                                 int accumulate) {
-  uint32_t mask0 = 0, mask1 = 0, mask2 = 0, mask3 = 0;
-  asm volatile(
-      "{\n\t"
-      ".reg .pred p;\n\t"
-      "setp.ne.b32 p, %4, 0;\n\t"
-      "tcgen05.mma.cta_group::1.kind::f16 [%0], %1, %2, %3, {%5, %6, %7, %8}, p;\n\t"
-      "}\n"
-      :
-      : "r"(tmem_d), "l"(a_desc), "l"(b_desc), "r"(i_desc), "r"(accumulate),
-        "r"(mask0), "r"(mask1), "r"(mask2), "r"(mask3)
-      : "memory");
-}
-
-__global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
+__global__ __launch_bounds__(kThreads) void step2_hopper_mma_kernel(
     const nv_bfloat16* __restrict__ A,
     const nv_bfloat16* __restrict__ B,
     float* __restrict__ D,
     int M,
     int N,
     int K) {
-  extern __shared__ __align__(128) unsigned char smem[];
-  auto* sA = reinterpret_cast<nv_bfloat16*>(smem);
-  auto* sB = reinterpret_cast<nv_bfloat16*>(smem + kPackedBOffsetBytes);
-
-  __shared__ uint64_t mbar;
-  __shared__ int tmem_addr;
+  __shared__ SharedStorage shared;
 
   const int tid = threadIdx.x;
-  const int lane_id = tid & 31;
-  const int warp_id = tid / 32;
-  const int tile_m = blockIdx.y * kTileM;
-  const int tile_n = blockIdx.x * kTileN;
+  const int warp_id = tid / kWarpSize;
+  const int lane_id = tid % kWarpSize;
+  const int block_m = blockIdx.y * kTileM;
+  const int block_n = blockIdx.x * kTileN;
+  const int warp_m = warp_id / kWarpsPerBlockN;
+  const int warp_n = warp_id % kWarpsPerBlockN;
+  const int warp_row = block_m + warp_m * kWarpTileM;
+  const int warp_col = block_n + warp_n * kWarpTileN;
 
-  if (tile_m >= M || tile_n >= N) {
-    return;
-  }
+  wmma::fragment<wmma::accumulator,
+                 kWarpTileM,
+                 kWarpTileN,
+                 kWarpTileK,
+                 float>
+      acc_frag;
+  wmma::fill_fragment(acc_frag, 0.0f);
 
-  const uint32_t mbar_addr =
-      static_cast<uint32_t>(__cvta_generic_to_shared(&mbar));
-  if (tid == 0) {
-    mbarrier_init(mbar_addr, 1);
-    fence_mbarrier_init_release_cluster();
-  }
-  if (warp_id == 0) {
-    uint32_t tmem_addr_smem =
-        static_cast<uint32_t>(__cvta_generic_to_shared(&tmem_addr));
-    tcgen05_alloc(tmem_addr_smem, align_up_local(kTileN, 32));
-  }
-  __syncthreads();
-
-  const uint32_t tmem_d = static_cast<uint32_t>(tmem_addr);
-  const uint32_t sA_addr = static_cast<uint32_t>(__cvta_generic_to_shared(sA));
-  const uint32_t sB_addr = static_cast<uint32_t>(__cvta_generic_to_shared(sB));
-  const uint64_t a_desc =
-      make_smem_desc(sA_addr,
-                     canonical_k_major_sbo_bytes(kTileM),  // leading_byte_offset_ = SBO (8-row group stride)
-                     canonical_k_major_lbo_bytes(kTileM),  // stride_byte_offset_  = LBO (K-block stride)
-                     kUmmaLayoutNone);
-  const uint64_t b_desc =
-      make_smem_desc(sB_addr,
-                     canonical_k_major_sbo_bytes(kTileN),  // leading_byte_offset_ = SBO
-                     canonical_k_major_lbo_bytes(kTileN),  // stride_byte_offset_  = LBO
-                     kUmmaLayoutNone);
-  const uint32_t i_desc = make_i_desc_f16bf16();
-
-  int phase = 0;
-  for (int k_base = 0; k_base < K; k_base += kUmmaK) {
-    // PTX K-major no-swizzle canonical layout:
-    // ((8, mn/8), (8, k/8*2)) : ((8, SBO), (1, LBO)) for bf16.
-    for (int i = tid; i < kTileM * kUmmaK; i += blockDim.x) {
-      int row = i / kUmmaK;
-      int col = i % kUmmaK;
-      int packed = canonical_k_major_index(kTileM, row, col);
-      sA[packed] = A[(tile_m + row) * K + (k_base + col)];
+  for (int k_base = 0; k_base < K; k_base += kWarpTileK) {
+    for (int idx = tid; idx < kTileM * kWarpTileK; idx += blockDim.x) {
+      const int row = idx / kWarpTileK;
+      const int col = idx % kWarpTileK;
+      shared.a[row][col] = A[(block_m + row) * K + (k_base + col)];
     }
-    for (int i = tid; i < kTileN * kUmmaK; i += blockDim.x) {
-      int row = i / kUmmaK;
-      int col = i % kUmmaK;
-      int packed = canonical_k_major_index(kTileN, row, col);
-      sB[packed] = B[(tile_n + row) * K + (k_base + col)];
+    for (int idx = tid; idx < kTileN * kWarpTileK; idx += blockDim.x) {
+      const int row = idx / kWarpTileK;
+      const int col = idx % kWarpTileK;
+      shared.b[row][col] = B[(block_n + row) * K + (k_base + col)];
     }
     __syncthreads();
 
-    if (warp_id == 0 && elect_sync()) {
-      tcgen05_mma_bf16(tmem_d, a_desc, b_desc, i_desc, k_base != 0);
-      tcgen05_commit(mbar_addr);
-    }
-    mbarrier_wait(mbar_addr, phase);
-    phase ^= 1;
+    wmma::fragment<wmma::matrix_a,
+                   kWarpTileM,
+                   kWarpTileN,
+                   kWarpTileK,
+                   nv_bfloat16,
+                   wmma::row_major>
+        a_frag;
+    wmma::fragment<wmma::matrix_b,
+                   kWarpTileM,
+                   kWarpTileN,
+                   kWarpTileK,
+                   nv_bfloat16,
+                   wmma::col_major>
+        b_frag;
+
+    wmma::load_matrix_sync(a_frag, &shared.a[warp_m * kWarpTileM][0], kWarpTileK);
+    wmma::load_matrix_sync(b_frag, &shared.b[warp_n * kWarpTileN][0], kWarpTileK);
+    wmma::mma_sync(acc_frag, a_frag, b_frag, acc_frag);
     __syncthreads();
   }
 
-  tcgen05_fence_after_thread_sync();
+  alignas(16) float warp_out[kWarpTileM * kWarpTileN];
+  wmma::store_matrix_sync(warp_out, acc_frag, kWarpTileN, wmma::mem_row_major);
 
-  if (warp_id < (kTileM / 32)) {
-    const int row = warp_id * 32 + lane_id;
-    for (int col = 0; col < kTileN; ++col) {
-      float value = 0.0f;
-      uint32_t tmem_ptr = tmem_addr_f32_1sm(tmem_d, warp_id, col);
-      tcgen05_ld_1x32(value, tmem_ptr);
-      tcgen05_wait_ld();
-      D[(tile_m + row) * N + (tile_n + col)] = value;
-    }
-  }
-
-  __syncthreads();
-  tcgen05_fence_after_thread_sync();
-  __syncthreads();
-  if (warp_id == 0) {
-    tcgen05_relinquish_alloc_permit();
-    tcgen05_dealloc(tmem_d, align_up_local(kTileN, 32));
+  for (int idx = lane_id; idx < kWarpTileM * kWarpTileN; idx += kWarpSize) {
+    const int row = idx / kWarpTileN;
+    const int col = idx % kWarpTileN;
+    D[(warp_row + row) * N + (warp_col + col)] = warp_out[idx];
   }
 }
 
-void launch_tcgen05_gemm(const nv_bfloat16* d_a,
-                         const nv_bfloat16* d_b,
-                         float* d_d,
-                         const Step2Options& options) {
+void launch_hopper_mma_gemm(const nv_bfloat16* d_a,
+                            const nv_bfloat16* d_b,
+                            float* d_d,
+                            const Step2Options& options) {
   dim3 block(kThreads);
-  dim3 grid(options.n / kTileN, options.m / kTileM);
-  std::size_t smem_bytes = kStep2SmemBytes;
-  step2_tcgen05_kernel<<<grid, block, smem_bytes>>>(d_a, d_b, d_d, options.m,
-                                                    options.n, options.k);
+  dim3 grid((options.n + kTileN - 1) / kTileN, (options.m + kTileM - 1) / kTileM);
+  step2_hopper_mma_kernel<<<grid, block>>>(d_a, d_b, d_d, options.m, options.n,
+                                           options.k);
   CHECK_CUDA(cudaGetLastError());
 }
 
@@ -518,8 +317,8 @@ int main(int argc, char** argv) {
 
     cudaDeviceProp props{};
     CHECK_CUDA(cudaGetDeviceProperties(&props, 0));
-    if (props.major != 10) {
-      throw std::runtime_error("step2 requires Blackwell tcgen05 support");
+    if (props.major < 8) {
+      throw std::runtime_error("step2 hopper mma path requires SM80 or newer");
     }
 
     const std::size_t a_elems =
@@ -536,11 +335,11 @@ int main(int argc, char** argv) {
 
     nv_bfloat16* device_A = nullptr;
     nv_bfloat16* device_B = nullptr;
-    float* device_tcgen05_D = nullptr;
+    float* device_hopper_D = nullptr;
     float* device_cublas_D = nullptr;
     CHECK_CUDA(cudaMalloc(&device_A, a_elems * sizeof(nv_bfloat16)));
     CHECK_CUDA(cudaMalloc(&device_B, b_elems * sizeof(nv_bfloat16)));
-    CHECK_CUDA(cudaMalloc(&device_tcgen05_D, d_elems * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&device_hopper_D, d_elems * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&device_cublas_D, d_elems * sizeof(float)));
     CHECK_CUDA(cudaMemcpy(device_A, host_A.data(), a_elems * sizeof(nv_bfloat16),
                           cudaMemcpyHostToDevice));
@@ -551,8 +350,8 @@ int main(int argc, char** argv) {
     CHECK_CUBLAS(cublasCreate(&handle));
     CHECK_CUBLAS(cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_HOST));
 
-    auto tcgen05_launch = [&] {
-      launch_tcgen05_gemm(device_A, device_B, device_tcgen05_D, options);
+    auto hopper_launch = [&] {
+      launch_hopper_mma_gemm(device_A, device_B, device_hopper_D, options);
     };
     auto cublas_launch = [&] {
       run_cublas_reference(handle, options, device_A, device_B, device_cublas_D);
@@ -561,20 +360,20 @@ int main(int argc, char** argv) {
     cublas_launch();
     CHECK_CUDA(cudaDeviceSynchronize());
 
-    tcgen05_launch();
+    hopper_launch();
     CHECK_CUDA(cudaDeviceSynchronize());
 
-    std::vector<float> host_tcgen05_D(d_elems, 0.0f);
+    std::vector<float> host_hopper_D(d_elems, 0.0f);
     std::vector<float> host_cublas_D(d_elems, 0.0f);
-    CHECK_CUDA(cudaMemcpy(host_tcgen05_D.data(), device_tcgen05_D,
+    CHECK_CUDA(cudaMemcpy(host_hopper_D.data(), device_hopper_D,
                           d_elems * sizeof(float), cudaMemcpyDeviceToHost));
     CHECK_CUDA(cudaMemcpy(host_cublas_D.data(), device_cublas_D,
                           d_elems * sizeof(float), cudaMemcpyDeviceToHost));
 
-    const CompareStats compare = compare_exact(host_cublas_D, host_tcgen05_D);
+    const CompareStats compare = compare_exact(host_cublas_D, host_hopper_D);
     std::cout << std::scientific << std::setprecision(6)
               << "CHECK benchmark=bench_step2_tcgen05_mma"
-              << " backend=tcgen05_mma"
+              << " backend=hopper_mma"
               << " m=" << options.m
               << " n=" << options.n
               << " k=" << options.k
@@ -584,21 +383,21 @@ int main(int argc, char** argv) {
               << '\n';
 
     if (!compare.pass) {
-      throw std::runtime_error("tcgen05 output does not exactly match cuBLAS");
+      throw std::runtime_error("hopper mma output does not exactly match cuBLAS");
     }
 
-    TimingStats tcgen05_stats =
-        benchmark_kernel(options, tcgen05_launch, device_tcgen05_D, host_tcgen05_D);
+    TimingStats hopper_stats =
+        benchmark_kernel(options, hopper_launch, device_hopper_D, host_hopper_D);
     TimingStats cublas_stats =
         benchmark_kernel(options, cublas_launch, device_cublas_D, host_cublas_D);
 
-    print_step2_result_line(options, "tcgen05_mma", tcgen05_stats);
+    print_step2_result_line(options, "hopper_mma", hopper_stats);
     print_step2_result_line(options, "cublas", cublas_stats);
 
     CHECK_CUBLAS(cublasDestroy(handle));
     CHECK_CUDA(cudaFree(device_A));
     CHECK_CUDA(cudaFree(device_B));
-    CHECK_CUDA(cudaFree(device_tcgen05_D));
+    CHECK_CUDA(cudaFree(device_hopper_D));
     CHECK_CUDA(cudaFree(device_cublas_D));
     return 0;
   } catch (const std::exception& e) {
