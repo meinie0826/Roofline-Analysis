@@ -159,6 +159,10 @@ __device__ __forceinline__ void mbarrier_init(uint32_t addr, uint32_t count) {
                : "memory");
 }
 
+__device__ __forceinline__ void fence_mbarrier_init_release_cluster() {
+  asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
+}
+
 __device__ __forceinline__ void mbarrier_wait(uint32_t addr, uint32_t phase) {
   asm volatile(
       "{\n\t"
@@ -202,6 +206,10 @@ __device__ __forceinline__ void tcgen05_fence_after_thread_sync() {
   asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
 }
 
+__device__ __forceinline__ void tcgen05_fence() {
+  asm volatile("tcgen05.fence;" ::: "memory");
+}
+
 __device__ __forceinline__ void tcgen05_wait_ld() {
   asm volatile("tcgen05.wait::ld.sync.aligned;" ::: "memory");
 }
@@ -217,16 +225,20 @@ __device__ __forceinline__ void tcgen05_ld_4x32(float& d0,
 }
 
 __device__ __forceinline__ uint64_t make_smem_desc(uint32_t addr,
-                                                   uint32_t sbo_bytes,
+                                                   uint32_t height,
                                                    uint32_t swizzle) {
-  return (static_cast<uint64_t>(addr >> 4)) |
-         (static_cast<uint64_t>(sbo_bytes) << 32) |
-         (static_cast<uint64_t>(swizzle) << 61);
+  uint64_t desc = 0;
+  desc |= static_cast<uint64_t>((addr >> 4) & 0x3FFF);
+  desc |= static_cast<uint64_t>((height * 16) >> 4) << 16;
+  desc |= 8ULL << 32;
+  desc |= 1ULL << 46;
+  desc |= static_cast<uint64_t>(swizzle) << 61;
+  return desc;
 }
 
 __device__ __forceinline__ uint32_t make_i_desc_f16bf16() {
-  return (1U << 4) | (1U << 7) | (1U << 10) | ((kTileN >> 3) << 17) |
-         (8U << 24);
+  return (1U << 0) | (1U << 4) | (1U << 7) | ((kTileN >> 3) << 10) |
+         ((kTileM >> 4) << 17);
 }
 
 __device__ __forceinline__ void tcgen05_mma_bf16(uint32_t tmem_d,
@@ -273,6 +285,9 @@ __global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
       static_cast<uint32_t>(__cvta_generic_to_shared(&mbar));
   if (tid == 0) {
     mbarrier_init(mbar_addr, 1);
+    fence_mbarrier_init_release_cluster();
+  }
+  if (warp_id == 0) {
     uint32_t tmem_addr_smem =
         static_cast<uint32_t>(__cvta_generic_to_shared(&tmem_addr));
     tcgen05_alloc(tmem_addr_smem, align_up_local(kTileN, 32));
@@ -282,8 +297,8 @@ __global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
   const uint32_t tmem_d = static_cast<uint32_t>(tmem_addr);
   const uint32_t sA_addr = static_cast<uint32_t>(__cvta_generic_to_shared(sA));
   const uint32_t sB_addr = static_cast<uint32_t>(__cvta_generic_to_shared(sB));
-  const uint64_t a_desc = make_smem_desc(sA_addr, 8 * kTileK * sizeof(nv_bfloat16), 0);
-  const uint64_t b_desc = make_smem_desc(sB_addr, 8 * kTileK * sizeof(nv_bfloat16), 0);
+  const uint64_t a_desc = make_smem_desc(sA_addr, kTileM, 0);
+  const uint64_t b_desc = make_smem_desc(sB_addr, kTileN, 0);
   const uint32_t i_desc = make_i_desc_f16bf16();
 
   int phase = 0;
@@ -309,8 +324,7 @@ __global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
     __syncthreads();
   }
 
-  tcgen05_fence_after_thread_sync();
-  __syncthreads();
+  tcgen05_fence();
 
   if (tid < kTileM) {
     for (int col = 0; col < kTileN; col += 4) {
@@ -330,7 +344,9 @@ __global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
   }
 
   __syncthreads();
-  if (tid == 0) {
+  tcgen05_fence_after_thread_sync();
+  __syncthreads();
+  if (warp_id == 0) {
     tcgen05_dealloc(tmem_d, align_up_local(kTileN, 32));
   }
 }
