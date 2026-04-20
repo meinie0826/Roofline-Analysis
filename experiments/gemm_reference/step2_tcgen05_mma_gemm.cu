@@ -206,10 +206,6 @@ __device__ __forceinline__ void tcgen05_fence_after_thread_sync() {
   asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
 }
 
-__device__ __forceinline__ void tcgen05_fence() {
-  asm volatile("tcgen05.fence;" ::: "memory");
-}
-
 __device__ __forceinline__ void tcgen05_wait_ld() {
   asm volatile("tcgen05.wait::ld.sync.aligned;" ::: "memory");
 }
@@ -324,7 +320,7 @@ __global__ __launch_bounds__(kThreads) void step2_tcgen05_kernel(
     __syncthreads();
   }
 
-  tcgen05_fence();
+  tcgen05_fence_after_thread_sync();
 
   if (tid < kTileM) {
     for (int col = 0; col < kTileN; col += 4) {
