@@ -17,6 +17,7 @@ STEP3_TARGET := bench_step3_hopper_tma
 STEP4_TARGET := bench_step4_hopper_ws_tma
 STEP5_TARGET := bench_step5_hopper_multistage_ws_tma
 STEP6_TARGET := bench_step6_hopper_swizzle_ws_tma
+STEP7_TARGET := bench_step7_tcgen05_umma
 SOURCES := \
 	bench_gemm_reference.cu \
 	naive_gemm.cu \
@@ -45,5 +46,8 @@ $(STEP5_TARGET): step5_hopper_multistage_ws_tma_gemm.cu gemm_reference_common.h
 $(STEP6_TARGET): step6_hopper_swizzle_ws_tma_gemm.cu gemm_reference_common.h
 	$(NVCC) -std=c++17 -O3 -lineinfo --expt-relaxed-constexpr $(STEP2_GENCODE) $< -o $@ $(LDFLAGS) -lcuda
 
+$(STEP7_TARGET): step7_tcgen05_umma_gemm.cu gemm_reference_common.h
+	$(NVCC) -std=c++17 -O3 -lineinfo --expt-relaxed-constexpr $(STEP2_GENCODE) $< -o $@ $(LDFLAGS)
+
 clean:
-	rm -f $(TARGET) $(STEP2_TARGET) $(STEP3_TARGET) $(STEP4_TARGET) $(STEP5_TARGET) $(STEP6_TARGET)
+	rm -f $(TARGET) $(STEP2_TARGET) $(STEP3_TARGET) $(STEP4_TARGET) $(STEP5_TARGET) $(STEP6_TARGET) $(STEP7_TARGET)
