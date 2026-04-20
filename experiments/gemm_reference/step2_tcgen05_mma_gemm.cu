@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <iomanip>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -15,6 +16,10 @@
 namespace {
 
 namespace wmma = nvcuda::wmma;
+
+#ifndef CUBLAS_COMPUTE_32F_FAST_16BF
+#define CUBLAS_COMPUTE_32F_FAST_16BF CUBLAS_COMPUTE_32F
+#endif
 
 constexpr int kWarpSize = 32;
 constexpr int kWarpsPerBlockM = 4;
@@ -119,7 +124,8 @@ void run_cublas_reference(cublasHandle_t handle,
                           const Step2Options& options,
                           const nv_bfloat16* d_a,
                           const nv_bfloat16* d_b,
-                          float* d_d) {
+                          float* d_d,
+                          cublasComputeType_t compute_type) {
   const float alpha = 1.0f;
   const float beta = 0.0f;
   CHECK_CUBLAS(cublasGemmEx(handle,
@@ -139,7 +145,7 @@ void run_cublas_reference(cublasHandle_t handle,
                             d_d,
                             CUDA_R_32F,
                             options.n,
-                            CUBLAS_COMPUTE_32F_PEDANTIC,
+                            compute_type,
                             CUBLAS_GEMM_DEFAULT));
 }
 
@@ -301,6 +307,65 @@ void print_step2_result_line(const Step2Options& options,
             << '\n';
 }
 
+void print_step2_check_line(const Step2Options& options,
+                            const char* backend,
+                            const CompareStats& compare,
+                            bool exact_required) {
+  std::cout << std::scientific << std::setprecision(6)
+            << "CHECK benchmark=bench_step2_tcgen05_mma"
+            << " backend=" << backend
+            << " m=" << options.m
+            << " n=" << options.n
+            << " k=" << options.k
+            << " pass=" << static_cast<int>(compare.pass)
+            << " max_abs=" << compare.max_abs
+            << " fail_count=" << compare.fail_count;
+  if (!exact_required) {
+    std::cout << " note=informational_only";
+  }
+  std::cout << '\n';
+}
+
+void print_step2_summary(const Step2Options& options,
+                         const TimingStats& hopper_stats,
+                         const TimingStats& cublas_fast_stats,
+                         const TimingStats& cublas_pedantic_stats,
+                         const CompareStats& hopper_compare,
+                         const CompareStats& fast_compare) {
+  auto print_row = [&](const char* backend,
+                       const TimingStats& stats,
+                       double baseline_ms) {
+    const double speedup = baseline_ms / stats.median_ms;
+    std::cout << std::fixed << std::setprecision(6)
+              << "  " << std::left << std::setw(20) << backend
+              << " median_ms=" << std::setw(10) << stats.median_ms
+              << " tflops=" << std::setw(9) << (stats.gflops / 1000.0)
+              << " speedup_vs_fast=" << std::setw(8) << speedup
+              << " checksum=" << stats.checksum << '\n';
+  };
+
+  std::cout << "SUMMARY benchmark=bench_step2_tcgen05_mma"
+            << " m=" << options.m
+            << " n=" << options.n
+            << " k=" << options.k
+            << " baseline=cublas_fast_16bf"
+            << '\n';
+  std::cout << "  correctness: hopper_mma vs cublas_pedantic exact_pass="
+            << static_cast<int>(hopper_compare.pass)
+            << " max_abs=" << std::scientific << std::setprecision(6)
+            << hopper_compare.max_abs
+            << " fail_count=" << hopper_compare.fail_count << '\n';
+  std::cout << "  fast_math_delta: cublas_fast_16bf vs cublas_pedantic pass="
+            << static_cast<int>(fast_compare.pass)
+            << " max_abs=" << std::scientific << std::setprecision(6)
+            << fast_compare.max_abs
+            << " fail_count=" << fast_compare.fail_count << '\n';
+  print_row("hopper_mma", hopper_stats, cublas_fast_stats.median_ms);
+  print_row("cublas_fast_16bf", cublas_fast_stats, cublas_fast_stats.median_ms);
+  print_row("cublas_pedantic", cublas_pedantic_stats,
+            cublas_fast_stats.median_ms);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -329,11 +394,13 @@ int main(int argc, char** argv) {
     nv_bfloat16* device_A = nullptr;
     nv_bfloat16* device_B = nullptr;
     float* device_hopper_D = nullptr;
-    float* device_cublas_D = nullptr;
+    float* device_cublas_pedantic_D = nullptr;
+    float* device_cublas_fast_D = nullptr;
     CHECK_CUDA(cudaMalloc(&device_A, a_elems * sizeof(nv_bfloat16)));
     CHECK_CUDA(cudaMalloc(&device_B, b_elems * sizeof(nv_bfloat16)));
     CHECK_CUDA(cudaMalloc(&device_hopper_D, d_elems * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&device_cublas_D, d_elems * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&device_cublas_pedantic_D, d_elems * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&device_cublas_fast_D, d_elems * sizeof(float)));
     CHECK_CUDA(cudaMemcpy(device_A, host_A.data(), a_elems * sizeof(nv_bfloat16),
                           cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(device_B, host_B.data(), b_elems * sizeof(nv_bfloat16),
@@ -346,52 +413,70 @@ int main(int argc, char** argv) {
     auto hopper_launch = [&] {
       launch_hopper_mma_gemm(device_A, device_B, device_hopper_D, options);
     };
-    auto cublas_launch = [&] {
-      run_cublas_reference(handle, options, device_A, device_B, device_cublas_D);
+    auto cublas_pedantic_launch = [&] {
+      run_cublas_reference(handle, options, device_A, device_B,
+                           device_cublas_pedantic_D,
+                           CUBLAS_COMPUTE_32F_PEDANTIC);
+    };
+    auto cublas_fast_launch = [&] {
+      run_cublas_reference(handle, options, device_A, device_B,
+                           device_cublas_fast_D,
+                           CUBLAS_COMPUTE_32F_FAST_16BF);
     };
 
-    cublas_launch();
+    cublas_pedantic_launch();
+    CHECK_CUDA(cudaDeviceSynchronize());
+
+    cublas_fast_launch();
     CHECK_CUDA(cudaDeviceSynchronize());
 
     hopper_launch();
     CHECK_CUDA(cudaDeviceSynchronize());
 
     std::vector<float> host_hopper_D(d_elems, 0.0f);
-    std::vector<float> host_cublas_D(d_elems, 0.0f);
+    std::vector<float> host_cublas_pedantic_D(d_elems, 0.0f);
+    std::vector<float> host_cublas_fast_D(d_elems, 0.0f);
     CHECK_CUDA(cudaMemcpy(host_hopper_D.data(), device_hopper_D,
                           d_elems * sizeof(float), cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaMemcpy(host_cublas_D.data(), device_cublas_D,
+    CHECK_CUDA(cudaMemcpy(host_cublas_pedantic_D.data(), device_cublas_pedantic_D,
+                          d_elems * sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(host_cublas_fast_D.data(), device_cublas_fast_D,
                           d_elems * sizeof(float), cudaMemcpyDeviceToHost));
 
-    const CompareStats compare = compare_exact(host_cublas_D, host_hopper_D);
-    std::cout << std::scientific << std::setprecision(6)
-              << "CHECK benchmark=bench_step2_tcgen05_mma"
-              << " backend=hopper_mma"
-              << " m=" << options.m
-              << " n=" << options.n
-              << " k=" << options.k
-              << " pass=" << static_cast<int>(compare.pass)
-              << " max_abs=" << compare.max_abs
-              << " fail_count=" << compare.fail_count
-              << '\n';
+    const CompareStats hopper_compare =
+        compare_exact(host_cublas_pedantic_D, host_hopper_D);
+    const CompareStats fast_compare =
+        compare_exact(host_cublas_pedantic_D, host_cublas_fast_D);
+    print_step2_check_line(options, "hopper_mma_vs_cublas_pedantic",
+                           hopper_compare, true);
+    print_step2_check_line(options, "cublas_fast_16bf_vs_cublas_pedantic",
+                           fast_compare, false);
 
-    if (!compare.pass) {
+    if (!hopper_compare.pass) {
       throw std::runtime_error("hopper mma output does not exactly match cuBLAS");
     }
 
     TimingStats hopper_stats =
         benchmark_kernel(options, hopper_launch, device_hopper_D, host_hopper_D);
-    TimingStats cublas_stats =
-        benchmark_kernel(options, cublas_launch, device_cublas_D, host_cublas_D);
+    TimingStats cublas_fast_stats =
+        benchmark_kernel(options, cublas_fast_launch, device_cublas_fast_D,
+                         host_cublas_fast_D);
+    TimingStats cublas_pedantic_stats =
+        benchmark_kernel(options, cublas_pedantic_launch,
+                         device_cublas_pedantic_D, host_cublas_pedantic_D);
 
     print_step2_result_line(options, "hopper_mma", hopper_stats);
-    print_step2_result_line(options, "cublas", cublas_stats);
+    print_step2_result_line(options, "cublas_fast_16bf", cublas_fast_stats);
+    print_step2_result_line(options, "cublas_pedantic", cublas_pedantic_stats);
+    print_step2_summary(options, hopper_stats, cublas_fast_stats,
+                        cublas_pedantic_stats, hopper_compare, fast_compare);
 
     CHECK_CUBLAS(cublasDestroy(handle));
     CHECK_CUDA(cudaFree(device_A));
     CHECK_CUDA(cudaFree(device_B));
     CHECK_CUDA(cudaFree(device_hopper_D));
-    CHECK_CUDA(cudaFree(device_cublas_D));
+    CHECK_CUDA(cudaFree(device_cublas_pedantic_D));
+    CHECK_CUDA(cudaFree(device_cublas_fast_D));
     return 0;
   } catch (const std::exception& e) {
     std::cerr << "ERROR " << e.what() << '\n';
