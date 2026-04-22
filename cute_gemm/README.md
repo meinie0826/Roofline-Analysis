@@ -1,0 +1,38 @@
+# `cute_gemm`
+
+最小版 CuTeDSL GEMM 实验目录。
+
+当前内容：
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_cutedsl.py): 只用 `tcgen05.mma` 的 CuTeDSL GEMM
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/ref.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/ref.py): `torch` reference
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py): 正确性验证 + 性能对比
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/run.sh](/Users/meiziyuan/Roofline-Analysis/cute_gemm/run.sh): 统一运行入口
+
+当前约束：
+- 不用 TMA
+- 不做 AB pipeline
+- tile 固定为 `(128, 256, 64)`
+- `M/N/K` 需要分别整除 `(128, 256, 64)`
+- `A/B` 是 `fp16`
+- 输出 `C` 是 `fp32`
+
+单个 shape 正确性：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis
+bash cute_gemm/run.sh --mnk 128,256,64
+```
+
+小 shape 对比：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis
+python3 cute_gemm/benchmark.py --shape-set small
+```
+
+大 shape 对比：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis
+python3 cute_gemm/benchmark.py --shape-set large
+```
