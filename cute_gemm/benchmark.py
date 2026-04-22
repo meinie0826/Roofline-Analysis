@@ -79,6 +79,24 @@ def _time_cuda(fn, warmup: int, iters: int) -> float:
     return (end - start) * 1000.0 / iters
 
 
+def _time_cuda_events(fn, warmup: int, iters: int) -> float:
+    for _ in range(warmup):
+        fn()
+    torch.cuda.synchronize()
+
+    start = torch.cuda.Event(enable_timing=True)
+    end = torch.cuda.Event(enable_timing=True)
+
+    total_ms = 0.0
+    for _ in range(iters):
+        start.record()
+        fn()
+        end.record()
+        end.synchronize()
+        total_ms += start.elapsed_time(end)
+    return total_ms / iters
+
+
 def _tflops(mnk: Tuple[int, int, int], ms: float) -> float:
     m, n, k = mnk
     flops = 2.0 * m * n * k
@@ -104,12 +122,22 @@ def benchmark_shape(
     ref = torch_gemm_with_dtype(a, b, cfg["torch_out_dtype"])
     check_close(got, ref, atol=atol, rtol=1e-5)
 
-    cute_ms = _time_cuda(
+    cute_wall_ms = _time_cuda(
         lambda: module.run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor),
         warmup,
         iters,
     )
-    torch_ms = _time_cuda(
+    cute_cuda_ms = _time_cuda_events(
+        lambda: module.run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor),
+        warmup,
+        iters,
+    )
+    torch_wall_ms = _time_cuda(
+        lambda: torch_gemm_with_dtype(a, b, cfg["torch_out_dtype"]),
+        warmup,
+        iters,
+    )
+    torch_cuda_ms = _time_cuda_events(
         lambda: torch_gemm_with_dtype(a, b, cfg["torch_out_dtype"]),
         warmup,
         iters,
@@ -118,27 +146,40 @@ def benchmark_shape(
     return {
         "variant": variant,
         "mnk": mnk,
-        "cute_ms": cute_ms,
-        "torch_ms": torch_ms,
-        "cute_tflops": _tflops(mnk, cute_ms),
-        "torch_tflops": _tflops(mnk, torch_ms),
-        "speedup_vs_torch": torch_ms / cute_ms,
+        "cute_wall_ms": cute_wall_ms,
+        "cute_cuda_ms": cute_cuda_ms,
+        "torch_wall_ms": torch_wall_ms,
+        "torch_cuda_ms": torch_cuda_ms,
+        "cute_wall_tflops": _tflops(mnk, cute_wall_ms),
+        "cute_cuda_tflops": _tflops(mnk, cute_cuda_ms),
+        "torch_wall_tflops": _tflops(mnk, torch_wall_ms),
+        "torch_cuda_tflops": _tflops(mnk, torch_cuda_ms),
+        "speedup_vs_torch_wall": torch_wall_ms / cute_wall_ms,
+        "speedup_vs_torch_cuda": torch_cuda_ms / cute_cuda_ms,
     }
 
 
 def print_results(rows: Iterable[dict]) -> None:
     print(
-        "variant,m,n,k,cute_ms,torch_ms,cute_tflops,torch_tflops,speedup_vs_torch"
+        "variant,m,n,k,"
+        "cute_wall_ms,cute_cuda_ms,torch_wall_ms,torch_cuda_ms,"
+        "cute_wall_tflops,cute_cuda_tflops,torch_wall_tflops,torch_cuda_tflops,"
+        "speedup_vs_torch_wall,speedup_vs_torch_cuda"
     )
     for row in rows:
         m, n, k = row["mnk"]
         print(
             f"{row['variant']},{m},{n},{k},"
-            f"{row['cute_ms']:.6f},"
-            f"{row['torch_ms']:.6f},"
-            f"{row['cute_tflops']:.6f},"
-            f"{row['torch_tflops']:.6f},"
-            f"{row['speedup_vs_torch']:.6f}"
+            f"{row['cute_wall_ms']:.6f},"
+            f"{row['cute_cuda_ms']:.6f},"
+            f"{row['torch_wall_ms']:.6f},"
+            f"{row['torch_cuda_ms']:.6f},"
+            f"{row['cute_wall_tflops']:.6f},"
+            f"{row['cute_cuda_tflops']:.6f},"
+            f"{row['torch_wall_tflops']:.6f},"
+            f"{row['torch_cuda_tflops']:.6f},"
+            f"{row['speedup_vs_torch_wall']:.6f},"
+            f"{row['speedup_vs_torch_cuda']:.6f}"
         )
 
 
@@ -179,9 +220,16 @@ def main():
                 {
                     "variant": variant,
                     "mnk": mnk,
-                    "cute_ms": round(row["cute_ms"], 6),
-                    "torch_ms": round(row["torch_ms"], 6),
-                    "speedup_vs_torch": round(row["speedup_vs_torch"], 6),
+                    "cute_wall_ms": round(row["cute_wall_ms"], 6),
+                    "cute_cuda_ms": round(row["cute_cuda_ms"], 6),
+                    "torch_wall_ms": round(row["torch_wall_ms"], 6),
+                    "torch_cuda_ms": round(row["torch_cuda_ms"], 6),
+                    "speedup_vs_torch_wall": round(
+                        row["speedup_vs_torch_wall"], 6
+                    ),
+                    "speedup_vs_torch_cuda": round(
+                        row["speedup_vs_torch_cuda"], 6
+                    ),
                 },
             )
     print_results(rows)
