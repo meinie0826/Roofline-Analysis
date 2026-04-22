@@ -84,18 +84,16 @@ def benchmark_shape(
 
 
 def print_results(rows: Iterable[dict]) -> None:
-    print(
-        "m,n,k,cute_ms,torch_ms,cute_tflops,torch_tflops,speedup_vs_torch"
-    )
+    print("m,n,k,cute_ms,torch_ms,cute_tflops,torch_tflops,speedup_vs_torch")
     for row in rows:
         m, n, k = row["mnk"]
         print(
             f"{m},{n},{k},"
-            f"{row['cute_ms']:.3f},"
-            f"{row['torch_ms']:.3f},"
-            f"{row['cute_tflops']:.3f},"
-            f"{row['torch_tflops']:.3f},"
-            f"{row['speedup_vs_torch']:.3f}"
+            f"{row['cute_ms']:.6f},"
+            f"{row['torch_ms']:.6f},"
+            f"{row['cute_tflops']:.6f},"
+            f"{row['torch_tflops']:.6f},"
+            f"{row['speedup_vs_torch']:.6f}"
         )
 
 
@@ -129,9 +127,9 @@ def main():
             "RESULT",
             {
                 "mnk": mnk,
-                "cute_ms": round(row["cute_ms"], 3),
-                "torch_ms": round(row["torch_ms"], 3),
-                "speedup_vs_torch": round(row["speedup_vs_torch"], 3),
+                "cute_ms": round(row["cute_ms"], 6),
+                "torch_ms": round(row["torch_ms"], 6),
+                "speedup_vs_torch": round(row["speedup_vs_torch"], 6),
             },
         )
     print_results(rows)
