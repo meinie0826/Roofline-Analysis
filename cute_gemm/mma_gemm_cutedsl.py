@@ -134,7 +134,9 @@ def kernel(
                     tCtAcc,
                 )
                 tiled_mma.set(tcgen05.Field.ACCUMULATE, True)
-            tcgen05.commit(storage.mma_mbar_ptr)
+            # UMMA completion arrive must be issued by exactly one thread.
+            with cute.arch.elect_one():
+                tcgen05.commit(storage.mma_mbar_ptr)
 
         cute.arch.mbarrier_wait(storage.mma_mbar_ptr, mma_phase)
         mma_phase = mma_phase ^ 1
