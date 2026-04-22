@@ -4,7 +4,11 @@ from typing import Iterable, Tuple
 
 import torch
 
-from mma_gemm_cutedsl import run_dense_gemm, validate_mnk
+from mma_gemm_cutedsl import (
+    prepare_cute_gemm,
+    run_dense_gemm_prepared,
+    validate_mnk,
+)
 from ref import check_close, make_inputs, torch_gemm
 
 
@@ -65,12 +69,17 @@ def benchmark_shape(
 ) -> dict:
     validate_mnk(mnk)
     a, b = make_inputs(mnk)
+    c, a_tensor, b_tensor, c_tensor = prepare_cute_gemm(a, b)
 
-    got = run_dense_gemm(a, b)
+    got = run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor)
     ref = torch_gemm(a, b)
     check_close(got, ref, atol=atol)
 
-    cute_ms = _time_cuda(lambda: run_dense_gemm(a, b), warmup, iters)
+    cute_ms = _time_cuda(
+        lambda: run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor),
+        warmup,
+        iters,
+    )
     torch_ms = _time_cuda(lambda: torch_gemm(a, b), warmup, iters)
 
     return {

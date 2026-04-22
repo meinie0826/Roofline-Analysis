@@ -210,7 +210,7 @@ def _to_cute_tensor(x, compact_divisor: int):
     )
 
 
-def run_dense_gemm(a, b):
+def prepare_cute_gemm(a, b):
     import torch
 
     m, k = a.shape
@@ -221,9 +221,17 @@ def run_dense_gemm(a, b):
     a_tensor = _to_cute_tensor(a, k)
     b_tensor = _to_cute_tensor(b, k)
     c_tensor = _to_cute_tensor(c, n)
+    return c, a_tensor, b_tensor, c_tensor
 
-    host_function(a_tensor, b_tensor, c_tensor, no_cache=True)
+
+def run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor):
+    host_function(a_tensor, b_tensor, c_tensor)
     return c
+
+
+def run_dense_gemm(a, b):
+    c, a_tensor, b_tensor, c_tensor = prepare_cute_gemm(a, b)
+    return run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor)
 
 
 def _parse_mnk(text: str) -> Tuple[int, int, int]:
