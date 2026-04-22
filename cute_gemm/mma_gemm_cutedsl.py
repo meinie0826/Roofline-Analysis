@@ -57,7 +57,7 @@ def kernel(
         num_threads=threads_per_cta,
     )
     tmem = utils.TmemAllocator(
-        storage.tmem_holding_buf.ptr,
+        storage.tmem_holding_buf,
         barrier_for_retrieve=tmem_alloc_barrier,
     )
     num_tmem_cols = 512
@@ -65,7 +65,7 @@ def kernel(
 
     if warp_idx == 0:
         with cute.arch.elect_one():
-            cute.arch.mbarrier_init(storage.mma_mbar_ptr.ptr, 1)
+            cute.arch.mbarrier_init(storage.mma_mbar_ptr, 1)
     cute.arch.mbarrier_init_fence()
 
     gA = cute.local_tile(mA_mk, mma_tiler_mnk, mma_coord_mnk, proj=(1, None, 1))
@@ -134,9 +134,9 @@ def kernel(
                     tCtAcc,
                 )
                 tiled_mma.set(tcgen05.Field.ACCUMULATE, True)
-            tcgen05.commit(storage.mma_mbar_ptr.ptr)
+            tcgen05.commit(storage.mma_mbar_ptr)
 
-        cute.arch.mbarrier_wait(storage.mma_mbar_ptr.ptr, mma_phase)
+        cute.arch.mbarrier_wait(storage.mma_mbar_ptr, mma_phase)
         mma_phase = mma_phase ^ 1
         pipeline.sync()
 
