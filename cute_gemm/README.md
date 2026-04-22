@@ -17,6 +17,13 @@
 - `A/B` 是 `fp16`
 - 输出 `C` 是 `fp32`
 
+`2cta` 版本当前约束：
+- 使用官方 tutorial 风格的 `2cta + tma + pipeline`
+- tile 固定为 `(256, 256, 64)`
+- `M/N/K` 需要分别整除 `(256, 256, 64)`
+- `A/B` 是 `fp16`
+- 输出 `C` 是 `fp16`
+
 单个 shape 正确性：
 
 ```bash
@@ -35,12 +42,40 @@ python3 cute_gemm/mma_gemm_2cta_cutedsl.py --mnk 256,256,64
 
 ```bash
 cd /Users/meiziyuan/Roofline-Analysis
-python3 cute_gemm/benchmark.py --shape-set small
+python3 cute_gemm/benchmark.py --variant 1cta --shape-set small
 ```
 
 大 shape 对比：
 
 ```bash
 cd /Users/meiziyuan/Roofline-Analysis
-python3 cute_gemm/benchmark.py --shape-set large
+python3 cute_gemm/benchmark.py --variant 1cta --shape-set large
+```
+
+`2cta` 小 shape：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis
+python3 cute_gemm/benchmark.py --variant 2cta --shape-set small
+```
+
+`2cta` 大 shape：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis
+python3 cute_gemm/benchmark.py --variant 2cta --shape-set large
+```
+
+两个版本一起跑：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis
+python3 cute_gemm/benchmark.py --variant all --shape-set all
+```
+
+手动指定 shape：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis
+python3 cute_gemm/benchmark.py --variant 2cta --shapes 256,256,64 1024,1024,256
 ```

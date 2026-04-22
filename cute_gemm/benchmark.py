@@ -4,25 +4,42 @@ from typing import Iterable, Tuple
 
 import torch
 
-from mma_gemm_cutedsl import (
-    prepare_cute_gemm,
-    run_dense_gemm_prepared,
-    validate_mnk,
-)
-from ref import check_close, make_inputs, torch_gemm
+import mma_gemm_cutedsl as gemm_1cta
+import mma_gemm_2cta_cutedsl as gemm_2cta
+from ref import check_close, make_inputs, torch_gemm_with_dtype
 
-
-SMALL_SHAPES = [
-    (128, 256, 64),
-    (256, 256, 64),
-    (256, 512, 128),
-]
-
-LARGE_SHAPES = [
-    (1024, 1024, 256),
-    (2048, 2048, 256),
-    (4096, 2048, 512),
-]
+VARIANTS: dict[str, dict] = {
+    "1cta": {
+        "module": gemm_1cta,
+        "small_shapes": [
+            (128, 256, 64),
+            (256, 256, 64),
+            (256, 512, 128),
+        ],
+        "large_shapes": [
+            (1024, 1024, 256),
+            (2048, 2048, 256),
+            (4096, 2048, 512),
+        ],
+        "torch_out_dtype": torch.float32,
+        "default_atol": 1e-3,
+    },
+    "2cta": {
+        "module": gemm_2cta,
+        "small_shapes": [
+            (256, 256, 64),
+            (512, 256, 64),
+            (512, 512, 128),
+        ],
+        "large_shapes": [
+            (1024, 1024, 256),
+            (2048, 2048, 256),
+            (4096, 2048, 512),
+        ],
+        "torch_out_dtype": torch.float16,
+        "default_atol": 1e-1,
+    },
+}
 
 
 def _parse_mnk(text: str) -> Tuple[int, int, int]:
@@ -32,14 +49,21 @@ def _parse_mnk(text: str) -> Tuple[int, int, int]:
     return parts[0], parts[1], parts[2]
 
 
-def _iter_shapes(shape_set: str, shapes: list[Tuple[int, int, int]] | None):
+def _iter_shapes(variant: str, shape_set: str, shapes: list[Tuple[int, int, int]] | None):
     if shapes:
         return shapes
+    cfg = VARIANTS[variant]
     if shape_set == "small":
-        return SMALL_SHAPES
+        return cfg["small_shapes"]
     if shape_set == "large":
-        return LARGE_SHAPES
-    return SMALL_SHAPES + LARGE_SHAPES
+        return cfg["large_shapes"]
+    return cfg["small_shapes"] + cfg["large_shapes"]
+
+
+def _iter_variants(variant: str):
+    if variant == "all":
+        return list(VARIANTS.keys())
+    return [variant]
 
 
 def _time_cuda(fn, warmup: int, iters: int) -> float:
@@ -62,27 +86,37 @@ def _tflops(mnk: Tuple[int, int, int], ms: float) -> float:
 
 
 def benchmark_shape(
+    variant: str,
     mnk: Tuple[int, int, int],
-    atol: float,
+    atol: float | None,
     warmup: int,
     iters: int,
 ) -> dict:
-    validate_mnk(mnk)
-    a, b = make_inputs(mnk)
-    c, a_tensor, b_tensor, c_tensor = prepare_cute_gemm(a, b)
+    cfg = VARIANTS[variant]
+    module = cfg["module"]
+    atol = cfg["default_atol"] if atol is None else atol
 
-    got = run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor)
-    ref = torch_gemm(a, b)
-    check_close(got, ref, atol=atol)
+    module.validate_mnk(mnk)
+    a, b = make_inputs(mnk)
+    c, a_tensor, b_tensor, c_tensor = module.prepare_cute_gemm(a, b)
+
+    got = module.run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor)
+    ref = torch_gemm_with_dtype(a, b, cfg["torch_out_dtype"])
+    check_close(got, ref, atol=atol, rtol=1e-5)
 
     cute_ms = _time_cuda(
-        lambda: run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor),
+        lambda: module.run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor),
         warmup,
         iters,
     )
-    torch_ms = _time_cuda(lambda: torch_gemm(a, b), warmup, iters)
+    torch_ms = _time_cuda(
+        lambda: torch_gemm_with_dtype(a, b, cfg["torch_out_dtype"]),
+        warmup,
+        iters,
+    )
 
     return {
+        "variant": variant,
         "mnk": mnk,
         "cute_ms": cute_ms,
         "torch_ms": torch_ms,
@@ -93,11 +127,13 @@ def benchmark_shape(
 
 
 def print_results(rows: Iterable[dict]) -> None:
-    print("m,n,k,cute_ms,torch_ms,cute_tflops,torch_tflops,speedup_vs_torch")
+    print(
+        "variant,m,n,k,cute_ms,torch_ms,cute_tflops,torch_tflops,speedup_vs_torch"
+    )
     for row in rows:
         m, n, k = row["mnk"]
         print(
-            f"{m},{n},{k},"
+            f"{row['variant']},{m},{n},{k},"
             f"{row['cute_ms']:.6f},"
             f"{row['torch_ms']:.6f},"
             f"{row['cute_tflops']:.6f},"
@@ -111,6 +147,11 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--variant",
+        choices=["1cta", "2cta", "all"],
+        default="all",
+    )
+    parser.add_argument(
         "--shape-set",
         choices=["small", "large", "all"],
         default="all",
@@ -123,24 +164,26 @@ def main():
     )
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--iters", type=int, default=10)
-    parser.add_argument("--atol", type=float, default=1e-3)
+    parser.add_argument("--atol", type=float, default=None)
     args = parser.parse_args()
 
     cu_driver.cuInit(0)
 
     rows = []
-    for mnk in _iter_shapes(args.shape_set, args.shapes):
-        row = benchmark_shape(mnk, args.atol, args.warmup, args.iters)
-        rows.append(row)
-        print(
-            "RESULT",
-            {
-                "mnk": mnk,
-                "cute_ms": round(row["cute_ms"], 6),
-                "torch_ms": round(row["torch_ms"], 6),
-                "speedup_vs_torch": round(row["speedup_vs_torch"], 6),
-            },
-        )
+    for variant in _iter_variants(args.variant):
+        for mnk in _iter_shapes(variant, args.shape_set, args.shapes):
+            row = benchmark_shape(variant, mnk, args.atol, args.warmup, args.iters)
+            rows.append(row)
+            print(
+                "RESULT",
+                {
+                    "variant": variant,
+                    "mnk": mnk,
+                    "cute_ms": round(row["cute_ms"], 6),
+                    "torch_ms": round(row["torch_ms"], 6),
+                    "speedup_vs_torch": round(row["speedup_vs_torch"], 6),
+                },
+            )
     print_results(rows)
 
 

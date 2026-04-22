@@ -12,6 +12,7 @@ from cutlass.cute.runtime import from_dlpack
 
 io_dtype = cutlass.Float16
 acc_dtype = cutlass.Float32
+output_dtype = cutlass.Float16
 threads_per_cta = 128
 
 cluster_shape_mnk = (2, 1, 1)
@@ -318,40 +319,36 @@ def validate_mnk(mnk: Tuple[int, int, int]) -> None:
         )
 
 
-def run_dense_gemm(mnk: Tuple[int, int, int], atol: float = 1e-1):
+def _to_cute_tensor(x, compact_divisor: int):
+    return (
+        from_dlpack(x, assumed_align=32)
+        .mark_layout_dynamic(leading_dim=1)
+        .mark_compact_shape_dynamic(mode=1, divisibility=compact_divisor)
+    )
+
+
+def prepare_cute_gemm(a, b):
     import torch
 
-    m, n, k = mnk
-    validate_mnk(mnk)
-    torch.manual_seed(0)
-
-    a = torch.randint(-2, 3, (m, k), device="cuda", dtype=torch.int32).to(torch.float16)
-    b = torch.randint(-2, 3, (n, k), device="cuda", dtype=torch.int32).to(torch.float16)
+    m, k = a.shape
+    n = b.shape[0]
+    validate_mnk((m, n, k))
     c = torch.empty((m, n), device="cuda", dtype=torch.float16)
 
-    a_tensor = (
-        from_dlpack(a, assumed_align=32)
-        .mark_layout_dynamic(leading_dim=1)
-        .mark_compact_shape_dynamic(mode=1, divisibility=k)
-    )
-    b_tensor = (
-        from_dlpack(b, assumed_align=32)
-        .mark_layout_dynamic(leading_dim=1)
-        .mark_compact_shape_dynamic(mode=1, divisibility=k)
-    )
-    c_tensor = (
-        from_dlpack(c, assumed_align=32)
-        .mark_layout_dynamic(leading_dim=1)
-        .mark_compact_shape_dynamic(mode=1, divisibility=n)
-    )
+    a_tensor = _to_cute_tensor(a, k)
+    b_tensor = _to_cute_tensor(b, k)
+    c_tensor = _to_cute_tensor(c, n)
+    return c, a_tensor, b_tensor, c_tensor
 
+
+def run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor):
     host_function(a_tensor, b_tensor, c_tensor)
+    return c
 
-    ref = torch.einsum("mk,nk->mn", a.float(), b.float())
-    torch.testing.assert_close(
-        c.cpu(), ref.to(torch.float16).cpu(), atol=atol, rtol=1e-5
-    )
-    print("PASS", {"mnk": mnk, "variant": "2cta+tma"})
+
+def run_dense_gemm(a, b):
+    c, a_tensor, b_tensor, c_tensor = prepare_cute_gemm(a, b)
+    return run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor)
 
 
 def _parse_mnk(text: str) -> Tuple[int, int, int]:
@@ -363,6 +360,7 @@ def _parse_mnk(text: str) -> Tuple[int, int, int]:
 
 if __name__ == "__main__":
     from cuda.bindings import driver as cu_driver
+    from ref import check_close, make_inputs, torch_gemm_with_dtype
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--mnk", type=_parse_mnk, default=(256, 256, 64))
@@ -370,4 +368,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     cu_driver.cuInit(0)
-    run_dense_gemm(args.mnk, atol=args.atol)
+    a, b = make_inputs(args.mnk)
+    got = run_dense_gemm(a, b)
+    ref = torch_gemm_with_dtype(a, b, torch.float16)
+    check_close(got, ref, atol=args.atol, rtol=1e-5)
+    print("PASS", {"mnk": args.mnk, "variant": "2cta"})

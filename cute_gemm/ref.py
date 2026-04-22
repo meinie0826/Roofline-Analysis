@@ -12,7 +12,16 @@ def make_inputs(mnk: Tuple[int, int, int], seed: int = 0):
 
 
 def torch_gemm(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    return torch.einsum("mk,nk->mn", a.float(), b.float())
+    return torch_gemm_with_dtype(a, b, torch.float32)
+
+
+def torch_gemm_with_dtype(
+    a: torch.Tensor,
+    b: torch.Tensor,
+    out_dtype: torch.dtype,
+) -> torch.Tensor:
+    out = torch.einsum("mk,nk->mn", a.float(), b.float())
+    return out.to(out_dtype)
 
 
 def check_close(
