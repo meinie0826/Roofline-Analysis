@@ -1,5 +1,4 @@
 import argparse
-import time
 from typing import Iterable, Tuple
 
 import cutlass.cute as cute
@@ -14,6 +13,7 @@ from ref import (
     torch_perf_gemm_with_dtype,
     torch_reference_gemm_with_dtype,
 )
+
 
 VARIANTS: dict[str, dict] = {
     "1cta": {
@@ -67,33 +67,13 @@ def _iter_shapes(variant: str, shape_set: str, shapes: list[Tuple[int, int, int]
     return cfg["small_shapes"] + cfg["large_shapes"]
 
 
-def _iter_variants(variant: str):
-    if variant == "all":
-        return list(VARIANTS.keys())
-    return [variant]
-
-
-def _time_cuda(fn, warmup: int, iters: int) -> float:
-    for _ in range(warmup):
-        fn()
-    torch.cuda.synchronize()
-
-    start = time.perf_counter()
-    for _ in range(iters):
-        fn()
-    torch.cuda.synchronize()
-    end = time.perf_counter()
-    return (end - start) * 1000.0 / iters
-
-
-def _time_cuda_events(fn, warmup: int, iters: int) -> float:
+def _time_torch_kernel(fn, warmup: int, iters: int) -> float:
     for _ in range(warmup):
         fn()
     torch.cuda.synchronize()
 
     start = torch.cuda.Event(enable_timing=True)
     end = torch.cuda.Event(enable_timing=True)
-
     total_ms = 0.0
     for _ in range(iters):
         start.record()
@@ -104,7 +84,7 @@ def _time_cuda_events(fn, warmup: int, iters: int) -> float:
     return total_ms / iters
 
 
-def _time_cutedsl_compiled(
+def _time_cute_kernel(
     module,
     a,
     b,
@@ -127,12 +107,6 @@ def _time_cutedsl_compiled(
     return time_us / 1e3
 
 
-def _tflops(mnk: Tuple[int, int, int], ms: float) -> float:
-    m, n, k = mnk
-    flops = 2.0 * m * n * k
-    return flops / (ms / 1e3) / 1e12
-
-
 def benchmark_shape(
     variant: str,
     mnk: Tuple[int, int, int],
@@ -152,17 +126,7 @@ def benchmark_shape(
     ref = torch_reference_gemm_with_dtype(a, b, cfg["torch_out_dtype"])
     check_close(got, ref, atol=atol, rtol=1e-5)
 
-    cute_host_wall_ms = _time_cuda(
-        lambda: module.run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor),
-        warmup,
-        iters,
-    )
-    cute_host_event_ms = _time_cuda_events(
-        lambda: module.run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor),
-        warmup,
-        iters,
-    )
-    cute_compiled_ms = _time_cutedsl_compiled(
+    cute_ms = _time_cute_kernel(
         module,
         a,
         b,
@@ -173,12 +137,7 @@ def benchmark_shape(
         warmup,
         iters,
     )
-    torch_gemm_wall_ms = _time_cuda(
-        lambda: torch_perf_gemm_with_dtype(a, b, cfg["torch_out_dtype"]),
-        warmup,
-        iters,
-    )
-    torch_gemm_cuda_ms = _time_cuda_events(
+    torch_ms = _time_torch_kernel(
         lambda: torch_perf_gemm_with_dtype(a, b, cfg["torch_out_dtype"]),
         warmup,
         iters,
@@ -187,46 +146,21 @@ def benchmark_shape(
     return {
         "variant": variant,
         "mnk": mnk,
-        "cute_host_wall_ms": cute_host_wall_ms,
-        "cute_host_event_ms": cute_host_event_ms,
-        "cute_compiled_ms": cute_compiled_ms,
-        "torch_gemm_wall_ms": torch_gemm_wall_ms,
-        "torch_gemm_cuda_ms": torch_gemm_cuda_ms,
-        "cute_host_wall_tflops": _tflops(mnk, cute_host_wall_ms),
-        "cute_host_event_tflops": _tflops(mnk, cute_host_event_ms),
-        "cute_compiled_tflops": _tflops(mnk, cute_compiled_ms),
-        "torch_gemm_wall_tflops": _tflops(mnk, torch_gemm_wall_ms),
-        "torch_gemm_cuda_tflops": _tflops(mnk, torch_gemm_cuda_ms),
-        "speedup_vs_torch_gemm_host_wall": torch_gemm_wall_ms / cute_host_wall_ms,
-        "speedup_vs_torch_gemm_host_event": torch_gemm_cuda_ms / cute_host_event_ms,
-        "speedup_vs_torch_gemm_compiled": torch_gemm_cuda_ms / cute_compiled_ms,
+        "cute_ms": cute_ms,
+        "torch_ms": torch_ms,
+        "speedup_vs_torch": torch_ms / cute_ms,
     }
 
 
 def print_results(rows: Iterable[dict]) -> None:
-    print(
-        "variant,m,n,k,"
-        "cute_host_wall_ms,cute_host_event_ms,cute_compiled_ms,torch_gemm_wall_ms,torch_gemm_cuda_ms,"
-        "cute_host_wall_tflops,cute_host_event_tflops,cute_compiled_tflops,torch_gemm_wall_tflops,torch_gemm_cuda_tflops,"
-        "speedup_vs_torch_gemm_host_wall,speedup_vs_torch_gemm_host_event,speedup_vs_torch_gemm_compiled"
-    )
+    print("variant,m,n,k,cute_ms,torch_ms,speedup_vs_torch")
     for row in rows:
         m, n, k = row["mnk"]
         print(
             f"{row['variant']},{m},{n},{k},"
-            f"{row['cute_host_wall_ms']:.6f},"
-            f"{row['cute_host_event_ms']:.6f},"
-            f"{row['cute_compiled_ms']:.6f},"
-            f"{row['torch_gemm_wall_ms']:.6f},"
-            f"{row['torch_gemm_cuda_ms']:.6f},"
-            f"{row['cute_host_wall_tflops']:.6f},"
-            f"{row['cute_host_event_tflops']:.6f},"
-            f"{row['cute_compiled_tflops']:.6f},"
-            f"{row['torch_gemm_wall_tflops']:.6f},"
-            f"{row['torch_gemm_cuda_tflops']:.6f},"
-            f"{row['speedup_vs_torch_gemm_host_wall']:.6f},"
-            f"{row['speedup_vs_torch_gemm_host_event']:.6f},"
-            f"{row['speedup_vs_torch_gemm_compiled']:.6f}"
+            f"{row['cute_ms']:.6f},"
+            f"{row['torch_ms']:.6f},"
+            f"{row['speedup_vs_torch']:.6f}"
         )
 
 
@@ -236,8 +170,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--variant",
-        choices=["1cta", "2cta", "all"],
-        default="all",
+        choices=["1cta", "2cta"],
+        default="2cta",
     )
     parser.add_argument(
         "--shape-set",
@@ -250,39 +184,27 @@ def main():
         nargs="*",
         default=None,
     )
-    parser.add_argument("--warmup", type=int, default=3)
-    parser.add_argument("--iters", type=int, default=10)
+    parser.add_argument("--warmup", type=int, default=5)
+    parser.add_argument("--iters", type=int, default=20)
     parser.add_argument("--atol", type=float, default=None)
     args = parser.parse_args()
 
     cu_driver.cuInit(0)
 
     rows = []
-    for variant in _iter_variants(args.variant):
-        for mnk in _iter_shapes(variant, args.shape_set, args.shapes):
-            row = benchmark_shape(variant, mnk, args.atol, args.warmup, args.iters)
-            rows.append(row)
-            print(
-                "RESULT",
-                {
-                    "variant": variant,
-                    "mnk": mnk,
-                    "cute_host_wall_ms": round(row["cute_host_wall_ms"], 6),
-                    "cute_host_event_ms": round(row["cute_host_event_ms"], 6),
-                    "cute_compiled_ms": round(row["cute_compiled_ms"], 6),
-                    "torch_gemm_wall_ms": round(row["torch_gemm_wall_ms"], 6),
-                    "torch_gemm_cuda_ms": round(row["torch_gemm_cuda_ms"], 6),
-                    "speedup_vs_torch_gemm_host_wall": round(
-                        row["speedup_vs_torch_gemm_host_wall"], 6
-                    ),
-                    "speedup_vs_torch_gemm_host_event": round(
-                        row["speedup_vs_torch_gemm_host_event"], 6
-                    ),
-                    "speedup_vs_torch_gemm_compiled": round(
-                        row["speedup_vs_torch_gemm_compiled"], 6
-                    ),
-                },
-            )
+    for mnk in _iter_shapes(args.variant, args.shape_set, args.shapes):
+        row = benchmark_shape(args.variant, mnk, args.atol, args.warmup, args.iters)
+        rows.append(row)
+        print(
+            "RESULT",
+            {
+                "variant": args.variant,
+                "mnk": mnk,
+                "cute_ms": round(row["cute_ms"], 6),
+                "torch_ms": round(row["torch_ms"], 6),
+                "speedup_vs_torch": round(row["speedup_vs_torch"], 6),
+            },
+        )
     print_results(rows)
 
 
