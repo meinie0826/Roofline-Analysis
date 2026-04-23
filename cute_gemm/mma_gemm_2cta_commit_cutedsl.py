@@ -299,6 +299,7 @@ def _parse_mnk(text: str) -> Tuple[int, int, int]:
 
 
 if __name__ == "__main__":
+    import torch
     from cuda.bindings import driver as cu_driver
     from ref import check_close, make_inputs, torch_gemm_with_dtype
 
@@ -310,6 +311,6 @@ if __name__ == "__main__":
     cu_driver.cuInit(0)
     a, b = make_inputs(args.mnk)
     got = run_dense_gemm(a, b)
-    ref = torch_gemm_with_dtype(a, b, output_dtype)
+    ref = torch_gemm_with_dtype(a, b, torch.float16)
     check_close(got, ref, atol=args.atol, rtol=1e-5)
     print("PASS", {"mnk": args.mnk, "variant": "2cta_commit"})
