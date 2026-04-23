@@ -83,24 +83,14 @@ def kernel(
         pipeline.Agent.Thread,
         cute.size(cta_layout_vmnk, mode=[0]) * threads_per_cta,
     )
-    mbar_base_ptr = storage.mma_sync_mbar_ptr.data_ptr().align(min_align=8)
-    mma_full_barrier = pipeline.MbarrierArray(
-        barrier_storage=mbar_base_ptr,
+    mma_pipeline = pipeline.PipelineUmmaAsync.create(
         num_stages=1,
-        agent=(pipeline.PipelineOp.TCGen05Mma, prod_group),
+        producer_group=prod_group,
+        consumer_group=cons_group,
+        barrier_storage=storage.mma_sync_mbar_ptr.data_ptr().align(min_align=8),
+        cta_layout_vmnk=cta_layout_vmnk,
+        defer_sync=True,
     )
-    mma_empty_barrier = pipeline.MbarrierArray(
-        barrier_storage=mbar_base_ptr + 1,
-        num_stages=1,
-        agent=(pipeline.PipelineOp.AsyncThread, cons_group),
-    )
-    cta_in_cluster_coord_vmnk = cta_layout_vmnk.get_flat_coord(cta_rank_in_cluster)
-    mma_mcast_mask = cute.make_layout_image_mask(
-        cta_layout_vmnk,
-        cta_in_cluster_coord_vmnk,
-        mode=0,
-    )
-    empty_dst_rank = cta_rank_in_cluster // 2 * 2
 
     cute.arch.mbarrier_init_fence()
     cute.arch.cluster_arrive_relaxed()
@@ -171,9 +161,7 @@ def kernel(
         cute.arch.cluster_wait()
 
         if is_leader_cta and warp_idx == 0:
-            prod_state = mma_producer_state.clone()
-            mma_empty_barrier.wait(prod_state.index, prod_state.phase)
-            mma_producer_state.advance()
+            mma_pipeline.producer_acquire(mma_producer_state)
             num_k_blocks = cute.size(tCrA, mode=[2])
             for k_block_idx in cutlass.range(num_k_blocks):
                 k_block_coord = (None, None, k_block_idx, 0)
@@ -185,22 +173,14 @@ def kernel(
                     tCtAcc,
                 )
                 tiled_mma.set(tcgen05.Field.ACCUMULATE, True)
-            mma_full_barrier.arrive_tcgen05mma(
-                prod_state.index,
-                mma_mcast_mask,
-                tcgen05.CtaGroup.TWO,
-            )
+            mma_pipeline.producer_commit(mma_producer_state)
+        mma_producer_state.advance()
 
-        cons_state = mma_consumer_state.clone()
-        mma_full_barrier.wait(cons_state.index, cons_state.phase)
+        mma_pipeline.consumer_wait(mma_consumer_state)
+        mma_pipeline.consumer_release(mma_consumer_state)
         mma_consumer_state.advance()
-        mma_empty_barrier.arrive(cons_state.index, empty_dst_rank)
 
-    if is_leader_cta and warp_idx == 0:
-        mma_empty_barrier.wait(
-            mma_producer_state.index,
-            mma_producer_state.phase,
-        )
+    mma_pipeline.producer_tail(mma_producer_state)
 
     tmem.relinquish_alloc_permit()
 
