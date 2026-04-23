@@ -74,7 +74,7 @@ def dump_mma_fragment_access(
     raw_ptr = cute.make_ptr(
         element_type,
         0,
-        cutlass.AddressSpace.smem,
+        cute.AddressSpace.smem,
         assumed_align=128,
     )
     swz_ptr = cute.recast_ptr(
