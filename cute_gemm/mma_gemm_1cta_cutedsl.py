@@ -2,6 +2,7 @@ from typing import Tuple
 
 import cutlass
 import cutlass.cute as cute
+import cutlass.cute.experimental.utils as cute_experimental_utils
 import cutlass.pipeline as pipeline
 import cutlass.utils as utils
 import cutlass.utils.blackwell_helpers as sm100_utils
@@ -114,6 +115,18 @@ def dump_mma_fragment_access(
                 f"{i:4d} | {str(frag_coord):>18} | {raw:6d} | {swz:6d} | {raw_bank:8d} | {swz_bank:8d}"
             )
         print()
+
+
+def dump_layout_mapping(name: str, layout, limit: int = 32):
+    total = cute.size(layout)
+    print(f"=== {name} ===")
+    print(f"{name}.layout = {cute.pretty_str(layout)}")
+    print(f"{'i':>3} | {'coord':>18} | {'value':>18}")
+    for i in range(min(limit, total)):
+        coord = layout.get_hier_coord(i)
+        value = layout(coord)
+        print(f"{i:3d} | {str(coord):>18} | {str(value):>18}")
+    print()
 
 
 @cute.struct
@@ -313,6 +326,20 @@ def host_function(
         dump_swizzle_mapping("B", b_smem_layout, limit=16)
         dump_mma_fragment_access("A", tiled_mma, a_smem_layout, io_dtype, "A", io_dtype.width)
         dump_mma_fragment_access("B", tiled_mma, b_smem_layout, io_dtype, "B", io_dtype.width)
+        print("=== tiled mma summary ===")
+        print(tiled_mma)
+        dump_layout_mapping("tiled_mma.tv_layout_A", tiled_mma.tv_layout_A, limit=32)
+        dump_layout_mapping("tiled_mma.tv_layout_B", tiled_mma.tv_layout_B, limit=32)
+        dump_layout_mapping("tiled_mma.tv_layout_A_tiled", tiled_mma.tv_layout_A_tiled, limit=32)
+        dump_layout_mapping("tiled_mma.tv_layout_B_tiled", tiled_mma.tv_layout_B_tiled, limit=32)
+        cta_v_map_a = cute_experimental_utils.get_cta_v_map_ab(
+            a, mma_tiler_mnk, tiled_mma, "A"
+        )
+        cta_v_map_b = cute_experimental_utils.get_cta_v_map_ab(
+            b, mma_tiler_mnk, tiled_mma, "B"
+        )
+        dump_layout_mapping("cta_v_map_A", cta_v_map_a, limit=32)
+        dump_layout_mapping("cta_v_map_B", cta_v_map_b, limit=32)
 
     grid_shape = cute.ceil_div((*c.layout.shape, 1), mma_tiler_mnk[:2])
     kernel(
