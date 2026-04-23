@@ -1,4 +1,5 @@
 from typing import Tuple
+import itertools
 
 import cutlass
 import cutlass.cute as cute
@@ -133,12 +134,24 @@ def dump_mma_fragment_access(
 
 
 def dump_layout_mapping(name: str, layout, limit: int = 32):
+    def iter_coords(shape):
+        if isinstance(shape, int):
+            for i in range(shape):
+                yield i
+            return
+        if not isinstance(shape, tuple):
+            raise TypeError(f"Unsupported shape leaf {type(shape)}: {shape}")
+        child_iters = [list(iter_coords(s)) for s in shape]
+        for prod in itertools.product(*child_iters):
+            yield tuple(prod)
+
     total = cute.size(layout)
     print(f"=== {name} ===")
     print(f"{name}.layout = {cute.pretty_str(layout)}")
     print(f"{'i':>3} | {'coord':>18} | {'value':>18}")
-    for i in range(min(limit, total)):
-        coord = layout.get_hier_coord(i)
+    for i, coord in enumerate(iter_coords(layout.shape)):
+        if i >= min(limit, total):
+            break
         value = layout(coord)
         print(f"{i:3d} | {str(coord):>18} | {str(value):>18}")
     print()
