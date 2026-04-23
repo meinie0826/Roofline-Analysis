@@ -2,7 +2,6 @@ from typing import Tuple
 
 import cutlass
 import cutlass.cute as cute
-import cutlass.cute.experimental.utils as cute_experimental_utils
 import cutlass.pipeline as pipeline
 import cutlass.utils as utils
 import cutlass.utils.blackwell_helpers as sm100_utils
@@ -15,6 +14,22 @@ acc_dtype = cutlass.Float32
 
 threads_per_cta = 128
 mma_tiler_mnk = (128, 256, 64)
+
+
+def get_cta_v_map_ab(gmem_tensor, mma_tiler_mnk, tiled_mma, input_operand):
+    ident = cute.make_identity_layout(gmem_tensor.shape)
+    mode = 0 if input_operand == "A" else 1
+    mma_tiler_mk = (mma_tiler_mnk[mode], *mma_tiler_mnk[2:])
+    g_tile = cute.composition(ident, mma_tiler_mk)
+    if input_operand == "A":
+        cta_v_map = tiled_mma._thrfrg_A(g_tile)
+    elif input_operand == "B":
+        cta_v_map = tiled_mma._thrfrg_B(g_tile)
+    else:
+        raise ValueError(f"Unsupported operand {input_operand}")
+    cta_v_map = cute.get(cta_v_map, mode=[1])
+    cta_v_map = cute.dice(cta_v_map, (1, (1,) * cute.rank(g_tile)))
+    return cta_v_map
 
 
 def dump_swizzle_mapping(name: str, composed_layout: cute.ComposedLayout, limit: int = 16):
@@ -332,12 +347,8 @@ def host_function(
         dump_layout_mapping("tiled_mma.tv_layout_B", tiled_mma.tv_layout_B, limit=32)
         dump_layout_mapping("tiled_mma.tv_layout_A_tiled", tiled_mma.tv_layout_A_tiled, limit=32)
         dump_layout_mapping("tiled_mma.tv_layout_B_tiled", tiled_mma.tv_layout_B_tiled, limit=32)
-        cta_v_map_a = cute_experimental_utils.get_cta_v_map_ab(
-            a, mma_tiler_mnk, tiled_mma, "A"
-        )
-        cta_v_map_b = cute_experimental_utils.get_cta_v_map_ab(
-            b, mma_tiler_mnk, tiled_mma, "B"
-        )
+        cta_v_map_a = get_cta_v_map_ab(a, mma_tiler_mnk, tiled_mma, "A")
+        cta_v_map_b = get_cta_v_map_ab(b, mma_tiler_mnk, tiled_mma, "B")
         dump_layout_mapping("cta_v_map_A", cta_v_map_a, limit=32)
         dump_layout_mapping("cta_v_map_B", cta_v_map_b, limit=32)
 
