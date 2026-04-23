@@ -174,25 +174,33 @@ def dump_thread_value_partition(
     print(f"=== {name} thread/value partition ===")
     print(f"{name}.tiled_mma.size = {tiled_mma.size}")
     print(f"{name}.thr_layout_vmnk = {cute.pretty_str(tiled_mma.thr_layout_vmnk)}")
+    if operand == "A":
+        thrfrg = tiled_mma._thrfrg_A(g_tile)
+    elif operand == "B":
+        thrfrg = tiled_mma._thrfrg_B(g_tile)
+    else:
+        raise ValueError(f"Unsupported operand {operand}")
 
-    for thr_idx in range(min(limit_threads, tiled_mma.size)):
-        thr_mma = tiled_mma.get_slice(thr_idx)
-        if operand == "A":
-            part = thr_mma.partition_A(g_tile)
-        elif operand == "B":
-            part = thr_mma.partition_B(g_tile)
-        else:
-            raise ValueError(f"Unsupported operand {operand}")
+    print(
+        f"{name}.note = layout-only dump; ThrMma.partition_{operand} requires Tensor input"
+    )
+    print(f"{name}.thrfrg.layout = {cute.pretty_str(thrfrg)}")
+    print(f"{'i':>3} | {'coord':>18} | {'value':>18}")
+    for i in range(min(limit_values, cute.size(thrfrg))):
+        coord = thrfrg.get_hier_coord(i)
+        value = thrfrg(coord)
+        print(f"{i:3d} | {str(coord):>18} | {str(value):>18}")
+    print()
 
-        print(f"--- {name} thread={thr_idx} ---")
-        print(f"{name}.thread[{thr_idx}].layout = {cute.pretty_str(part.layout)}")
-        print(f"{'i':>3} | {'coord':>18} | {'value':>18}")
-        total = cute.size(part)
-        for i in range(min(limit_values, total)):
-            coord = part.layout.get_hier_coord(i)
-            value = part[coord]
-            print(f"{i:3d} | {str(coord):>18} | {str(value):>18}")
-        print()
+    projected = cute.get(thrfrg, mode=[1])
+    projected = cute.dice(projected, (1, (1,) * cute.rank(g_tile)))
+    print(f"{name}.projected_without_thread.layout = {cute.pretty_str(projected)}")
+    print(f"{'i':>3} | {'coord':>18} | {'value':>18}")
+    for i in range(min(limit_values, cute.size(projected))):
+        coord = projected.get_hier_coord(i)
+        value = projected(coord)
+        print(f"{i:3d} | {str(coord):>18} | {str(value):>18}")
+    print()
 
 
 @cute.struct
