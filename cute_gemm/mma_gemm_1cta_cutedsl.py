@@ -157,6 +157,44 @@ def dump_layout_mapping(name: str, layout, limit: int = 32):
     print()
 
 
+def dump_thread_value_partition(
+    name: str,
+    tiled_mma: cute.TiledMma,
+    gmem_tensor: cute.Tensor,
+    mma_tiler_mnk,
+    operand: str,
+    limit_threads: int = 8,
+    limit_values: int = 16,
+):
+    mode = 0 if operand == "A" else 1
+    mma_tiler_mk = (mma_tiler_mnk[mode], *mma_tiler_mnk[2:])
+    ident = cute.make_identity_layout(gmem_tensor.shape)
+    g_tile = cute.composition(ident, mma_tiler_mk)
+
+    print(f"=== {name} thread/value partition ===")
+    print(f"{name}.tiled_mma.size = {tiled_mma.size}")
+    print(f"{name}.thr_layout_vmnk = {cute.pretty_str(tiled_mma.thr_layout_vmnk)}")
+
+    for thr_idx in range(min(limit_threads, tiled_mma.size)):
+        thr_mma = tiled_mma.get_slice(thr_idx)
+        if operand == "A":
+            part = thr_mma.partition_A(g_tile)
+        elif operand == "B":
+            part = thr_mma.partition_B(g_tile)
+        else:
+            raise ValueError(f"Unsupported operand {operand}")
+
+        print(f"--- {name} thread={thr_idx} ---")
+        print(f"{name}.thread[{thr_idx}].layout = {cute.pretty_str(part.layout)}")
+        print(f"{'i':>3} | {'coord':>18} | {'value':>18}")
+        total = cute.size(part)
+        for i in range(min(limit_values, total)):
+            coord = part.layout.get_hier_coord(i)
+            value = part[coord]
+            print(f"{i:3d} | {str(coord):>18} | {str(value):>18}")
+        print()
+
+
 @cute.struct
 class SharedStorage:
     mma_mbar_ptr: cutlass.Int64
@@ -364,6 +402,8 @@ def host_function(
         cta_v_map_b = get_cta_v_map_ab(b, mma_tiler_mnk, tiled_mma, "B")
         dump_layout_mapping("cta_v_map_A", cta_v_map_a, limit=32)
         dump_layout_mapping("cta_v_map_B", cta_v_map_b, limit=32)
+        dump_thread_value_partition("A", tiled_mma, a, mma_tiler_mnk, "A")
+        dump_thread_value_partition("B", tiled_mma, b, mma_tiler_mnk, "B")
 
     grid_shape = cute.ceil_div((*c.layout.shape, 1), mma_tiler_mnk[:2])
     kernel(
