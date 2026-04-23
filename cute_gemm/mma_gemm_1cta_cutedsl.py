@@ -54,6 +54,56 @@ def dump_swizzle_mapping(name: str, composed_layout: cute.ComposedLayout, limit:
     print()
 
 
+def bank_id_from_elem_offset(
+    offset: int, element_bits: int, bank_width_bytes: int = 4, num_banks: int = 32
+):
+    elem_bytes = max(1, element_bits // 8)
+    byte_addr = offset * elem_bytes
+    return (byte_addr // bank_width_bytes) % num_banks
+
+
+def dump_mma_fragment_access(
+    name: str,
+    tiled_mma: cute.TiledMma,
+    smem_layout: cute.ComposedLayout,
+    operand: str,
+    element_bits: int,
+    limit: int = 32,
+):
+    raw_tensor = cute.make_tensor(0, smem_layout.outer)
+    swz_tensor = cute.make_tensor(0, smem_layout)
+    if operand == "A":
+        frag_raw = tiled_mma.make_fragment_A(raw_tensor)
+        frag_swz = tiled_mma.make_fragment_A(swz_tensor)
+    elif operand == "B":
+        frag_raw = tiled_mma.make_fragment_B(raw_tensor)
+        frag_swz = tiled_mma.make_fragment_B(swz_tensor)
+    else:
+        raise ValueError(f"Unsupported operand {operand}")
+
+    print(f"=== {name} fragment access ===")
+    print(f"{name}.fragment.layout = {cute.pretty_str(frag_raw.layout)}")
+    num_k_blocks = cute.size(frag_raw, mode=[2])
+    for k_block in range(num_k_blocks):
+        frag_raw_k = frag_raw[(None, None, k_block, 0)]
+        frag_swz_k = frag_swz[(None, None, k_block, 0)]
+        total = cute.size(frag_raw_k)
+        print(f"--- {name} k_block={k_block} ---")
+        print(
+            f"{'step':>4} | {'frag_coord':>18} | {'raw':>6} | {'swz':>6} | {'raw_bank':>8} | {'swz_bank':>8}"
+        )
+        for i in range(min(limit, total)):
+            frag_coord = frag_raw_k.layout.get_hier_coord(i)
+            raw = int(frag_raw_k.layout(frag_coord))
+            swz = int(frag_swz_k.layout(frag_coord))
+            raw_bank = bank_id_from_elem_offset(raw, element_bits)
+            swz_bank = bank_id_from_elem_offset(swz, element_bits)
+            print(
+                f"{i:4d} | {str(frag_coord):>18} | {raw:6d} | {swz:6d} | {raw_bank:8d} | {swz_bank:8d}"
+            )
+        print()
+
+
 @cute.struct
 class SharedStorage:
     mma_mbar_ptr: cutlass.Int64
@@ -249,6 +299,8 @@ def host_function(
         print("=== host swizzle debug end ===")
         dump_swizzle_mapping("A", a_smem_layout, limit=16)
         dump_swizzle_mapping("B", b_smem_layout, limit=16)
+        dump_mma_fragment_access("A", tiled_mma, a_smem_layout, "A", io_dtype.width)
+        dump_mma_fragment_access("B", tiled_mma, b_smem_layout, "B", io_dtype.width)
 
     grid_shape = cute.ceil_div((*c.layout.shape, 1), mma_tiler_mnk[:2])
     kernel(
