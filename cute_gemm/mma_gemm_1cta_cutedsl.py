@@ -66,12 +66,24 @@ def dump_mma_fragment_access(
     name: str,
     tiled_mma: cute.TiledMma,
     smem_layout: cute.ComposedLayout,
+    element_type,
     operand: str,
     element_bits: int,
     limit: int = 32,
 ):
-    raw_tensor = cute.make_tensor(0, smem_layout.outer)
-    swz_tensor = cute.make_tensor(0, smem_layout)
+    raw_ptr = cute.make_ptr(
+        element_type,
+        0,
+        cutlass.AddressSpace.smem,
+        assumed_align=128,
+    )
+    swz_ptr = cute.recast_ptr(
+        raw_ptr,
+        swizzle_=smem_layout.inner,
+        dtype=element_type,
+    )
+    raw_tensor = cute.make_tensor(raw_ptr, smem_layout.outer)
+    swz_tensor = cute.make_tensor(swz_ptr, smem_layout.outer)
     if operand == "A":
         frag_raw = tiled_mma.make_fragment_A(raw_tensor)
         frag_swz = tiled_mma.make_fragment_A(swz_tensor)
@@ -299,8 +311,8 @@ def host_function(
         print("=== host swizzle debug end ===")
         dump_swizzle_mapping("A", a_smem_layout, limit=16)
         dump_swizzle_mapping("B", b_smem_layout, limit=16)
-        dump_mma_fragment_access("A", tiled_mma, a_smem_layout, "A", io_dtype.width)
-        dump_mma_fragment_access("B", tiled_mma, b_smem_layout, "B", io_dtype.width)
+        dump_mma_fragment_access("A", tiled_mma, a_smem_layout, io_dtype, "A", io_dtype.width)
+        dump_mma_fragment_access("B", tiled_mma, b_smem_layout, io_dtype, "B", io_dtype.width)
 
     grid_shape = cute.ceil_div((*c.layout.shape, 1), mma_tiler_mnk[:2])
     kernel(
