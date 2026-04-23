@@ -298,23 +298,23 @@ def kernel(
     sA_stage = sA[(None, None, None, 0)]
     sB_stage = sB[(None, None, None, 0)]
 
-    if debug_swizzle and bidx == 0 and bidy == 0 and tidx == 0:
-        cute.printf("=== swizzle debug begin ===")
-        cute.printf("sA.layout       = {}", sA.layout)
-        cute.printf("sA_stage.layout = {}", sA_stage.layout)
-        cute.printf("sA.iter.swz     = {}", sA.iterator)
-        cute.printf(
-            "sA.iter.raw     = {}",
-            cute.recast_ptr(sA.iterator, swizzle_=None, dtype=io_dtype),
-        )
-        cute.printf("sB.layout       = {}", sB.layout)
-        cute.printf("sB_stage.layout = {}", sB_stage.layout)
-        cute.printf("sB.iter.swz     = {}", sB.iterator)
-        cute.printf(
-            "sB.iter.raw     = {}",
-            cute.recast_ptr(sB.iterator, swizzle_=None, dtype=io_dtype),
-        )
-        cute.printf("=== swizzle debug end ===")
+    # if debug_swizzle and bidx == 0 and bidy == 0 and tidx == 0:
+    #     cute.printf("=== swizzle debug begin ===")
+    #     cute.printf("sA.layout       = {}", sA.layout)
+    #     cute.printf("sA_stage.layout = {}", sA_stage.layout)
+    #     cute.printf("sA.iter.swz     = {}", sA.iterator)
+    #     cute.printf(
+    #         "sA.iter.raw     = {}",
+    #         cute.recast_ptr(sA.iterator, swizzle_=None, dtype=io_dtype),
+    #     )
+    #     cute.printf("sB.layout       = {}", sB.layout)
+    #     cute.printf("sB_stage.layout = {}", sB_stage.layout)
+    #     cute.printf("sB.iter.swz     = {}", sB.iterator)
+    #     cute.printf(
+    #         "sB.iter.raw     = {}",
+    #         cute.recast_ptr(sB.iterator, swizzle_=None, dtype=io_dtype),
+    #     )
+    #     cute.printf("=== swizzle debug end ===")
 
     mma_phase = cutlass.Int32(0)
     tiled_mma.set(tcgen05.Field.ACCUMULATE, False)
@@ -390,31 +390,39 @@ def host_function(
         1,
     )
 
-    if debug_swizzle:
-        print("=== host swizzle debug begin ===")
-        print("a_smem_layout       =", cute.pretty_str(a_smem_layout))
-        print("a_smem_layout.outer =", cute.pretty_str(a_smem_layout.outer))
-        print("a_smem_layout.inner =", cute.pretty_str(a_smem_layout.inner))
-        print("b_smem_layout       =", cute.pretty_str(b_smem_layout))
-        print("b_smem_layout.outer =", cute.pretty_str(b_smem_layout.outer))
-        print("b_smem_layout.inner =", cute.pretty_str(b_smem_layout.inner))
-        print("=== host swizzle debug end ===")
-        dump_swizzle_mapping("A", a_smem_layout, limit=16)
-        dump_swizzle_mapping("B", b_smem_layout, limit=16)
-        dump_mma_fragment_access("A", tiled_mma, a_smem_layout, io_dtype, "A", io_dtype.width)
-        dump_mma_fragment_access("B", tiled_mma, b_smem_layout, io_dtype, "B", io_dtype.width)
-        print("=== tiled mma summary ===")
-        print(tiled_mma)
-        dump_layout_mapping("tiled_mma.tv_layout_A", tiled_mma.tv_layout_A, limit=32)
-        dump_layout_mapping("tiled_mma.tv_layout_B", tiled_mma.tv_layout_B, limit=32)
-        dump_layout_mapping("tiled_mma.tv_layout_A_tiled", tiled_mma.tv_layout_A_tiled, limit=32)
-        dump_layout_mapping("tiled_mma.tv_layout_B_tiled", tiled_mma.tv_layout_B_tiled, limit=32)
-        cta_v_map_a = get_cta_v_map_ab(a, mma_tiler_mnk, tiled_mma, "A")
-        cta_v_map_b = get_cta_v_map_ab(b, mma_tiler_mnk, tiled_mma, "B")
-        dump_layout_mapping("cta_v_map_A", cta_v_map_a, limit=32)
-        dump_layout_mapping("cta_v_map_B", cta_v_map_b, limit=32)
-        dump_thread_value_partition("A", tiled_mma, a, mma_tiler_mnk, "A")
-        dump_thread_value_partition("B", tiled_mma, b, mma_tiler_mnk, "B")
+    # if debug_swizzle:
+    #     print("=== host swizzle debug begin ===")
+    #     print("a_smem_layout       =", cute.pretty_str(a_smem_layout))
+    #     print("a_smem_layout.outer =", cute.pretty_str(a_smem_layout.outer))
+    #     print("a_smem_layout.inner =", cute.pretty_str(a_smem_layout.inner))
+    #     print("b_smem_layout       =", cute.pretty_str(b_smem_layout))
+    #     print("b_smem_layout.outer =", cute.pretty_str(b_smem_layout.outer))
+    #     print("b_smem_layout.inner =", cute.pretty_str(b_smem_layout.inner))
+    #     print("=== host swizzle debug end ===")
+    #     dump_swizzle_mapping("A", a_smem_layout, limit=16)
+    #     dump_swizzle_mapping("B", b_smem_layout, limit=16)
+    #     dump_mma_fragment_access(
+    #         "A", tiled_mma, a_smem_layout, io_dtype, "A", io_dtype.width
+    #     )
+    #     dump_mma_fragment_access(
+    #         "B", tiled_mma, b_smem_layout, io_dtype, "B", io_dtype.width
+    #     )
+    #     print("=== tiled mma summary ===")
+    #     print(tiled_mma)
+    #     dump_layout_mapping("tiled_mma.tv_layout_A", tiled_mma.tv_layout_A, limit=32)
+    #     dump_layout_mapping("tiled_mma.tv_layout_B", tiled_mma.tv_layout_B, limit=32)
+    #     dump_layout_mapping(
+    #         "tiled_mma.tv_layout_A_tiled", tiled_mma.tv_layout_A_tiled, limit=32
+    #     )
+    #     dump_layout_mapping(
+    #         "tiled_mma.tv_layout_B_tiled", tiled_mma.tv_layout_B_tiled, limit=32
+    #     )
+    #     cta_v_map_a = get_cta_v_map_ab(a, mma_tiler_mnk, tiled_mma, "A")
+    #     cta_v_map_b = get_cta_v_map_ab(b, mma_tiler_mnk, tiled_mma, "B")
+    #     dump_layout_mapping("cta_v_map_A", cta_v_map_a, limit=32)
+    #     dump_layout_mapping("cta_v_map_B", cta_v_map_b, limit=32)
+    #     dump_thread_value_partition("A", tiled_mma, a, mma_tiler_mnk, "A")
+    #     dump_thread_value_partition("B", tiled_mma, b, mma_tiler_mnk, "B")
 
     grid_shape = cute.ceil_div((*c.layout.shape, 1), mma_tiler_mnk[:2])
     kernel(
