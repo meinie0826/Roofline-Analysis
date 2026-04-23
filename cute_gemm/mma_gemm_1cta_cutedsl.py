@@ -30,6 +30,7 @@ def kernel(
     mC_mn: cute.Tensor,
     a_smem_layout: cute.ComposedLayout,
     b_smem_layout: cute.ComposedLayout,
+    debug_swizzle: cutlass.Constexpr[bool] = False,
 ):
     tidx, _, _ = cute.arch.thread_idx()
     warp_idx = cute.arch.warp_idx()
@@ -107,6 +108,24 @@ def kernel(
     sA_stage = sA[(None, None, None, 0)]
     sB_stage = sB[(None, None, None, 0)]
 
+    if debug_swizzle and bidx == 0 and bidy == 0 and tidx == 0:
+        cute.printf("=== swizzle debug begin ===")
+        cute.printf("sA.layout       = {}", sA.layout)
+        cute.printf("sA_stage.layout = {}", sA_stage.layout)
+        cute.printf("sA.iter.swz     = {}", sA.iterator)
+        cute.printf(
+            "sA.iter.raw     = {}",
+            cute.recast_ptr(sA.iterator, swizzle_=None, dtype=io_dtype),
+        )
+        cute.printf("sB.layout       = {}", sB.layout)
+        cute.printf("sB_stage.layout = {}", sB_stage.layout)
+        cute.printf("sB.iter.swz     = {}", sB.iterator)
+        cute.printf(
+            "sB.iter.raw     = {}",
+            cute.recast_ptr(sB.iterator, swizzle_=None, dtype=io_dtype),
+        )
+        cute.printf("=== swizzle debug end ===")
+
     mma_phase = cutlass.Int32(0)
     tiled_mma.set(tcgen05.Field.ACCUMULATE, False)
 
@@ -153,7 +172,12 @@ def kernel(
 
 
 @cute.jit
-def host_function(a: cute.Tensor, b: cute.Tensor, c: cute.Tensor):
+def host_function(
+    a: cute.Tensor,
+    b: cute.Tensor,
+    c: cute.Tensor,
+    debug_swizzle: cutlass.Constexpr[bool] = False,
+):
     tiled_mma = sm100_utils.make_trivial_tiled_mma(
         io_dtype,
         tcgen05.OperandMajorMode.K,
@@ -176,6 +200,16 @@ def host_function(a: cute.Tensor, b: cute.Tensor, c: cute.Tensor):
         1,
     )
 
+    if debug_swizzle:
+        print("=== host swizzle debug begin ===")
+        print("a_smem_layout       =", cute.pretty_str(a_smem_layout))
+        print("a_smem_layout.outer =", cute.pretty_str(a_smem_layout.outer))
+        print("a_smem_layout.inner =", cute.pretty_str(a_smem_layout.inner))
+        print("b_smem_layout       =", cute.pretty_str(b_smem_layout))
+        print("b_smem_layout.outer =", cute.pretty_str(b_smem_layout.outer))
+        print("b_smem_layout.inner =", cute.pretty_str(b_smem_layout.inner))
+        print("=== host swizzle debug end ===")
+
     grid_shape = cute.ceil_div((*c.layout.shape, 1), mma_tiler_mnk[:2])
     kernel(
         tiled_mma,
@@ -184,6 +218,7 @@ def host_function(a: cute.Tensor, b: cute.Tensor, c: cute.Tensor):
         c,
         a_smem_layout,
         b_smem_layout,
+        debug_swizzle,
     ).launch(
         grid=grid_shape,
         block=(threads_per_cta, 1, 1),
@@ -224,14 +259,14 @@ def prepare_cute_gemm(a, b):
     return c, a_tensor, b_tensor, c_tensor
 
 
-def run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor):
-    host_function(a_tensor, b_tensor, c_tensor)
+def run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor, debug_swizzle: bool = False):
+    host_function(a_tensor, b_tensor, c_tensor, debug_swizzle)
     return c
 
 
-def run_dense_gemm(a, b):
+def run_dense_gemm(a, b, debug_swizzle: bool = False):
     c, a_tensor, b_tensor, c_tensor = prepare_cute_gemm(a, b)
-    return run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor)
+    return run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor, debug_swizzle)
 
 
 def _parse_mnk(text: str) -> Tuple[int, int, int]:
@@ -249,11 +284,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--mnk", type=_parse_mnk, default=(128, 256, 64))
     parser.add_argument("--atol", type=float, default=1e-3)
+    parser.add_argument("--debug-swizzle", action="store_true")
     args = parser.parse_args()
 
     cu_driver.cuInit(0)
     a, b = make_inputs(args.mnk)
-    got = run_dense_gemm(a, b)
+    got = run_dense_gemm(a, b, debug_swizzle=args.debug_swizzle)
     ref = torch_gemm(a, b)
     check_close(got, ref, atol=args.atol)
     print("PASS", {"mnk": args.mnk, "dtype": "fp16->fp32"})
