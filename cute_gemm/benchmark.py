@@ -8,7 +8,12 @@ import torch
 
 import mma_gemm_cutedsl as gemm_1cta
 import mma_gemm_2cta_cutedsl as gemm_2cta
-from ref import check_close, make_inputs, torch_gemm_with_dtype
+from ref import (
+    check_close,
+    make_inputs,
+    torch_perf_gemm_with_dtype,
+    torch_reference_gemm_with_dtype,
+)
 
 VARIANTS: dict[str, dict] = {
     "1cta": {
@@ -144,7 +149,7 @@ def benchmark_shape(
     c, a_tensor, b_tensor, c_tensor = module.prepare_cute_gemm(a, b)
 
     got = module.run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor)
-    ref = torch_gemm_with_dtype(a, b, cfg["torch_out_dtype"])
+    ref = torch_reference_gemm_with_dtype(a, b, cfg["torch_out_dtype"])
     check_close(got, ref, atol=atol, rtol=1e-5)
 
     cute_host_wall_ms = _time_cuda(
@@ -168,13 +173,13 @@ def benchmark_shape(
         warmup,
         iters,
     )
-    torch_wall_ms = _time_cuda(
-        lambda: torch_gemm_with_dtype(a, b, cfg["torch_out_dtype"]),
+    torch_gemm_wall_ms = _time_cuda(
+        lambda: torch_perf_gemm_with_dtype(a, b, cfg["torch_out_dtype"]),
         warmup,
         iters,
     )
-    torch_cuda_ms = _time_cuda_events(
-        lambda: torch_gemm_with_dtype(a, b, cfg["torch_out_dtype"]),
+    torch_gemm_cuda_ms = _time_cuda_events(
+        lambda: torch_perf_gemm_with_dtype(a, b, cfg["torch_out_dtype"]),
         warmup,
         iters,
     )
@@ -185,25 +190,25 @@ def benchmark_shape(
         "cute_host_wall_ms": cute_host_wall_ms,
         "cute_host_event_ms": cute_host_event_ms,
         "cute_compiled_ms": cute_compiled_ms,
-        "torch_wall_ms": torch_wall_ms,
-        "torch_cuda_ms": torch_cuda_ms,
+        "torch_gemm_wall_ms": torch_gemm_wall_ms,
+        "torch_gemm_cuda_ms": torch_gemm_cuda_ms,
         "cute_host_wall_tflops": _tflops(mnk, cute_host_wall_ms),
         "cute_host_event_tflops": _tflops(mnk, cute_host_event_ms),
         "cute_compiled_tflops": _tflops(mnk, cute_compiled_ms),
-        "torch_wall_tflops": _tflops(mnk, torch_wall_ms),
-        "torch_cuda_tflops": _tflops(mnk, torch_cuda_ms),
-        "speedup_vs_torch_host_wall": torch_wall_ms / cute_host_wall_ms,
-        "speedup_vs_torch_host_event": torch_cuda_ms / cute_host_event_ms,
-        "speedup_vs_torch_compiled": torch_cuda_ms / cute_compiled_ms,
+        "torch_gemm_wall_tflops": _tflops(mnk, torch_gemm_wall_ms),
+        "torch_gemm_cuda_tflops": _tflops(mnk, torch_gemm_cuda_ms),
+        "speedup_vs_torch_gemm_host_wall": torch_gemm_wall_ms / cute_host_wall_ms,
+        "speedup_vs_torch_gemm_host_event": torch_gemm_cuda_ms / cute_host_event_ms,
+        "speedup_vs_torch_gemm_compiled": torch_gemm_cuda_ms / cute_compiled_ms,
     }
 
 
 def print_results(rows: Iterable[dict]) -> None:
     print(
         "variant,m,n,k,"
-        "cute_host_wall_ms,cute_host_event_ms,cute_compiled_ms,torch_wall_ms,torch_cuda_ms,"
-        "cute_host_wall_tflops,cute_host_event_tflops,cute_compiled_tflops,torch_wall_tflops,torch_cuda_tflops,"
-        "speedup_vs_torch_host_wall,speedup_vs_torch_host_event,speedup_vs_torch_compiled"
+        "cute_host_wall_ms,cute_host_event_ms,cute_compiled_ms,torch_gemm_wall_ms,torch_gemm_cuda_ms,"
+        "cute_host_wall_tflops,cute_host_event_tflops,cute_compiled_tflops,torch_gemm_wall_tflops,torch_gemm_cuda_tflops,"
+        "speedup_vs_torch_gemm_host_wall,speedup_vs_torch_gemm_host_event,speedup_vs_torch_gemm_compiled"
     )
     for row in rows:
         m, n, k = row["mnk"]
@@ -212,16 +217,16 @@ def print_results(rows: Iterable[dict]) -> None:
             f"{row['cute_host_wall_ms']:.6f},"
             f"{row['cute_host_event_ms']:.6f},"
             f"{row['cute_compiled_ms']:.6f},"
-            f"{row['torch_wall_ms']:.6f},"
-            f"{row['torch_cuda_ms']:.6f},"
+            f"{row['torch_gemm_wall_ms']:.6f},"
+            f"{row['torch_gemm_cuda_ms']:.6f},"
             f"{row['cute_host_wall_tflops']:.6f},"
             f"{row['cute_host_event_tflops']:.6f},"
             f"{row['cute_compiled_tflops']:.6f},"
-            f"{row['torch_wall_tflops']:.6f},"
-            f"{row['torch_cuda_tflops']:.6f},"
-            f"{row['speedup_vs_torch_host_wall']:.6f},"
-            f"{row['speedup_vs_torch_host_event']:.6f},"
-            f"{row['speedup_vs_torch_compiled']:.6f}"
+            f"{row['torch_gemm_wall_tflops']:.6f},"
+            f"{row['torch_gemm_cuda_tflops']:.6f},"
+            f"{row['speedup_vs_torch_gemm_host_wall']:.6f},"
+            f"{row['speedup_vs_torch_gemm_host_event']:.6f},"
+            f"{row['speedup_vs_torch_gemm_compiled']:.6f}"
         )
 
 
@@ -265,16 +270,16 @@ def main():
                     "cute_host_wall_ms": round(row["cute_host_wall_ms"], 6),
                     "cute_host_event_ms": round(row["cute_host_event_ms"], 6),
                     "cute_compiled_ms": round(row["cute_compiled_ms"], 6),
-                    "torch_wall_ms": round(row["torch_wall_ms"], 6),
-                    "torch_cuda_ms": round(row["torch_cuda_ms"], 6),
-                    "speedup_vs_torch_host_wall": round(
-                        row["speedup_vs_torch_host_wall"], 6
+                    "torch_gemm_wall_ms": round(row["torch_gemm_wall_ms"], 6),
+                    "torch_gemm_cuda_ms": round(row["torch_gemm_cuda_ms"], 6),
+                    "speedup_vs_torch_gemm_host_wall": round(
+                        row["speedup_vs_torch_gemm_host_wall"], 6
                     ),
-                    "speedup_vs_torch_host_event": round(
-                        row["speedup_vs_torch_host_event"], 6
+                    "speedup_vs_torch_gemm_host_event": round(
+                        row["speedup_vs_torch_gemm_host_event"], 6
                     ),
-                    "speedup_vs_torch_compiled": round(
-                        row["speedup_vs_torch_compiled"], 6
+                    "speedup_vs_torch_gemm_compiled": round(
+                        row["speedup_vs_torch_gemm_compiled"], 6
                     ),
                 },
             )

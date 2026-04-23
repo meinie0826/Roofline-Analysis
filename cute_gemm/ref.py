@@ -12,7 +12,33 @@ def make_inputs(mnk: Tuple[int, int, int], seed: int = 0):
 
 
 def torch_gemm(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    return torch_gemm_with_dtype(a, b, torch.float32)
+    return torch_reference_gemm_with_dtype(a, b, torch.float32)
+
+
+def torch_reference_gemm_with_dtype(
+    a: torch.Tensor,
+    b: torch.Tensor,
+    out_dtype: torch.dtype,
+) -> torch.Tensor:
+    out = torch.einsum("mk,nk->mn", a.float(), b.float())
+    return out.to(out_dtype)
+
+
+def torch_perf_gemm_with_dtype(
+    a: torch.Tensor,
+    b: torch.Tensor,
+    out_dtype: torch.dtype,
+) -> torch.Tensor:
+    if out_dtype == torch.float16:
+        return torch.mm(a, b.t())
+
+    if out_dtype == torch.float32:
+        try:
+            return torch.mm(a, b.t(), out_dtype=torch.float32)
+        except (TypeError, RuntimeError):
+            return torch.mm(a.float(), b.float().t())
+
+    return torch.mm(a.float(), b.float().t()).to(out_dtype)
 
 
 def torch_gemm_with_dtype(
@@ -20,8 +46,7 @@ def torch_gemm_with_dtype(
     b: torch.Tensor,
     out_dtype: torch.dtype,
 ) -> torch.Tensor:
-    out = torch.einsum("mk,nk->mn", a.float(), b.float())
-    return out.to(out_dtype)
+    return torch_reference_gemm_with_dtype(a, b, out_dtype)
 
 
 def check_close(
