@@ -174,8 +174,10 @@ def kernel(
         cute.arch.cluster_wait()
 
         if is_leader_cta and warp_idx == 0:
-            prod_state = mma_producer_state.clone()
-            mma_empty_barrier.wait(prod_state.index, prod_state.phase)
+            mma_empty_barrier.wait(
+                mma_producer_state.index,
+                mma_producer_state.phase,
+            )
             num_k_blocks = cute.size(tCrA, mode=[2])
             for k_block_idx in cutlass.range(num_k_blocks):
                 k_block_coord = (None, None, k_block_idx, 0)
@@ -188,15 +190,20 @@ def kernel(
                 )
                 tiled_mma.set(tcgen05.Field.ACCUMULATE, True)
             mma_full_barrier.arrive_tcgen05mma(
-                prod_state.index,
+                mma_producer_state.index,
                 mma_mcast_mask,
                 tcgen05.CtaGroup.TWO,
             )
         mma_producer_state.advance()
 
-        cons_state = mma_consumer_state.clone()
-        mma_full_barrier.wait(cons_state.index, cons_state.phase)
-        mma_empty_barrier.arrive(cons_state.index, empty_dst_rank)
+        mma_full_barrier.wait(
+            mma_consumer_state.index,
+            mma_consumer_state.phase,
+        )
+        mma_empty_barrier.arrive(
+            mma_consumer_state.index,
+            empty_dst_rank,
+        )
         mma_consumer_state.advance()
 
     if is_leader_cta:
