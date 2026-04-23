@@ -1,0 +1,118 @@
+Patch already applied, skipping...
+===============================================
+Compiling bench_cutlass_2sm_gemm.cu
+===============================================
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                                                     ^
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                                                     ^
+
+===============================================
+Compiling bench_2sm_comparison.cu
+===============================================
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                                                     ^
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                                                     ^
+
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 820; warning : Advisory: '.multicast::cluster' modifier on instruction 'cp.async.bulk{.tensor}' should be used on .target 'sm_90a/sm_100a/sm_100f/sm_103a/sm_103f/sm_110a/sm_110f' instead of .target 'sm_103' as this feature is expected to have substantially reduced performance on some future architectures
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 943; warning : Advisory: '.multicast::cluster' modifier on instruction 'cp.async.bulk{.tensor}' should be used on .target 'sm_90a/sm_100a/sm_100f/sm_103a/sm_103f/sm_110a/sm_110f' instead of .target 'sm_103' as this feature is expected to have substantially reduced performance on some future architectures
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1195; error   : Feature '.multicast::cluster::all' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1327; error   : Instruction 'tcgen05.alloc' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1327; error   : Feature '.cta_group::1' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1512; error   : Instruction 'tcgen05.mma' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1512; error   : Feature '.cta_group::1' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1512; error   : Feature '.kind::f16' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1543; error   : Instruction 'tcgen05.mma' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1543; error   : Feature '.cta_group::1' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1543; error   : Feature '.kind::f16' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1574; error   : Instruction 'tcgen05.mma' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1574; error   : Feature '.cta_group::1' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1574; error   : Feature '.kind::f16' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1605; error   : Instruction 'tcgen05.mma' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1605; error   : Feature '.cta_group::1' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1605; error   : Feature '.kind::f16' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1628; error   : Instruction 'tcgen05.commit' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1628; error   : Feature '.cta_group::1' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1656; error   : Instruction 'tcgen05.commit' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1656; error   : Feature '.cta_group::1' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1671; error   : Instruction 'tcgen05.relinquish_alloc_permit' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1671; error   : Feature '.cta_group::1' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1742; error   : Instruction 'tcgen05.dealloc' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 1742; error   : Feature '.cta_group::1' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 2511; error   : Feature '.16x256b' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 2511; error   : Instruction 'tcgen05.ld' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 2542; error   : Feature '.16x256b' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 2542; error   : Instruction 'tcgen05.ld' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 3035; error   : Feature '.16x256b' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 3035; error   : Instruction 'tcgen05.ld' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 3066; error   : Feature '.16x256b' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 3066; error   : Instruction 'tcgen05.ld' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 3071; error   : Instruction 'tcgen05.wait' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 4326; error   : Feature '.cta_group::2' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 4332; error   : Feature '.cta_group::2' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 4453; error   : Feature '.cta_group::2' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 4459; error   : Feature '.cta_group::2' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 4711; error   : Feature '.multicast::cluster::all' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 4843; error   : Instruction 'tcgen05.alloc' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 4843; error   : Feature '.cta_group::2' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5032; error   : Instruction 'tcgen05.mma' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5032; error   : Feature '.cta_group::2' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5032; error   : Feature '.kind::f16' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5063; error   : Instruction 'tcgen05.mma' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5063; error   : Feature '.cta_group::2' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5063; error   : Feature '.kind::f16' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5094; error   : Instruction 'tcgen05.mma' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5094; error   : Feature '.cta_group::2' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5094; error   : Feature '.kind::f16' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5125; error   : Instruction 'tcgen05.mma' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5125; error   : Feature '.cta_group::2' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5125; error   : Feature '.kind::f16' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5148; error   : Instruction 'tcgen05.commit' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5148; error   : Feature '.cta_group::2' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5177; error   : Instruction 'tcgen05.commit' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5177; error   : Feature '.cta_group::2' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5194; error   : Instruction 'tcgen05.relinquish_alloc_permit' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5194; error   : Feature '.cta_group::2' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5304; error   : Instruction 'tcgen05.dealloc' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 5304; error   : Feature '.cta_group::2' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 6072; error   : Feature '.16x256b' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 6072; error   : Instruction 'tcgen05.ld' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 6103; error   : Feature '.16x256b' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 6103; error   : Instruction 'tcgen05.ld' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 6596; error   : Feature '.16x256b' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 6596; error   : Instruction 'tcgen05.ld' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 6627; error   : Feature '.16x256b' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 6627; error   : Instruction 'tcgen05.ld' not supported on .target 'sm_103'
+ptxas /tmp/tmpxft_00009e06_00000000-7_bench_2sm_comparison.compute_103.ptx, line 6632; error   : Instruction 'tcgen05.wait' not supported on .target 'sm_103'
+ptxas fatal   : Ptx assembly aborted due to errors

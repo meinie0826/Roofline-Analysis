@@ -1,0 +1,54 @@
+patching file include/cutlass/arch/synclog.hpp
+===============================================
+Compiling bench_cutlass_2sm_gemm.cu
+===============================================
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                                                     ^
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                                                     ^
+
+===============================================
+Compiling bench_2sm_comparison.cu
+===============================================
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                                                     ^
+
+bench_2sm_comparison.cu(183): error: CutlassRunner is not a template
+    using Runner = CutlassRunner<64, cutlass::gemm::KernelTmaWarpSpecialized1SmSm100,
+                   ^
+
+bench_2sm_comparison.cu(185): error: class "cutlass::gemm::KernelTmaWarpSpecialized1SmSm100" has no member "StageCount"
+                                 cutlass::gemm::KernelTmaWarpSpecialized1SmSm100::StageCount>;
+                                                                                  ^
+
+bench_2sm_comparison.cu(348): error: CutlassRunner is not a template
+    using Runner = CutlassRunner<64, cutlass::gemm::KernelTmaWarpSpecialized2SmSm100,
+                   ^
+
+bench_2sm_comparison.cu(350): error: class "cutlass::gemm::KernelTmaWarpSpecialized2SmSm100" has no member "StageCount"
+                                 cutlass::gemm::KernelTmaWarpSpecialized2SmSm100::StageCount>;
+                                                                                  ^
+
+4 errors detected in the compilation of "bench_2sm_comparison.cu".

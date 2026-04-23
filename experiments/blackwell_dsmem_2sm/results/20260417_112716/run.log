@@ -1,0 +1,162 @@
+Patch already applied, skipping...
+===============================================
+Compiling bench_cutlass_2sm_gemm.cu
+===============================================
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                                                     ^
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                                                     ^
+
+===============================================
+Compiling bench_2sm_comparison.cu
+===============================================
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __device__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                             ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/Roofline-Analysis/experiments/blackwell_dsmem_2sm/../../cutlass/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning #20012-D: __host__ annotation is ignored on a non-virtual function("StaticPersistentTileScheduler100") that is explicitly defaulted on its first declaration
+    __inline__ __attribute__((always_inline)) __attribute__((device)) __attribute__((host))
+                                                                                     ^
+
+bench_2sm_comparison.cu(101): error: qualified name is not allowed
+    cutlass::DeviceAllocation<ElementA> A;
+    ^
+
+bench_2sm_comparison.cu(101): error: this declaration has no storage class or type specifier
+    cutlass::DeviceAllocation<ElementA> A;
+    ^
+
+bench_2sm_comparison.cu(101): error: expected a ";"
+    cutlass::DeviceAllocation<ElementA> A;
+                             ^
+
+bench_2sm_comparison.cu(102): error: qualified name is not allowed
+    cutlass::DeviceAllocation<ElementB> B;
+    ^
+
+bench_2sm_comparison.cu(102): error: this declaration has no storage class or type specifier
+    cutlass::DeviceAllocation<ElementB> B;
+    ^
+
+bench_2sm_comparison.cu(102): error: expected a ";"
+    cutlass::DeviceAllocation<ElementB> B;
+                             ^
+
+bench_2sm_comparison.cu(103): error: qualified name is not allowed
+    cutlass::DeviceAllocation<ElementC> C;
+    ^
+
+bench_2sm_comparison.cu(103): error: this declaration has no storage class or type specifier
+    cutlass::DeviceAllocation<ElementC> C;
+    ^
+
+bench_2sm_comparison.cu(103): error: expected a ";"
+    cutlass::DeviceAllocation<ElementC> C;
+                             ^
+
+bench_2sm_comparison.cu(104): error: qualified name is not allowed
+    cutlass::DeviceAllocation<ElementD> D;
+    ^
+
+bench_2sm_comparison.cu(104): error: this declaration has no storage class or type specifier
+    cutlass::DeviceAllocation<ElementD> D;
+    ^
+
+bench_2sm_comparison.cu(104): error: expected a ";"
+    cutlass::DeviceAllocation<ElementD> D;
+                             ^
+
+bench_2sm_comparison.cu(112): error: name followed by "::" must be a class or namespace name
+    cutlass::device_memory::allocation<uint8_t> workspace_;
+             ^
+
+bench_2sm_comparison.cu(112): error: this declaration has no storage class or type specifier
+    cutlass::device_memory::allocation<uint8_t> workspace_;
+    ^
+
+bench_2sm_comparison.cu(112): error: expected a ";"
+    cutlass::device_memory::allocation<uint8_t> workspace_;
+                                              ^
+
+bench_2sm_comparison.cu(115): error: namespace "cutlass" has no member "make_cute_packed_stride"
+      strideA = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(m, k, 1));
+                         ^
+
+bench_2sm_comparison.cu(116): error: namespace "cutlass" has no member "make_cute_packed_stride"
+      strideB = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(n, k, 1));
+                         ^
+
+bench_2sm_comparison.cu(117): error: namespace "cutlass" has no member "make_cute_packed_stride"
+      strideC = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(m, n, 1));
+                         ^
+
+bench_2sm_comparison.cu(118): error: namespace "cutlass" has no member "make_cute_packed_stride"
+      strideD = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(m, n, 1));
+                         ^
+
+bench_2sm_comparison.cu(120): error: identifier "A" is undefined
+      A.reset(static_cast<std::size_t>(m) * k);
+      ^
+
+bench_2sm_comparison.cu(121): error: identifier "B" is undefined
+      B.reset(static_cast<std::size_t>(k) * n);
+      ^
+
+bench_2sm_comparison.cu(122): error: expected an identifier
+      C.reset(static_cast<std::size_t>(m) * n);
+       ^
+
+bench_2sm_comparison.cu(122): error: expected a type specifier
+      C.reset(static_cast<std::size_t>(m) * n);
+              ^
+
+bench_2sm_comparison.cu(122): error: argument list for class template "cute::C" is missing
+      C.reset(static_cast<std::size_t>(m) * n);
+      ^
+
+bench_2sm_comparison.cu(123): error: identifier "D" is undefined
+      D.reset(static_cast<std::size_t>(m) * n);
+      ^
+
+bench_2sm_comparison.cu(131): error: identifier "A" is undefined
+          {A.get(), strideA, B.get(), strideB},
+           ^
+
+bench_2sm_comparison.cu(131): error: identifier "B" is undefined
+          {A.get(), strideA, B.get(), strideB},
+                             ^
+
+bench_2sm_comparison.cu(132): error: argument list for class template "cute::C" is missing
+          {{1.0f, 0.0f}, C.get(), strideC, D.get(), strideD},
+                         ^
+
+bench_2sm_comparison.cu(132): error: identifier "D" is undefined
+          {{1.0f, 0.0f}, C.get(), strideC, D.get(), strideD},
+                                           ^
+
+bench_2sm_comparison.cu(136): error: identifier "workspace_" is undefined
+      workspace_ = cutlass::device_memory::allocation<uint8_t>(workspace_size);
+      ^
+
+bench_2sm_comparison.cu(136): error: name followed by "::" must be a class or namespace name
+      workspace_ = cutlass::device_memory::allocation<uint8_t>(workspace_size);
+                            ^
+
+31 errors detected in the compilation of "bench_2sm_comparison.cu".
