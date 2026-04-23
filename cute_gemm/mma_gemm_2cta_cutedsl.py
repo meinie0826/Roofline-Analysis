@@ -21,7 +21,7 @@ mma_tiler_mnk = (256, 256, 64)
 
 @cute.struct
 class SharedStorage:
-    mma_mbar_ptr: cutlass.Int64
+    mma_sync_mbar_ptr: cute.struct.MemRange[cutlass.Int64, 2]
     tmem_dealloc_mbar: cutlass.Int64
     tmem_holding_buf: cutlass.Int32
 
@@ -34,6 +34,7 @@ def kernel(
     mC_mn: cute.Tensor,
     a_smem_layout: cute.ComposedLayout,
     b_smem_layout: cute.ComposedLayout,
+    cta_layout_vmnk: cute.Layout,
 ):
     tidx, _, _ = cute.arch.thread_idx()
     warp_idx = cute.arch.warp_idx()
@@ -42,8 +43,8 @@ def kernel(
     cta_rank_in_cluster = cute.arch.make_warp_uniform(cute.arch.block_idx_in_cluster())
 
     mma_coord_vmnk = (
-        cta_rank_in_cluster,
-        bidx // cluster_shape_mnk[0],
+        bidx % cute.size(cta_layout_vmnk, mode=[0]),
+        bidx // cute.size(cta_layout_vmnk, mode=[0]),
         bidy,
         None,
     )
@@ -72,18 +73,22 @@ def kernel(
     tmem = utils.TmemAllocator(
         storage.tmem_holding_buf,
         barrier_for_retrieve=tmem_alloc_barrier,
-        is_two_cta=True,
+        is_two_cta=cute.size(cta_layout_vmnk, mode=[0]) > 1,
         two_cta_tmem_dealloc_mbar_ptr=storage.tmem_dealloc_mbar,
     )
     num_tmem_cols = 512
     tmem.allocate(num_tmem_cols)
 
-    if warp_idx == 0:
-        with cute.arch.elect_one():
-            cute.arch.mbarrier_init(storage.mma_mbar_ptr, 1)
-    cute.arch.mbarrier_init_fence()
-    cute.arch.cluster_arrive_relaxed()
-    cute.arch.cluster_wait()
+    mma_producer, mma_consumer = pipeline.PipelineUmmaAsync.create(
+        num_stages=1,
+        producer_group=pipeline.CooperativeGroup(pipeline.Agent.Thread),
+        consumer_group=pipeline.CooperativeGroup(
+            pipeline.Agent.Thread,
+            cute.size(cta_layout_vmnk, mode=[0]) * threads_per_cta,
+        ),
+        barrier_storage=storage.mma_sync_mbar_ptr.data_ptr(),
+        cta_layout_vmnk=cta_layout_vmnk,
+    ).make_participants()
 
     gA = cute.local_tile(mA_mk, mma_tiler_mnk, mma_coord_mnk, proj=(1, None, 1))
     gB = cute.local_tile(mB_nk, mma_tiler_mnk, mma_coord_mnk, proj=(None, 1, 1))
@@ -125,7 +130,6 @@ def kernel(
     sA_stage = sA[(None, None, None, 0)]
     sB_stage = sB[(None, None, None, 0)]
 
-    mma_phase = cutlass.Int32(0)
     tiled_mma.set(tcgen05.Field.ACCUMULATE, False)
 
     num_k_tiles = cute.size(gA, mode=[2])
@@ -143,6 +147,7 @@ def kernel(
         cute.arch.cluster_wait()
 
         if is_leader_cta and warp_idx == 0:
+            mma_empty = mma_producer.acquire_and_advance()
             num_k_blocks = cute.size(tCrA, mode=[2])
             for k_block_idx in cutlass.range(num_k_blocks):
                 k_block_coord = (None, None, k_block_idx, 0)
@@ -154,15 +159,13 @@ def kernel(
                     tCtAcc,
                 )
                 tiled_mma.set(tcgen05.Field.ACCUMULATE, True)
-            with cute.arch.elect_one():
-                tcgen05.commit(storage.mma_mbar_ptr)
+            mma_empty.commit()
 
-        if is_leader_cta:
-            cute.arch.mbarrier_wait(storage.mma_mbar_ptr, mma_phase)
+        mma_full = mma_consumer.wait_and_advance()
+        mma_full.release()
 
-        cute.arch.cluster_arrive_relaxed()
-        cute.arch.cluster_wait()
-        mma_phase = mma_phase ^ 1
+    if warp_idx == 0 and is_leader_cta:
+        mma_producer.tail()
 
     tmem.relinquish_alloc_permit()
 
@@ -198,10 +201,15 @@ def host_function(a: cute.Tensor, b: cute.Tensor, c: cute.Tensor):
         b.element_type,
         1,
     )
+    cta_layout_mnk = cute.make_layout(cluster_shape_mnk)
+    cta_layout_vmnk = cute.tiled_divide(cta_layout_mnk, (tiled_mma.thr_id,))
 
-    grid_shape = cute.ceil_div(
-        (*c.layout.shape, 1),
-        (mma_tiler_mnk[0] // cluster_shape_mnk[0], mma_tiler_mnk[1], 1),
+    grid_shape = cute.round_up(
+        cute.ceil_div(
+            (*c.layout.shape, 1),
+            (mma_tiler_mnk[0] // cluster_shape_mnk[0], mma_tiler_mnk[1], 1),
+        ),
+        cluster_shape_mnk,
     )
     kernel(
         tiled_mma,
@@ -210,6 +218,7 @@ def host_function(a: cute.Tensor, b: cute.Tensor, c: cute.Tensor):
         c,
         a_smem_layout,
         b_smem_layout,
+        cta_layout_vmnk,
     ).launch(
         grid=grid_shape,
         block=(threads_per_cta, 1, 1),
