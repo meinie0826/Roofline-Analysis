@@ -79,6 +79,18 @@ def bank_id_from_elem_offset(
     return (byte_addr // bank_width_bytes) % num_banks
 
 
+def iter_static_coords(shape):
+    if isinstance(shape, int):
+        for i in range(shape):
+            yield i
+        return
+    if not isinstance(shape, tuple):
+        raise TypeError(f"Unsupported shape leaf {type(shape)}: {shape}")
+    child_iters = [list(iter_static_coords(s)) for s in shape]
+    for prod in itertools.product(*child_iters):
+        yield tuple(prod)
+
+
 def dump_mma_fragment_access(
     name: str,
     tiled_mma: cute.TiledMma,
@@ -134,22 +146,11 @@ def dump_mma_fragment_access(
 
 
 def dump_layout_mapping(name: str, layout, limit: int = 32):
-    def iter_coords(shape):
-        if isinstance(shape, int):
-            for i in range(shape):
-                yield i
-            return
-        if not isinstance(shape, tuple):
-            raise TypeError(f"Unsupported shape leaf {type(shape)}: {shape}")
-        child_iters = [list(iter_coords(s)) for s in shape]
-        for prod in itertools.product(*child_iters):
-            yield tuple(prod)
-
     total = cute.size(layout)
     print(f"=== {name} ===")
     print(f"{name}.layout = {cute.pretty_str(layout)}")
     print(f"{'i':>3} | {'coord':>18} | {'value':>18}")
-    for i, coord in enumerate(iter_coords(layout.shape)):
+    for i, coord in enumerate(iter_static_coords(layout.shape)):
         if i >= min(limit, total):
             break
         value = layout(coord)
@@ -186,8 +187,9 @@ def dump_thread_value_partition(
     )
     print(f"{name}.thrfrg.layout = {cute.pretty_str(thrfrg)}")
     print(f"{'i':>3} | {'coord':>18} | {'value':>18}")
-    for i in range(min(limit_values, cute.size(thrfrg))):
-        coord = thrfrg.get_hier_coord(i)
+    for i, coord in enumerate(iter_static_coords(thrfrg.shape)):
+        if i >= min(limit_values, cute.size(thrfrg)):
+            break
         value = thrfrg(coord)
         print(f"{i:3d} | {str(coord):>18} | {str(value):>18}")
     print()
@@ -196,8 +198,9 @@ def dump_thread_value_partition(
     projected = cute.dice(projected, (1, (1,) * cute.rank(g_tile)))
     print(f"{name}.projected_without_thread.layout = {cute.pretty_str(projected)}")
     print(f"{'i':>3} | {'coord':>18} | {'value':>18}")
-    for i in range(min(limit_values, cute.size(projected))):
-        coord = projected.get_hier_coord(i)
+    for i, coord in enumerate(iter_static_coords(projected.shape)):
+        if i >= min(limit_values, cute.size(projected)):
+            break
         value = projected(coord)
         print(f"{i:3d} | {str(coord):>18} | {str(value):>18}")
     print()
