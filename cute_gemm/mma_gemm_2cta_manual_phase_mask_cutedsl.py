@@ -83,17 +83,12 @@ def kernel(
         pipeline.Agent.Thread,
         cute.size(cta_layout_vmnk, mode=[0]) * threads_per_cta,
     )
-    mbar_base_ptr = storage.mma_sync_mbar_ptr.data_ptr().align(min_align=8)
-    mma_full_barrier = pipeline.MbarrierArray(
-        barrier_storage=mbar_base_ptr,
-        num_stages=1,
-        agent=(pipeline.PipelineOp.TCGen05Mma, prod_group),
-    )
-    mma_empty_barrier = pipeline.MbarrierArray(
-        barrier_storage=mbar_base_ptr + 1,
-        num_stages=1,
-        agent=(pipeline.PipelineOp.AsyncThread, cons_group),
-    )
+    # Keep direct ownership of the barrier pointers instead of MbarrierArray
+    # objects. MbarrierArray reconstructs through __new_from_mlir_values__ and
+    # re-runs mbarrier_init(), which polluted the lowered PTX with repeated
+    # barrier reinitialization inside the mainloop.
+    mma_full_barrier_ptr = storage.mma_sync_mbar_ptr.data_ptr().align(min_align=8)
+    mma_empty_barrier_ptr = mma_full_barrier_ptr + 1
 
     # Match PipelineUmmaAsync.create(): full barrier uses the local CTA image mask,
     # empty barrier releases back to the leading CTA in the 2CTA pair.
@@ -104,6 +99,11 @@ def kernel(
         mode=0,
     )
     empty_dst_rank = cta_rank_in_cluster // 2 * 2
+
+    if warp_idx == 0:
+        with cute.arch.elect_one():
+            cute.arch.mbarrier_init(mma_full_barrier_ptr, prod_group.size)
+            cute.arch.mbarrier_init(mma_empty_barrier_ptr, cons_group.size)
 
     cute.arch.mbarrier_init_fence()
     cute.arch.cluster_arrive_relaxed()
@@ -174,8 +174,8 @@ def kernel(
         cute.arch.cluster_wait()
 
         if is_leader_cta and warp_idx == 0:
-            mma_empty_barrier.wait(
-                mma_producer_state.index,
+            cute.arch.mbarrier_wait(
+                mma_empty_barrier_ptr + mma_producer_state.index,
                 mma_producer_state.phase,
             )
             num_k_blocks = cute.size(tCrA, mode=[2])
@@ -189,27 +189,28 @@ def kernel(
                     tCtAcc,
                 )
                 tiled_mma.set(tcgen05.Field.ACCUMULATE, True)
-            mma_full_barrier.arrive_tcgen05mma(
-                mma_producer_state.index,
-                mma_mcast_mask,
-                tcgen05.CtaGroup.TWO,
-            )
+            with cute.arch.elect_one():
+                cute.nvgpu.tcgen05.commit(
+                    mma_full_barrier_ptr + mma_producer_state.index,
+                    mma_mcast_mask,
+                    tcgen05.CtaGroup.TWO,
+                )
         mma_producer_state.advance()
 
-        mma_full_barrier.wait(
-            mma_consumer_state.index,
+        cute.arch.mbarrier_wait(
+            mma_full_barrier_ptr + mma_consumer_state.index,
             mma_consumer_state.phase,
         )
-        mma_empty_barrier.arrive(
-            mma_consumer_state.index,
+        cute.arch.mbarrier_arrive(
+            mma_empty_barrier_ptr + mma_consumer_state.index,
             empty_dst_rank,
         )
         mma_consumer_state.advance()
 
     if is_leader_cta:
         # Match PipelineUmmaAsync.producer_tail() for a single-stage pipeline.
-        mma_empty_barrier.wait(
-            mma_producer_state.index,
+        cute.arch.mbarrier_wait(
+            mma_empty_barrier_ptr + mma_producer_state.index,
             mma_producer_state.phase,
         )
 
