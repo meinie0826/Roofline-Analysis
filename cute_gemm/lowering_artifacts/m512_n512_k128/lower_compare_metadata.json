@@ -6,8 +6,7 @@
   ],
   "variants": [
     "2cta_commit",
-    "2cta_manual",
-    "2cta_pipeline"
+    "2cta_manual"
   ],
   "out_dir": "/workspace/Roofline-Analysis/cute_gemm/lowering_artifacts/m512_n512_k128",
   "results": [
@@ -40,23 +39,7 @@
       "header_path": "/workspace/Roofline-Analysis/cute_gemm/lowering_artifacts/m512_n512_k128/2cta_manual/2cta_manual.h",
       "object_path": "/workspace/Roofline-Analysis/cute_gemm/lowering_artifacts/m512_n512_k128/2cta_manual/2cta_manual.o",
       "mlir_lines": 378,
-      "ptx_lines": 658,
-      "cubin_bytes": 29336
-    },
-    {
-      "variant": "2cta_pipeline",
-      "module_file": "/workspace/Roofline-Analysis/cute_gemm/mma_gemm_2cta_pipeline_cutedsl.py",
-      "function_name": "cutlass_host_function_Tensorgmemodiv128i64div1281_Tensorgmemodiv128i64div1281_Tensorgmemodiv512i64div5121",
-      "kernel_symbols": [
-        "kernel_cutlass_kernel_TiledMMA_ThrLayoutVMNK21111000_PermutationMNK____MMAAtom_ThrID21_ShapeMNK25625616_TVLayoutA2128161281256_TVLayoutB2128161281256_TVLayoutC21282561281256_tensorptrf16g_0"
-      ],
-      "mlir_path": "/workspace/Roofline-Analysis/cute_gemm/lowering_artifacts/m512_n512_k128/2cta_pipeline/2cta_pipeline.mlir",
-      "ptx_path": "/workspace/Roofline-Analysis/cute_gemm/lowering_artifacts/m512_n512_k128/2cta_pipeline/2cta_pipeline.ptx",
-      "cubin_path": "/workspace/Roofline-Analysis/cute_gemm/lowering_artifacts/m512_n512_k128/2cta_pipeline/2cta_pipeline.cubin",
-      "header_path": "/workspace/Roofline-Analysis/cute_gemm/lowering_artifacts/m512_n512_k128/2cta_pipeline/2cta_pipeline.h",
-      "object_path": "/workspace/Roofline-Analysis/cute_gemm/lowering_artifacts/m512_n512_k128/2cta_pipeline/2cta_pipeline.o",
-      "mlir_lines": 378,
-      "ptx_lines": 594,
+      "ptx_lines": 601,
       "cubin_bytes": 26336
     }
   ],
