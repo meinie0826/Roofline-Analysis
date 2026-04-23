@@ -149,10 +149,14 @@ def kernel(
     sA_stage = sA[(None, None, None, 0)]
     sB_stage = sB[(None, None, None, 0)]
 
-    # For num_stages == 1, these phase bits mirror make_pipeline_state():
-    # producer starts at phase=1 waiting for an empty buffer, consumer at phase=0.
-    full_phase = cutlass.Int32(0)
-    empty_phase = cutlass.Int32(1)
+    mma_producer_state = pipeline.make_pipeline_state(
+        pipeline.PipelineUserType.Producer,
+        1,
+    )
+    mma_consumer_state = pipeline.make_pipeline_state(
+        pipeline.PipelineUserType.Consumer,
+        1,
+    )
     tiled_mma.set(tcgen05.Field.ACCUMULATE, False)
 
     num_k_tiles = cute.size(gA, mode=[2])
@@ -170,7 +174,8 @@ def kernel(
         cute.arch.cluster_wait()
 
         if is_leader_cta and warp_idx == 0:
-            mma_empty_barrier.wait(0, empty_phase)
+            prod_state = mma_producer_state.clone()
+            mma_empty_barrier.wait(prod_state.index, prod_state.phase)
             num_k_blocks = cute.size(tCrA, mode=[2])
             for k_block_idx in cutlass.range(num_k_blocks):
                 k_block_coord = (None, None, k_block_idx, 0)
@@ -183,19 +188,23 @@ def kernel(
                 )
                 tiled_mma.set(tcgen05.Field.ACCUMULATE, True)
             mma_full_barrier.arrive_tcgen05mma(
-                0,
+                prod_state.index,
                 mma_mcast_mask,
                 tcgen05.CtaGroup.TWO,
             )
+        mma_producer_state.advance()
 
-        mma_full_barrier.wait(0, full_phase)
-        mma_empty_barrier.arrive(0, empty_dst_rank)
-        full_phase = full_phase ^ 1
-        empty_phase = empty_phase ^ 1
+        cons_state = mma_consumer_state.clone()
+        mma_full_barrier.wait(cons_state.index, cons_state.phase)
+        mma_empty_barrier.arrive(cons_state.index, empty_dst_rank)
+        mma_consumer_state.advance()
 
-    if is_leader_cta and warp_idx == 0:
+    if is_leader_cta:
         # Match PipelineUmmaAsync.producer_tail() for a single-stage pipeline.
-        mma_empty_barrier.wait(0, empty_phase)
+        mma_empty_barrier.wait(
+            mma_producer_state.index,
+            mma_producer_state.phase,
+        )
 
     tmem.relinquish_alloc_permit()
 
