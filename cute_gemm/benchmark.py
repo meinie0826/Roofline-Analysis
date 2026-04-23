@@ -5,8 +5,9 @@ import cutlass.cute as cute
 import cutlass.cute.testing as cute_testing
 import torch
 
-import mma_gemm_cutedsl as gemm_1cta
-import mma_gemm_2cta_cutedsl as gemm_2cta
+import mma_gemm_1cta_cutedsl as gemm_1cta
+import mma_gemm_2cta_commit_cutedsl as gemm_2cta_commit
+import mma_gemm_2cta_pipeline_cutedsl as gemm_2cta_pipeline
 from ref import (
     check_close,
     make_inputs,
@@ -31,8 +32,23 @@ VARIANTS: dict[str, dict] = {
         "torch_out_dtype": torch.float32,
         "default_atol": 1e-3,
     },
-    "2cta": {
-        "module": gemm_2cta,
+    "2cta_pipeline": {
+        "module": gemm_2cta_pipeline,
+        "small_shapes": [
+            (256, 256, 64),
+            (512, 256, 64),
+            (512, 512, 128),
+        ],
+        "large_shapes": [
+            (1024, 1024, 256),
+            (2048, 2048, 256),
+            (4096, 2048, 512),
+        ],
+        "torch_out_dtype": torch.float16,
+        "default_atol": 1e-1,
+    },
+    "2cta_commit": {
+        "module": gemm_2cta_commit,
         "small_shapes": [
             (256, 256, 64),
             (512, 256, 64),
@@ -65,6 +81,12 @@ def _iter_shapes(variant: str, shape_set: str, shapes: list[Tuple[int, int, int]
     if shape_set == "large":
         return cfg["large_shapes"]
     return cfg["small_shapes"] + cfg["large_shapes"]
+
+
+def _iter_variants(variant: str) -> list[str]:
+    if variant == "all":
+        return list(VARIANTS.keys())
+    return [variant]
 
 
 def _time_torch_kernel(fn, warmup: int, iters: int) -> float:
@@ -170,8 +192,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--variant",
-        choices=["1cta", "2cta"],
-        default="2cta",
+        choices=["all", *VARIANTS.keys()],
+        default="all",
     )
     parser.add_argument(
         "--shape-set",
@@ -192,19 +214,20 @@ def main():
     cu_driver.cuInit(0)
 
     rows = []
-    for mnk in _iter_shapes(args.variant, args.shape_set, args.shapes):
-        row = benchmark_shape(args.variant, mnk, args.atol, args.warmup, args.iters)
-        rows.append(row)
-        print(
-            "RESULT",
-            {
-                "variant": args.variant,
-                "mnk": mnk,
-                "cute_ms": round(row["cute_ms"], 6),
-                "torch_ms": round(row["torch_ms"], 6),
-                "speedup_vs_torch": round(row["speedup_vs_torch"], 6),
-            },
-        )
+    for variant in _iter_variants(args.variant):
+        for mnk in _iter_shapes(variant, args.shape_set, args.shapes):
+            row = benchmark_shape(variant, mnk, args.atol, args.warmup, args.iters)
+            rows.append(row)
+            print(
+                "RESULT",
+                {
+                    "variant": variant,
+                    "mnk": mnk,
+                    "cute_ms": round(row["cute_ms"], 6),
+                    "torch_ms": round(row["torch_ms"], 6),
+                    "speedup_vs_torch": round(row["speedup_vs_torch"], 6),
+                },
+            )
     print_results(rows)
 
 

@@ -3,8 +3,9 @@
 最小版 CuTeDSL GEMM 实验目录。
 
 当前内容：
-- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_cutedsl.py): 只用 `tcgen05.mma` 的 CuTeDSL GEMM
-- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_cutedsl.py): 基于官方 tutorial 风格的 `2cta` 版本
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_1cta_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_1cta_cutedsl.py): 只用 `tcgen05.mma` 的 `1cta` CuTeDSL GEMM
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_pipeline_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_pipeline_cutedsl.py): 用 `PipelineUmmaAsync` 做 `2cta` 同步的版本
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_commit_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_commit_cutedsl.py): 用底层 `commit` 协议做 `2cta` 同步的版本
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/ref.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/ref.py): `torch` reference
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py): 正确性验证 + 性能对比
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/run.sh](/Users/meiziyuan/Roofline-Analysis/cute_gemm/run.sh): 统一运行入口
@@ -35,7 +36,8 @@ bash cute_gemm/run.sh --mnk 128,256,64
 
 ```bash
 cd /Users/meiziyuan/Roofline-Analysis
-python3 cute_gemm/mma_gemm_2cta_cutedsl.py --mnk 256,256,64
+python3 cute_gemm/mma_gemm_2cta_pipeline_cutedsl.py --mnk 256,256,64
+python3 cute_gemm/mma_gemm_2cta_commit_cutedsl.py --mnk 256,256,64
 ```
 
 小 shape 对比：
