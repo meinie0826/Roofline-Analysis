@@ -19,13 +19,38 @@ mma_tiler_mnk = (128, 256, 64)
 def dump_swizzle_mapping(name: str, composed_layout: cute.ComposedLayout, limit: int = 16):
     outer = composed_layout.outer
     total = cute.size(outer)
+    rows = []
+    first_diff = None
+    for i in range(total):
+        coord = outer.get_hier_coord(i)
+        raw = int(outer(coord))
+        swz = int(composed_layout(coord))
+        if len(rows) < limit:
+            rows.append((i, coord, raw, swz))
+        if first_diff is None and raw != swz:
+            first_diff = i
+
     print(f"=== {name} swizzle mapping ===")
     print(f"{'i':>3} | {'coord':>18} | {'raw':>6} | {'swz':>6}")
-    for i in range(min(limit, total)):
-        coord = outer.get_hier_coord(i)
-        raw = outer(coord)
-        swz = composed_layout(coord)
-        print(f"{i:3d} | {str(coord):>18} | {int(raw):6d} | {int(swz):6d}")
+    for i, coord, raw, swz in rows:
+        print(f"{i:3d} | {str(coord):>18} | {raw:6d} | {swz:6d}")
+    if first_diff is None:
+        print("first raw!=swz index: none in full layout")
+    else:
+        print(f"first raw!=swz index: {first_diff}")
+        print(f"=== {name} first swizzle differences ===")
+        print(f"{'i':>3} | {'coord':>18} | {'raw':>6} | {'swz':>6}")
+        shown = 0
+        for i in range(first_diff, total):
+            coord = outer.get_hier_coord(i)
+            raw = int(outer(coord))
+            swz = int(composed_layout(coord))
+            if raw == swz:
+                continue
+            print(f"{i:3d} | {str(coord):>18} | {raw:6d} | {swz:6d}")
+            shown += 1
+            if shown >= limit:
+                break
     print()
 
 
@@ -126,40 +151,16 @@ def kernel(
         cute.printf("sA.layout       = {}", sA.layout)
         cute.printf("sA_stage.layout = {}", sA_stage.layout)
         cute.printf("sA.iter.swz     = {}", sA.iterator)
-        cute.printf("sA.iter.type    = {}", sA.iterator.type)
-        cute.printf("sA.iter.is_swz  = {}", sA.iterator.type.is_swizzled)
-        if sA.iterator.type.is_swizzled:
-            cute.printf("sA.iter.swz_ty  = {}", sA.iterator.type.swizzle_type)
         cute.printf(
             "sA.iter.raw     = {}",
             cute.recast_ptr(sA.iterator, swizzle_=None, dtype=io_dtype),
         )
-        cute.printf(
-            "sA.raw.type     = {}",
-            cute.recast_ptr(sA.iterator, swizzle_=None, dtype=io_dtype).type,
-        )
-        cute.printf(
-            "sA.raw.is_swz   = {}",
-            cute.recast_ptr(sA.iterator, swizzle_=None, dtype=io_dtype).type.is_swizzled,
-        )
         cute.printf("sB.layout       = {}", sB.layout)
         cute.printf("sB_stage.layout = {}", sB_stage.layout)
         cute.printf("sB.iter.swz     = {}", sB.iterator)
-        cute.printf("sB.iter.type    = {}", sB.iterator.type)
-        cute.printf("sB.iter.is_swz  = {}", sB.iterator.type.is_swizzled)
-        if sB.iterator.type.is_swizzled:
-            cute.printf("sB.iter.swz_ty  = {}", sB.iterator.type.swizzle_type)
         cute.printf(
             "sB.iter.raw     = {}",
             cute.recast_ptr(sB.iterator, swizzle_=None, dtype=io_dtype),
-        )
-        cute.printf(
-            "sB.raw.type     = {}",
-            cute.recast_ptr(sB.iterator, swizzle_=None, dtype=io_dtype).type,
-        )
-        cute.printf(
-            "sB.raw.is_swz   = {}",
-            cute.recast_ptr(sB.iterator, swizzle_=None, dtype=io_dtype).type.is_swizzled,
         )
         cute.printf("=== swizzle debug end ===")
 
