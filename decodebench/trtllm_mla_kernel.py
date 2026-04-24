@@ -108,7 +108,7 @@ class FlashInferTRTLLMMLAKernel:
             1,
             shape.num_q_heads,
             shape.kv_lora_rank,
-            dtype=self.dtype,
+            dtype=torch.bfloat16,
             device=self.device,
         )
 
