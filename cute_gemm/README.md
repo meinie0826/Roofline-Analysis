@@ -12,6 +12,9 @@
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_cutedsl.py): `2cta + TMA load A/B + AB pipeline` 版本
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_6stage_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_6stage_cutedsl.py): `2cta + TMA load A/B + 6-stage AB pipeline` 版本
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_cutedsl.py): `2cta + TMA load A/B + AB pipeline + TMA store C` 版本
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_tile256x256x128_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_tile256x256x128_cutedsl.py): `2cta + TMA store + tile (256,256,128)` 版本
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_ws3epi_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_ws3epi_cutedsl.py): `2cta + TMA store + 3 epilogue warps` 版本
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_ws5epi_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_ws5epi_cutedsl.py): `2cta + TMA store + 5 epilogue warps` 版本
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/ref.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/ref.py): `torch` reference
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py): 正确性验证 + 性能对比，输出 Torch 分配版和预分配 cuBLAS/cuBLASLt baseline
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/configs.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/configs.py): autotune candidate 配置
@@ -170,6 +173,8 @@ python3 cute_gemm/autotune.py --group ab-stage --shape-set all
 python3 cute_gemm/autotune.py --group tma-store --shape-set all
 python3 cute_gemm/autotune.py --group default --shape-set all --warmup 10 --iters 50
 python3 cute_gemm/autotune.py --group default --shapes 4096,2048,512 --cublaslt-bin cute_gemm/cublaslt_benchmark
+python3 cute_gemm/benchmark.py --variant autotuned --autotune-group tile-shape --shapes 4096,2048,512 --cublaslt-bin cute_gemm/cublaslt_benchmark
+python3 cute_gemm/benchmark.py --variant autotuned --autotune-group warp-spec --shapes 4096,2048,512 --cublaslt-bin cute_gemm/cublaslt_benchmark
 ```
 
 autotune 结果会写到 `cute_gemm/autotune_results/latest.json`，同时保留带时间戳的 JSON。

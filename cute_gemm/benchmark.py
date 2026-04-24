@@ -18,6 +18,9 @@ import mma_gemm_2cta_tma_6stage_cutedsl as gemm_2cta_tma_6stage
 import mma_gemm_2cta_tma_nopipeline_cutedsl as gemm_2cta_tma_nopipeline
 import mma_gemm_2cta_tma_pipeline_cutedsl as gemm_2cta_tma_pipeline
 import mma_gemm_2cta_tma_pipeline_tma_store_cutedsl as gemm_2cta_tma_pipeline_tma_store
+import mma_gemm_2cta_tma_pipeline_tma_store_tile256x256x128_cutedsl as gemm_2cta_tma_pipeline_tma_store_tile256x256x128
+import mma_gemm_2cta_tma_pipeline_tma_store_ws3epi_cutedsl as gemm_2cta_tma_pipeline_tma_store_ws3epi
+import mma_gemm_2cta_tma_pipeline_tma_store_ws5epi_cutedsl as gemm_2cta_tma_pipeline_tma_store_ws5epi
 from configs import CANDIDATE_GROUPS
 from ref import (
     check_close,
@@ -106,6 +109,49 @@ VARIANTS: dict[str, dict] = {
     },
     "2cta_tma_pipeline_tma_store": {
         "module": gemm_2cta_tma_pipeline_tma_store,
+        "small_shapes": [
+            (256, 256, 64),
+            (512, 256, 64),
+            (512, 512, 128),
+        ],
+        "large_shapes": [
+            (1024, 1024, 256),
+            (2048, 2048, 256),
+            (4096, 2048, 512),
+        ],
+        "torch_out_dtype": torch.float16,
+        "default_atol": 1e-1,
+    },
+    "2cta_tma_pipeline_tma_store_tile256x256x128": {
+        "module": gemm_2cta_tma_pipeline_tma_store_tile256x256x128,
+        "small_shapes": [
+            (512, 512, 128),
+        ],
+        "large_shapes": [
+            (1024, 1024, 256),
+            (2048, 2048, 256),
+            (4096, 2048, 512),
+        ],
+        "torch_out_dtype": torch.float16,
+        "default_atol": 1e-1,
+    },
+    "2cta_tma_pipeline_tma_store_ws3epi": {
+        "module": gemm_2cta_tma_pipeline_tma_store_ws3epi,
+        "small_shapes": [
+            (256, 256, 64),
+            (512, 256, 64),
+            (512, 512, 128),
+        ],
+        "large_shapes": [
+            (1024, 1024, 256),
+            (2048, 2048, 256),
+            (4096, 2048, 512),
+        ],
+        "torch_out_dtype": torch.float16,
+        "default_atol": 1e-1,
+    },
+    "2cta_tma_pipeline_tma_store_ws5epi": {
+        "module": gemm_2cta_tma_pipeline_tma_store_ws5epi,
         "small_shapes": [
             (256, 256, 64),
             (512, 256, 64),
@@ -386,16 +432,28 @@ def benchmark_shape_autotuned(
 ) -> dict:
     rows = []
     for candidate in CANDIDATE_GROUPS[group]:
-        row = benchmark_shape(
-            candidate.variant,
-            mnk,
-            atol,
-            warmup,
-            iters,
-            cublaslt_bin,
-            cublaslt_algos,
-            cublaslt_workspace_mb,
-        )
+        try:
+            row = benchmark_shape(
+                candidate.variant,
+                mnk,
+                atol,
+                warmup,
+                iters,
+                cublaslt_bin,
+                cublaslt_algos,
+                cublaslt_workspace_mb,
+            )
+        except ValueError as error:
+            print(
+                "AUTOTUNE_SKIP",
+                {
+                    "mnk": mnk,
+                    "name": candidate.name,
+                    "variant": candidate.variant,
+                    "reason": str(error),
+                },
+            )
+            continue
         row["candidate"] = candidate.to_dict()
         rows.append(row)
         print(
@@ -408,6 +466,9 @@ def benchmark_shape_autotuned(
                 "cute_tflops": None if row["cute_tflops"] is None else round(row["cute_tflops"], 3),
             },
         )
+
+    if not rows:
+        raise ValueError(f"no compatible autotune candidates for shape {mnk}")
 
     best = min(rows, key=lambda row: row["cute_ms"])
     best = dict(best)

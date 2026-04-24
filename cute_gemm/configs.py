@@ -32,15 +32,61 @@ TMA_STORE_SWEEP = (
 )
 
 TILE_SHAPE_SWEEP = (
-    GemmCandidate("tile256x256x64", "2cta_tma_pipeline", 4),
+    GemmCandidate("tile256x256x64", "2cta_tma_pipeline_tma_store", 4, True),
+    GemmCandidate(
+        "tile256x256x128",
+        "2cta_tma_pipeline_tma_store_tile256x256x128",
+        4,
+        True,
+        tile_shape=(256, 256, 128),
+    ),
 )
 
 WARP_SPEC_SWEEP = (
-    GemmCandidate("ws_1tma_1mma_4epi", "2cta_tma_pipeline", 4),
+    GemmCandidate("ws_1tma_1mma_4epi", "2cta_tma_pipeline_tma_store", 4, True),
+    GemmCandidate(
+        "ws_1tma_1mma_3epi",
+        "2cta_tma_pipeline_tma_store_ws3epi",
+        4,
+        True,
+        epilogue_warps=3,
+        threads_per_cta=160,
+    ),
+    GemmCandidate(
+        "ws_1tma_1mma_5epi",
+        "2cta_tma_pipeline_tma_store_ws5epi",
+        4,
+        True,
+        epilogue_warps=5,
+        threads_per_cta=224,
+    ),
 )
 
 DEFAULT_AUTOTUNE_CANDIDATES = AB_STAGE_SWEEP + (
     GemmCandidate("ab4_tma_store", "2cta_tma_pipeline_tma_store", 4, True),
+    GemmCandidate(
+        "tile256x256x128",
+        "2cta_tma_pipeline_tma_store_tile256x256x128",
+        4,
+        True,
+        tile_shape=(256, 256, 128),
+    ),
+    GemmCandidate(
+        "ws_1tma_1mma_3epi",
+        "2cta_tma_pipeline_tma_store_ws3epi",
+        4,
+        True,
+        epilogue_warps=3,
+        threads_per_cta=160,
+    ),
+    GemmCandidate(
+        "ws_1tma_1mma_5epi",
+        "2cta_tma_pipeline_tma_store_ws5epi",
+        4,
+        True,
+        epilogue_warps=5,
+        threads_per_cta=224,
+    ),
 )
 
 CANDIDATE_GROUPS = {
