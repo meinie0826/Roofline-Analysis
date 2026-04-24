@@ -8,12 +8,19 @@ from collections import defaultdict
 from pathlib import Path
 
 
-def load_rows(results_dir: Path) -> list[dict]:
+def load_rows(results_dir: Path, run_id: str | None = None, latest_run_only: bool = False) -> list[dict]:
     rows = []
     for path in sorted(results_dir.glob("*.json")):
         row = json.loads(path.read_text(encoding="utf-8"))
         row["file"] = path.name
         rows.append(row)
+    if run_id is not None:
+        return [row for row in rows if row.get("run_id") == run_id]
+    if latest_run_only:
+        run_ids = sorted({row.get("run_id") for row in rows if row.get("run_id")})
+        if run_ids:
+            latest_run_id = run_ids[-1]
+            return [row for row in rows if row.get("run_id") == latest_run_id]
     return rows
 
 
@@ -116,10 +123,12 @@ def print_summary(rows: list[dict], reference_backend: str | None = None) -> Non
 def main() -> int:
     parser = argparse.ArgumentParser(description="Print compact DecodeBench result summary.")
     parser.add_argument("--results-dir", type=Path, default=Path("decodebench/results"))
+    parser.add_argument("--run-id")
+    parser.add_argument("--latest-run-only", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--reference-backend", default="flashinfer_paged_decode")
     args = parser.parse_args()
 
-    rows = load_rows(args.results_dir)
+    rows = load_rows(args.results_dir, run_id=args.run_id, latest_run_only=args.latest_run_only)
     if not rows:
         print(f"No JSON results found in {args.results_dir}")
         return 1

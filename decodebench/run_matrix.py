@@ -159,6 +159,7 @@ def write_failure(path: Path, backend: dict, workload: dict, returncode: int, co
             short_reason = line
             break
     result = {
+        "run_id": os.environ.get("DECODEBENCH_RUN_ID"),
         "status": "failed",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "python_executable": PYTHON_BIN,
@@ -214,6 +215,7 @@ def main() -> int:
     args.results_dir.mkdir(parents=True, exist_ok=True)
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     failures = 0
+    executed_paths: list[Path] = []
 
     for backend in config["backends"]:
         if not backend.get("enabled", True):
@@ -221,6 +223,8 @@ def main() -> int:
         for workload in config["workloads"]:
             if not is_supported(backend, workload):
                 continue
+            path = output_path(backend, workload, args.results_dir)
+            executed_paths.append(path)
             argv = build_cmd(backend, workload, config.get("defaults", {}), args.results_dir)
             if args.dry_run:
                 print(shell(argv))
@@ -233,7 +237,7 @@ def main() -> int:
                     print(completed.stdout, end="")
                 if completed.returncode != 0:
                     failures += 1
-                    write_failure(output_path(backend, workload, args.results_dir), backend, workload, completed.returncode, argv, completed.stdout)
+                    write_failure(path, backend, workload, completed.returncode, argv, completed.stdout)
                     print(f"✗ {workload['id']:<28} {short_backend(backend['name'])}  | {short_failure_reason(completed.stdout)}")
                 else:
                     print(f"✓ {workload['id']:<28} {short_backend(backend['name'])}")
@@ -241,8 +245,13 @@ def main() -> int:
     if args.execute and args.report:
         print()
         rows = []
-        for path in sorted(args.results_dir.glob("*.json")):
-            rows.append(json.loads(path.read_text(encoding="utf-8")))
+        for path in executed_paths:
+            if not path.exists():
+                continue
+            row = json.loads(path.read_text(encoding="utf-8"))
+            if row.get("run_id") not in (None, run_id):
+                continue
+            rows.append(row)
         if rows:
             print_summary(rows)
 
