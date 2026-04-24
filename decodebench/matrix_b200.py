@@ -19,7 +19,7 @@ BACKENDS = [
         "enabled": True,
         "kernel_path": "FlashInfer BatchDecodeWithPagedKVCacheWrapper / XQA",
         "status": "implemented",
-        "supported_attention": {"MHA", "GQA", "MQA"},
+        "supported_attention": {"MHA", "GQA"},
         "supported_kv_dtypes": {"bf16", "fp16", "fp8"},
         "supported_page_sizes": {16, 32, 64, 128},
     },
@@ -31,7 +31,7 @@ BACKENDS = [
         "status": "implemented",
         "supported_attention": {"MHA", "GQA", "MQA"},
         "supported_kv_dtypes": {"bf16", "fp16", "fp8"},
-        "supported_page_sizes": {64, 128},
+        "supported_page_sizes": {64},
     },
     {
         "name": "flashattn_kvcache",
