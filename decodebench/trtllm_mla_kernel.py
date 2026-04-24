@@ -80,7 +80,7 @@ class FlashInferTRTLLMMLAKernel:
             shape.batch_size,
             1,
             shape.num_q_heads,
-            shape.head_dim_qk,
+            shape.kv_lora_rank + shape.qk_rope_head_dim,
             dtype=self.dtype,
             device=self.device,
         )

@@ -86,9 +86,9 @@ BACKENDS = [
     {
         "name": "vllm_flash",
         "layer": "framework_benchmark",
-        "enabled": True,
+        "enabled": False,
         "kernel_path": "vLLM attention_benchmarks backend=flash",
-        "status": "enabled_framework_level_not_kernel_only",
+        "status": "disabled_by_default_requires_model_access_framework_level",
         "supported_attention": {"MHA", "GQA", "MQA"},
         "supported_kv_dtypes": {"bf16", "fp16"},
         "supported_page_sizes": {16, 32, 64, 128},
@@ -96,9 +96,9 @@ BACKENDS = [
     {
         "name": "vllm_flashinfer",
         "layer": "framework_benchmark",
-        "enabled": True,
+        "enabled": False,
         "kernel_path": "vLLM attention_benchmarks backend=flashinfer",
-        "status": "enabled_framework_level_not_kernel_only",
+        "status": "disabled_by_default_requires_model_access_framework_level",
         "supported_attention": {"MHA", "GQA", "MQA"},
         "supported_kv_dtypes": {"bf16", "fp16", "fp8"},
         "supported_page_sizes": {16, 32, 64, 128},
