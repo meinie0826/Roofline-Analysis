@@ -17,6 +17,9 @@ build/
 # Local autotune output
 cute_gemm/autotune_results/
 
+# Decode benchmark outputs
+decodebench/results/
+
 # Python cache
 __pycache__/
 *.pyc
