@@ -91,6 +91,43 @@ def flashmla_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
     ]
 
 
+def flashattn_mla_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
+    return [
+        PYTHON_BIN,
+        "decodebench/flashattn_mla_benchmark.py",
+        "--batch-size", str(workload["batch_size"]),
+        "--context-len", str(workload["context_len"]),
+        "--num-q-heads", str(workload["num_q_heads"]),
+        "--num-kv-heads", str(workload["num_kv_heads"]),
+        "--head-dim", str(workload["head_dim"]),
+        "--head-dim-v", str(workload["head_dim_v"]),
+        "--kv-dtype", workload["kv_dtype"],
+        "--page-size", str(workload["page_size"]),
+        "--warmup-steps", str(defaults.get("warmup_steps", 10)),
+        "--repeat", str(defaults.get("repeat", 50)),
+        "--output", str(output),
+    ]
+
+
+def trtllm_mla_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
+    return [
+        PYTHON_BIN,
+        "decodebench/trtllm_mla_benchmark.py",
+        "--batch-size", str(workload["batch_size"]),
+        "--context-len", str(workload["context_len"]),
+        "--num-q-heads", str(workload["num_q_heads"]),
+        "--num-kv-heads", str(workload.get("num_kv_heads", 1)),
+        "--qk-nope-head-dim", str(workload.get("qk_nope_head_dim", 128)),
+        "--kv-lora-rank", str(workload.get("kv_lora_rank", workload.get("head_dim_v", 512))),
+        "--qk-rope-head-dim", str(workload.get("qk_rope_head_dim", workload.get("head_dim", 64))),
+        "--kv-dtype", workload["kv_dtype"],
+        "--page-size", str(workload["page_size"]),
+        "--warmup-steps", str(defaults.get("warmup_steps", 10)),
+        "--repeat", str(defaults.get("repeat", 50)),
+        "--output", str(output),
+    ]
+
+
 def vllm_attention_cmd(workload: dict, defaults: dict, output: Path, backend: str) -> list[str]:
     return [
         PYTHON_BIN,
@@ -136,6 +173,10 @@ def build_cmd(backend: dict, workload: dict, defaults: dict, results_dir: Path) 
         return flashattn_kvcache_cmd(workload, defaults, output)
     if backend["name"] == "flashmla_decode":
         return flashmla_cmd(workload, defaults, output)
+    if backend["name"] == "flashattn_mla_decode":
+        return flashattn_mla_cmd(workload, defaults, output)
+    if backend["name"] == "flashinfer_trtllm_mla_decode":
+        return trtllm_mla_cmd(workload, defaults, output)
     if backend["name"] == "vllm_paged_decode":
         return vllm_paged_cmd(workload, defaults, output)
     if backend["name"] == "vllm_flash":
@@ -171,6 +212,8 @@ def short_backend(name: str) -> str:
         "flashinfer_trtllm_decode": "trtllm",
         "flashattn_kvcache": "flash-attn",
         "flashmla_decode": "flashmla",
+        "flashattn_mla_decode": "flash-attn-mla",
+        "flashinfer_trtllm_mla_decode": "trtllm-mla",
         "vllm_paged_decode": "vllm-paged",
         "vllm_flash": "vllm-flash",
         "vllm_flashinfer": "vllm-flashinfer",

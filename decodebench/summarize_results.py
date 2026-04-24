@@ -29,7 +29,9 @@ def short_backend(name: str | None) -> str:
         "flashinfer_paged_decode": "flashinfer",
         "flashinfer_trtllm_decode": "trtllm",
         "flashattn_kvcache": "flash-attn",
+        "flashattn_mla_decode": "flash-attn-mla",
         "flashmla_decode": "flashmla",
+        "flashinfer_trtllm_mla_decode": "trtllm-mla",
         "vllm_paged_decode": "vllm-paged",
         "vllm_flash": "vllm-flash",
         "vllm_flashinfer": "vllm-flashinfer",
@@ -97,9 +99,11 @@ def backend_order(name: str) -> tuple[int, str]:
         "flash-attn-fa3": 3,
         "flash-attn-fa2": 4,
         "flashmla": 5,
-        "vllm-paged": 6,
-        "vllm-flash": 7,
-        "vllm-flashinfer": 8,
+        "trtllm-mla": 6,
+        "flash-attn-mla": 7,
+        "vllm-paged": 8,
+        "vllm-flash": 9,
+        "vllm-flashinfer": 10,
     }
     return order.get(name, 100), name
 

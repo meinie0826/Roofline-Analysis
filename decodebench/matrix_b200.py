@@ -64,6 +64,26 @@ BACKENDS = [
         "supported_page_sizes": {64},
     },
     {
+        "name": "flashattn_mla_decode",
+        "layer": "kernel",
+        "enabled": False,
+        "kernel_path": "hopper.flash_attn_interface.flash_attn_with_kvcache(qv, page_table)",
+        "status": "disabled_on_b200_hopper_mla_path_sm90_only",
+        "supported_attention": {"MLA"},
+        "supported_kv_dtypes": {"bf16", "fp16"},
+        "supported_page_sizes": {64},
+    },
+    {
+        "name": "flashinfer_trtllm_mla_decode",
+        "layer": "kernel",
+        "enabled": True,
+        "kernel_path": "flashinfer.mla.trtllm_batch_decode_with_kv_cache_mla",
+        "status": "implemented_if_flashinfer_trtllm_mla_is_available",
+        "supported_attention": {"MLA"},
+        "supported_kv_dtypes": {"bf16", "fp16"},
+        "supported_page_sizes": {64, 128},
+    },
+    {
         "name": "vllm_flash",
         "layer": "framework_benchmark",
         "enabled": True,
@@ -100,10 +120,17 @@ def workload(
     num_kv_heads: int | None = None,
     head_dim: int = 128,
     head_dim_v: int | None = None,
+    qk_nope_head_dim: int = 128,
+    kv_lora_rank: int | None = None,
+    qk_rope_head_dim: int | None = None,
 ) -> dict:
     if attention == "MLA":
         if num_kv_heads is None:
             num_kv_heads = 1
+        if kv_lora_rank is None:
+            kv_lora_rank = 512 if head_dim_v is None else head_dim_v
+        if qk_rope_head_dim is None:
+            qk_rope_head_dim = head_dim
         item = {
             "id": f"mla_{kv_dtype}_b{batch_size}_ctx{ctx_label(context_len)}_p{page_size}",
             "attention": attention,
@@ -111,6 +138,9 @@ def workload(
             "num_kv_heads": num_kv_heads,
             "head_dim": head_dim,
             "head_dim_v": 512 if head_dim_v is None else head_dim_v,
+            "qk_nope_head_dim": qk_nope_head_dim,
+            "kv_lora_rank": kv_lora_rank,
+            "qk_rope_head_dim": qk_rope_head_dim,
             "kv_dtype": kv_dtype,
             "page_size": page_size,
             "batch_size": batch_size,
