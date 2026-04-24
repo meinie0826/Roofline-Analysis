@@ -1,0 +1,18 @@
+{
+  "run_id": null,
+  "status": "failed",
+  "timestamp": "2026-04-24T13:27:23.732713+00:00",
+  "python_executable": "/workspace/Roofline-Analysis/.venv/bin/python",
+  "backend": "vllm_paged_decode",
+  "kernel_path": "vllm._custom_ops.paged_attention_v2",
+  "workload_id": "mha_bf16_b16_ctx4k_p64",
+  "attention": "MHA",
+  "kv_dtype": "bf16",
+  "page_size": 64,
+  "batch_size": 16,
+  "context_len": 4096,
+  "returncode": 1,
+  "command": "/workspace/Roofline-Analysis/.venv/bin/python decodebench/vllm_paged_benchmark.py --batch-size 16 --context-len 4096 --num-q-heads 32 --num-kv-heads 32 --head-dim 128 --kv-dtype bf16 --page-size 64 --warmup-steps 20 --repeat 100 --output /workspace/Roofline-Analysis/decodebench/results/vllm_paged_decode__mha_bf16_b16_ctx4k_p64.json",
+  "output": "Traceback (most recent call last):\n  File \"/workspace/Roofline-Analysis/decodebench/vllm_paged_benchmark.py\", line 109, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/vllm_paged_benchmark.py\", line 68, in main\n    kernel.run()\n  File \"/workspace/Roofline-Analysis/decodebench/vllm_paged_kernel.py\", line 204, in run\n    self.ops.paged_attention_v2(\n  File \"/workspace/Roofline-Analysis/3rd/vllm/vllm/_custom_ops.py\", line 176, in paged_attention_v2\n    torch.ops._C.paged_attention_v2(\n  File \"/workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/torch/_ops.py\", line 1269, in __call__\n    return self._op(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: Unsupported block size: 64\n",
+  "short_reason": "RuntimeError: Unsupported block size: 64"
+}

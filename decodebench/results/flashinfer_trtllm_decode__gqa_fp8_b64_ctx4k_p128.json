@@ -1,8 +1,11 @@
 {
+  "run_id": null,
   "status": "failed",
-  "timestamp": "2026-04-24T10:58:51.489692+00:00",
+  "timestamp": "2026-04-24T15:53:00.092684+00:00",
+  "python_executable": "/workspace/Roofline-Analysis/.venv/bin/python",
   "backend": "flashinfer_trtllm_decode",
   "kernel_path": "flashinfer.decode.trtllm_batch_decode_with_kv_cache",
+  "layer": "kernel",
   "workload_id": "gqa_fp8_b64_ctx4k_p128",
   "attention": "GQA",
   "kv_dtype": "fp8",
@@ -10,6 +13,7 @@
   "batch_size": 64,
   "context_len": 4096,
   "returncode": 1,
-  "command": "python3 decodebench/trtllm_decode_benchmark.py --batch-size 64 --context-len 4096 --num-q-heads 32 --num-kv-heads 8 --head-dim 128 --kv-dtype fp8 --page-size 128 --warmup-steps 20 --repeat 100 --output /Users/meiziyuan/Roofline-Analysis/decodebench/results/flashinfer_trtllm_decode__gqa_fp8_b64_ctx4k_p128.json",
-  "output": "/Users/meiziyuan/miniconda3/lib/python3.13/site-packages/torch/_subclasses/functional_tensor.py:307: UserWarning: Failed to initialize NumPy: No module named 'numpy' (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/torch/csrc/utils/tensor_numpy.cpp:84.)\n  cpu = _conversion_method_template(device=torch.device(\"cpu\"))\nTraceback (most recent call last):\n  File \"/Users/meiziyuan/Roofline-Analysis/decodebench/trtllm_decode_kernel.py\", line 46, in __init__\n    import flashinfer\nModuleNotFoundError: No module named 'flashinfer'\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/Users/meiziyuan/Roofline-Analysis/decodebench/trtllm_decode_benchmark.py\", line 109, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/Users/meiziyuan/Roofline-Analysis/decodebench/trtllm_decode_benchmark.py\", line 64, in main\n    kernel = FlashInferTRTLLMDecodeKernel(shape)\n  File \"/Users/meiziyuan/Roofline-Analysis/decodebench/trtllm_decode_kernel.py\", line 48, in __init__\n    raise ImportError(\n    ...<2 lines>...\n    ) from error\nImportError: FlashInfer is not installed. Install it with: python3 -m pip install flashinfer-python flashinfer-cubin\n"
+  "command": "/workspace/Roofline-Analysis/.venv/bin/python decodebench/trtllm_decode_benchmark.py --batch-size 64 --context-len 4096 --num-q-heads 32 --num-kv-heads 8 --head-dim 128 --kv-dtype fp8 --page-size 128 --warmup-steps 20 --repeat 100 --output /workspace/Roofline-Analysis/decodebench/results/flashinfer_trtllm_decode__gqa_fp8_b64_ctx4k_p128.json",
+  "output": "Traceback (most recent call last):\n  File \"/workspace/Roofline-Analysis/decodebench/trtllm_decode_benchmark.py\", line 109, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/trtllm_decode_benchmark.py\", line 68, in main\n    kernel.run()\n  File \"/workspace/Roofline-Analysis/decodebench/trtllm_decode_kernel.py\", line 103, in run\n    return self.flashinfer.decode.trtllm_batch_decode_with_kv_cache(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/flashinfer/decode.py\", line 2581, in trtllm_batch_decode_with_kv_cache\n    run_func(\n  File \"python/tvm_ffi/cython/function.pxi\", line 929, in tvm_ffi.core.Function.__call__\nRuntimeError: Error in function 'trtllm_paged_attention_launcher' at /workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/flashinfer/data/csrc/trtllm_fmha_kernel_launcher.cu:211: Missing TRTLLM-GEN kernel (decode): qkvLayout=2, maskType=1, kernelType=2, tileScheduler=0, multiCtasKvMode=1, headDimPerCtaV=128, headDimQk=128, headDimV=128, tileSizeQ=8, tileSizeKv=128, numTokensPerPage=128, reuseSmemKForV=0, uses2CtaMma=0, sparseMla=0, skipsSoftmax=0\n",
+  "short_reason": "RuntimeError: Error in function 'trtllm_paged_attention_launcher' at /workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/flashinfer/data/csrc/trtllm_fmha_kernel_launcher.cu:211: Missing TRTLLM-GEN kernel (decode): qkvLayout=2, maskType=1, kernelType=2, tileScheduler=0, multiCtasKvMode=1, headDimPerCtaV=128, headDimQk=128, headDimV=128, tileSizeQ=8, tileSizeKv=128, numTokensPerPage=128, reuseSmemKForV=0, uses2CtaMma=0, sparseMla=0, skipsSoftmax=0"
 }

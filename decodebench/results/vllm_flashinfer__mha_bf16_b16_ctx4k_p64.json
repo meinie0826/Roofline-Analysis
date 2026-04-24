@@ -1,6 +1,6 @@
 {
-  "run_id": "20260424T130343Z",
-  "timestamp": "2026-04-24T13:04:40.054309+00:00",
+  "run_id": "20260424T155135Z",
+  "timestamp": "2026-04-24T15:58:47.515168+00:00",
   "gpu": "cuda:0",
   "backend": "vllm_flashinfer",
   "kernel_path": "vLLM attention_benchmarks backend=flashinfer",
@@ -21,6 +21,6 @@
   "peak_allocated_gb": 0.0,
   "selected_backend": "flashinfer",
   "fallback": true,
-  "fallback_reason": "You are trying to access a gated repo.\nMake sure to have access to it at https://huggingface.co/meta-llama/Meta-Llama-3-8B.\n401 Client Error. (Request ID: Root=1-69eb6a67-5c8d8128252187b610f72ae5;9abf4993-3877-4761-b598-9e5811759953)\n\nCannot access gated repo for url https://huggingface.co/meta-llama/Meta-Llama-3-8B/resolve/main/config.json.\nAccess to model meta-llama/Meta-Llama-3-8B is restricted. You must have access to it and be authenticated to access it. Please log in.",
+  "fallback_reason": "You are trying to access a gated repo.\nMake sure to have access to it at https://huggingface.co/meta-llama/Meta-Llama-3-8B.\n401 Client Error. (Request ID: Root=1-69eb9336-41a31b9e5005766059186d91;cca5c00c-5ddf-4534-b112-7624ce4b6f15)\n\nCannot access gated repo for url https://huggingface.co/meta-llama/Meta-Llama-3-8B/resolve/main/config.json.\nAccess to model meta-llama/Meta-Llama-3-8B is restricted. You must have access to it and be authenticated to access it. Please log in.",
   "notes": "Metric is vLLM attention benchmark mean_time, not CUDA-event p50. Useful for cross-backend comparison within vLLM benchmark suite."
 }

@@ -1,0 +1,19 @@
+{
+  "run_id": null,
+  "status": "failed",
+  "timestamp": "2026-04-24T15:56:26.005712+00:00",
+  "python_executable": "/workspace/Roofline-Analysis/.venv/bin/python",
+  "backend": "flashmla_decode",
+  "kernel_path": "flash_mla.flash_mla_with_kvcache",
+  "layer": "kernel",
+  "workload_id": "mla_bf16_b32_ctx32k_p64",
+  "attention": "MLA",
+  "kv_dtype": "bf16",
+  "page_size": 64,
+  "batch_size": 32,
+  "context_len": 32768,
+  "returncode": 1,
+  "command": "/workspace/Roofline-Analysis/.venv/bin/python decodebench/flashmla_benchmark.py --batch-size 32 --context-len 32768 --num-q-heads 128 --num-kv-heads 1 --head-dim 64 --head-dim-v 512 --kv-dtype bf16 --page-size 64 --warmup-steps 20 --repeat 100 --output /workspace/Roofline-Analysis/decodebench/results/flashmla_decode__mla_bf16_b32_ctx32k_p64.json",
+  "output": "Traceback (most recent call last):\n  File \"/workspace/Roofline-Analysis/decodebench/flashmla_benchmark.py\", line 99, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/flashmla_benchmark.py\", line 63, in main\n    avg_us, p50_us, p95_us = time_kernel(kernel.torch, kernel.run, args.warmup_steps, args.repeat)\n                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/flashmla_benchmark.py\", line 31, in time_kernel\n    fn()\n  File \"/workspace/Roofline-Analysis/decodebench/flashmla_kernel.py\", line 74, in run\n    return self.flash_mla_with_kvcache(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/flash_mla/flash_mla_interface.py\", line 165, in flash_mla_with_kvcache\n    out, lse, new_tile_scheduler_metadata, new_num_splits = flash_mla_cuda.dense_decode_fwd(\n                                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: Dense decode MLA is only supported on SM90a architecture\n",
+  "short_reason": "RuntimeError: Dense decode MLA is only supported on SM90a architecture"
+}
