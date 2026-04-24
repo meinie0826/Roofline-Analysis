@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
+import os
 import shlex
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -31,11 +34,59 @@ def flashinfer_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
     ]
 
 
+def torch_sdpa_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
+    return [
+        "python3",
+        "decodebench/torch_sdpa_benchmark.py",
+        "--batch-size", str(workload["batch_size"]),
+        "--context-len", str(workload["context_len"]),
+        "--num-q-heads", str(workload["num_q_heads"]),
+        "--num-kv-heads", str(workload["num_kv_heads"]),
+        "--head-dim", str(workload["head_dim"]),
+        "--kv-dtype", workload["kv_dtype"],
+        "--page-size", str(workload["page_size"]),
+        "--warmup-steps", str(defaults.get("warmup_steps", 10)),
+        "--repeat", str(defaults.get("repeat", 50)),
+        "--output", str(output),
+    ]
+
+
 def build_cmd(backend: dict, workload: dict, defaults: dict, results_dir: Path) -> list[str]:
     output = results_dir / f'{backend["name"]}__{workload["id"]}.json'
     if backend["name"] == "flashinfer_paged_decode":
         return flashinfer_cmd(workload, defaults, output)
+    if backend["name"] == "torch_sdpa_decode":
+        return torch_sdpa_cmd(workload, defaults, output)
     raise ValueError(f'Backend not implemented yet: {backend["name"]}')
+
+
+def is_supported(backend: dict, workload: dict) -> bool:
+    supported_kv_dtypes = backend.get("supported_kv_dtypes")
+    return supported_kv_dtypes is None or workload["kv_dtype"] in supported_kv_dtypes
+
+
+def output_path(backend: dict, workload: dict, results_dir: Path) -> Path:
+    return results_dir / f'{backend["name"]}__{workload["id"]}.json'
+
+
+def write_failure(path: Path, backend: dict, workload: dict, returncode: int, command: list[str], output: str) -> None:
+    result = {
+        "status": "failed",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "backend": backend["name"],
+        "kernel_path": backend.get("kernel_path"),
+        "workload_id": workload["id"],
+        "attention": workload["attention"],
+        "kv_dtype": workload["kv_dtype"],
+        "page_size": workload["page_size"],
+        "batch_size": workload["batch_size"],
+        "context_len": workload["context_len"],
+        "returncode": returncode,
+        "command": shell(command),
+        "output": output,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def load_config(path: Path) -> dict:
@@ -53,6 +104,7 @@ def main() -> int:
     parser.add_argument("--results-dir", type=Path, default=ROOT / "results")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
     if args.dry_run == args.execute:
@@ -60,17 +112,33 @@ def main() -> int:
 
     config = load_config(args.config)
     args.results_dir.mkdir(parents=True, exist_ok=True)
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    failures = 0
 
     for backend in config["backends"]:
         if not backend.get("enabled", True):
             continue
         for workload in config["workloads"]:
+            if not is_supported(backend, workload):
+                continue
             argv = build_cmd(backend, workload, config.get("defaults", {}), args.results_dir)
-            print(shell(argv))
-            if args.execute:
-                subprocess.run(argv, check=True)
+            if args.dry_run:
+                print(shell(argv))
+            else:
+                env = os.environ.copy()
+                env["DECODEBENCH_RUN_ID"] = run_id
+                env["DECODEBENCH_WORKLOAD_ID"] = workload["id"]
+                completed = subprocess.run(argv, check=False, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                if args.verbose and completed.stdout:
+                    print(completed.stdout, end="")
+                if completed.returncode != 0:
+                    failures += 1
+                    write_failure(output_path(backend, workload, args.results_dir), backend, workload, completed.returncode, argv, completed.stdout)
+                    print(f"FAIL {backend['name']} {workload['id']} -> {output_path(backend, workload, args.results_dir)}")
+                else:
+                    print(f"OK   {backend['name']} {workload['id']} -> {output_path(backend, workload, args.results_dir)}")
 
-    return 0
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

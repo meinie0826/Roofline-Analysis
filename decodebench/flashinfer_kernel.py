@@ -41,7 +41,14 @@ def dtype_from_name(torch, name: str):
 class FlashInferPagedDecodeKernel:
     def __init__(self, shape: DecodeShape):
         import torch
-        import flashinfer
+
+        try:
+            import flashinfer
+        except ImportError as error:
+            raise ImportError(
+                "FlashInfer is not installed. Install it with: "
+                "python3 -m pip install flashinfer-python flashinfer-cubin"
+            ) from error
 
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA is required")
@@ -101,6 +108,7 @@ class FlashInferPagedDecodeKernel:
             shape.page_size,
             data_type=self.q_dtype,
             q_data_type=self.q_dtype,
+            kv_data_type=self.kv_dtype,
         )
         return wrapper
 

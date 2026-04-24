@@ -14,6 +14,14 @@ BACKENDS = [
         "kernel_path": "FlashInfer BatchDecodeWithPagedKVCacheWrapper / XQA",
         "status": "implemented",
     },
+    {
+        "name": "torch_sdpa_decode",
+        "layer": "baseline",
+        "enabled": True,
+        "kernel_path": "torch.nn.functional.scaled_dot_product_attention",
+        "status": "implemented",
+        "supported_kv_dtypes": {"bf16", "fp16"},
+    },
 ]
 
 
