@@ -56,9 +56,9 @@ BACKENDS = [
     {
         "name": "flashmla_decode",
         "layer": "kernel",
-        "enabled": True,
+        "enabled": False,
         "kernel_path": "flash_mla.flash_mla_with_kvcache",
-        "status": "implemented_if_flashmla_is_installed",
+        "status": "disabled_on_b200_dense_decode_mla_sm90a_only",
         "supported_attention": {"MLA"},
         "supported_kv_dtypes": {"bf16"},
         "supported_page_sizes": {64},

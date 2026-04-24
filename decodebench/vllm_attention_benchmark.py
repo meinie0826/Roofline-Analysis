@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 from datetime import datetime, timezone
@@ -54,6 +55,8 @@ def main() -> int:
     row = bench.run(repeats=args.repeat, warmup_steps=args.warmup_steps)
 
     mean_time_s = row["mean_time"]
+    if row.get("error") or not isinstance(mean_time_s, (int, float)) or not math.isfinite(mean_time_s):
+        raise RuntimeError(str(row.get("error") or f"invalid vLLM benchmark mean_time: {mean_time_s}"))
     result = {
         "run_id": os.environ.get("DECODEBENCH_RUN_ID"),
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -76,8 +79,8 @@ def main() -> int:
         "approx_effective_kv_bandwidth_gb_s": None,
         "peak_allocated_gb": (row.get("memory_allocated_mb") or 0) / 1024,
         "selected_backend": args.backend,
-        "fallback": row.get("error") is not None,
-        "fallback_reason": row.get("error"),
+        "fallback": False,
+        "fallback_reason": None,
         "notes": "Metric is vLLM attention benchmark mean_time, not CUDA-event p50. Useful for cross-backend comparison within vLLM benchmark suite.",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
