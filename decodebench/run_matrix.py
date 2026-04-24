@@ -149,6 +149,9 @@ def is_supported(backend: dict, workload: dict) -> bool:
     supported_kv_dtypes = backend.get("supported_kv_dtypes")
     if supported_kv_dtypes is not None and workload["kv_dtype"] not in supported_kv_dtypes:
         return False
+    supported_page_sizes = backend.get("supported_page_sizes")
+    if supported_page_sizes is not None and workload["page_size"] not in supported_page_sizes:
+        return False
     supported_workload_ids = backend.get("supported_workload_ids")
     if supported_workload_ids is not None and workload["id"] not in supported_workload_ids:
         return False

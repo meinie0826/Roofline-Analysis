@@ -54,9 +54,10 @@ BACKENDS = [
         "kernel_path": "vllm._custom_ops.paged_attention_v2",
         "status": "implemented_if_vllm_is_installed",
         "supported_kv_dtypes": {"bf16", "fp16"},
+        "supported_page_sizes": {16, 32},
         "supported_workload_ids": {
-            "mha_bf16_b16_ctx4k_p64",
-            "gqa_bf16_b64_ctx4k_p64",
+            "mha_bf16_b16_ctx4k_p32",
+            "gqa_bf16_b64_ctx4k_p32",
         },
     },
     {
@@ -105,9 +106,11 @@ def workload(
 WORKLOADS = [
     # Baseline: standard MHA, BF16 KV.
     workload("MHA", "bf16", batch_size=16, context_len=4096, page_size=64),
+    workload("MHA", "bf16", batch_size=16, context_len=4096, page_size=32),
 
     # GQA dtype comparison at fixed Blackwell-friendly page size.
     workload("GQA", "bf16", batch_size=64, context_len=4096, page_size=64),
+    workload("GQA", "bf16", batch_size=64, context_len=4096, page_size=32),
     workload("GQA", "fp8", batch_size=64, context_len=4096, page_size=64),
 
     # Page-size sensitivity for paged KV decode.
