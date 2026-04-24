@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
+PYTHON_BIN = sys.executable or "python3"
 
 from summarize_results import print_summary
 
@@ -23,7 +24,7 @@ def shell(argv: list[str]) -> str:
 
 def flashinfer_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
     return [
-        "python3",
+        PYTHON_BIN,
         "decodebench/flashinfer_benchmark.py",
         "--batch-size", str(workload["batch_size"]),
         "--context-len", str(workload["context_len"]),
@@ -40,7 +41,7 @@ def flashinfer_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
 
 def flashinfer_trtllm_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
     return [
-        "python3",
+        PYTHON_BIN,
         "decodebench/trtllm_decode_benchmark.py",
         "--batch-size", str(workload["batch_size"]),
         "--context-len", str(workload["context_len"]),
@@ -57,7 +58,7 @@ def flashinfer_trtllm_cmd(workload: dict, defaults: dict, output: Path) -> list[
 
 def vllm_attention_cmd(workload: dict, defaults: dict, output: Path, backend: str) -> list[str]:
     return [
-        "python3",
+        PYTHON_BIN,
         "decodebench/vllm_attention_benchmark.py",
         "--backend", backend,
         "--batch-size", str(workload["batch_size"]),
@@ -105,9 +106,16 @@ def short_backend(name: str) -> str:
 
 
 def write_failure(path: Path, backend: dict, workload: dict, returncode: int, command: list[str], output: str) -> None:
+    short_reason = ""
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    for line in reversed(lines):
+        if any(token in line for token in ("Error:", "RuntimeError:", "ImportError:", "ModuleNotFoundError:", "FileNotFoundError:", "ValueError:", "Unknown backend:")):
+            short_reason = line
+            break
     result = {
         "status": "failed",
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "python_executable": PYTHON_BIN,
         "backend": backend["name"],
         "kernel_path": backend.get("kernel_path"),
         "workload_id": workload["id"],
@@ -119,6 +127,7 @@ def write_failure(path: Path, backend: dict, workload: dict, returncode: int, co
         "returncode": returncode,
         "command": shell(command),
         "output": output,
+        "short_reason": short_reason,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -131,6 +140,14 @@ def load_config(path: Path) -> dict:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.CONFIG
+
+
+def short_failure_reason(output: str) -> str:
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    for line in reversed(lines):
+        if any(token in line for token in ("Error:", "RuntimeError:", "ImportError:", "ModuleNotFoundError:", "FileNotFoundError:", "ValueError:", "Unknown backend:")):
+            return line
+    return lines[-1] if lines else "unknown error"
 
 
 def main() -> int:
@@ -171,7 +188,7 @@ def main() -> int:
                 if completed.returncode != 0:
                     failures += 1
                     write_failure(output_path(backend, workload, args.results_dir), backend, workload, completed.returncode, argv, completed.stdout)
-                    print(f"✗ {workload['id']:<28} {short_backend(backend['name'])}")
+                    print(f"✗ {workload['id']:<28} {short_backend(backend['name'])}  | {short_failure_reason(completed.stdout)}")
                 else:
                     print(f"✓ {workload['id']:<28} {short_backend(backend['name'])}")
 
