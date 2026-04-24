@@ -12,6 +12,7 @@ import mma_gemm_2cta_pipeline_cutedsl as gemm_2cta_pipeline
 import mma_gemm_2cta_tma_2stage_cutedsl as gemm_2cta_tma_2stage
 import mma_gemm_2cta_tma_nopipeline_cutedsl as gemm_2cta_tma_nopipeline
 import mma_gemm_2cta_tma_pipeline_cutedsl as gemm_2cta_tma_pipeline
+import mma_gemm_2cta_tma_pipeline_tma_store_cutedsl as gemm_2cta_tma_pipeline_tma_store
 from ref import (
     check_close,
     make_torch_cublas_runner,
@@ -84,6 +85,21 @@ VARIANTS: dict[str, dict] = {
     },
     "2cta_tma_pipeline": {
         "module": gemm_2cta_tma_pipeline,
+        "small_shapes": [
+            (256, 256, 64),
+            (512, 256, 64),
+            (512, 512, 128),
+        ],
+        "large_shapes": [
+            (1024, 1024, 256),
+            (2048, 2048, 256),
+            (4096, 2048, 512),
+        ],
+        "torch_out_dtype": torch.float16,
+        "default_atol": 1e-1,
+    },
+    "2cta_tma_pipeline_tma_store": {
+        "module": gemm_2cta_tma_pipeline_tma_store,
         "small_shapes": [
             (256, 256, 64),
             (512, 256, 64),

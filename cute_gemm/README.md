@@ -9,6 +9,7 @@
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_nopipeline_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_nopipeline_cutedsl.py): `2cta + TMA load A/B + 单 stage` 对照版本
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_2stage_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_2stage_cutedsl.py): `2cta + TMA load A/B + 2-stage AB pipeline` 版本
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_cutedsl.py): `2cta + TMA load A/B + AB pipeline` 版本
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_cutedsl.py): `2cta + TMA load A/B + AB pipeline + TMA store C` 版本
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/ref.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/ref.py): `torch` reference
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py): 正确性验证 + 性能对比，输出 Torch 分配版和预分配 cuBLAS/cuBLASLt baseline
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/run.sh](/Users/meiziyuan/Roofline-Analysis/cute_gemm/run.sh): 统一运行入口
@@ -33,7 +34,8 @@
 2. `2cta_tma_nopipeline`: A/B load 改 TMA multicast，但 `ab_stages=1`，隔离 TMA load 收益。
 3. `2cta_tma_2stage`: A/B TMA load 加 2-stage AB pipeline，观察浅 pipeline 对隐藏 TMA latency 的收益。
 4. `2cta_tma_pipeline`: A/B TMA load 加 4-stage AB pipeline，作为当前深 pipeline 版本。
-5. 后续候选：TMA store C、2-stage/4-stage epilogue、只 multicast A/B 单边对照、tile shape sweep、persistent scheduler。
+5. `2cta_tma_pipeline_tma_store`: 保持 4-stage AB pipeline，把 C 写回改成 SMEM staging + TMA store。
+6. 后续候选：2-stage/4-stage epilogue、只 multicast A/B 单边对照、tile shape sweep、persistent scheduler。
 
 单个 shape 正确性：
 
@@ -51,6 +53,7 @@ python3 cute_gemm/mma_gemm_2cta_commit_cutedsl.py --mnk 256,256,64
 python3 cute_gemm/mma_gemm_2cta_tma_nopipeline_cutedsl.py --mnk 256,256,64
 python3 cute_gemm/mma_gemm_2cta_tma_2stage_cutedsl.py --mnk 256,256,64
 python3 cute_gemm/mma_gemm_2cta_tma_pipeline_cutedsl.py --mnk 256,256,64
+python3 cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_cutedsl.py --mnk 256,256,64
 ```
 
 小 shape 对比：
@@ -102,8 +105,10 @@ cd /Users/meiziyuan/Roofline-Analysis
 python3 cute_gemm/mma_gemm_2cta_tma_nopipeline_cutedsl.py --mnk 256,256,64
 python3 cute_gemm/mma_gemm_2cta_tma_2stage_cutedsl.py --mnk 256,256,64
 python3 cute_gemm/mma_gemm_2cta_tma_pipeline_cutedsl.py --mnk 256,256,64
+python3 cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_cutedsl.py --mnk 256,256,64
 python3 cute_gemm/benchmark.py --variant 2cta_tma_nopipeline --shape-set small
 python3 cute_gemm/benchmark.py --variant 2cta_tma_2stage --shape-set small
 python3 cute_gemm/benchmark.py --variant 2cta_tma_pipeline --shape-set small
+python3 cute_gemm/benchmark.py --variant 2cta_tma_pipeline_tma_store --shape-set small
 python3 cute_gemm/benchmark.py --variant 2cta_tma_pipeline --shape-set large
 ```
