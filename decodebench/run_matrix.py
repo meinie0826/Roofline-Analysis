@@ -163,6 +163,53 @@ def vllm_paged_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
     ]
 
 
+def torch_sdpa_cmd(workload: dict, defaults: dict, output: Path, backend: str) -> list[str]:
+    return [
+        PYTHON_BIN,
+        "decodebench/torch_sdpa_benchmark.py",
+        "--backend", backend,
+        "--batch-size", str(workload["batch_size"]),
+        "--context-len", str(workload["context_len"]),
+        "--num-q-heads", str(workload["num_q_heads"]),
+        "--num-kv-heads", str(workload["num_kv_heads"]),
+        "--head-dim", str(workload["head_dim"]),
+        "--kv-dtype", workload["kv_dtype"],
+        "--page-size", str(workload["page_size"]),
+        "--warmup-steps", str(defaults.get("warmup_steps", 10)),
+        "--repeat", str(defaults.get("repeat", 50)),
+        "--output", str(output),
+    ]
+
+
+def external_cmd(backend: dict, workload: dict, defaults: dict, output: Path) -> list[str]:
+    template_key = backend["command_template_env"]
+    command_template = os.environ.get(template_key, backend.get("command_template", ""))
+    if not command_template:
+        command_template = f"__missing_env_{template_key}__"
+    return [
+        PYTHON_BIN,
+        "decodebench/external_benchmark.py",
+        "--backend-name", backend["name"],
+        "--kernel-path", backend.get("kernel_path", backend["name"]),
+        "--layer", backend.get("layer", "framework_reference"),
+        "--command-template", command_template,
+        "--batch-size", str(workload["batch_size"]),
+        "--context-len", str(workload["context_len"]),
+        "--num-q-heads", str(workload["num_q_heads"]),
+        "--num-kv-heads", str(workload["num_kv_heads"]),
+        "--head-dim", str(workload["head_dim"]),
+        "--head-dim-v", str(workload.get("head_dim_v", workload["head_dim"])),
+        "--qk-nope-head-dim", str(workload.get("qk_nope_head_dim", 128)),
+        "--kv-lora-rank", str(workload.get("kv_lora_rank", workload.get("head_dim_v", workload["head_dim"]))),
+        "--qk-rope-head-dim", str(workload.get("qk_rope_head_dim", workload["head_dim"])),
+        "--kv-dtype", workload["kv_dtype"],
+        "--page-size", str(workload["page_size"]),
+        "--warmup-steps", str(defaults.get("warmup_steps", 10)),
+        "--repeat", str(defaults.get("repeat", 50)),
+        "--output", str(output),
+    ]
+
+
 def build_cmd(backend: dict, workload: dict, defaults: dict, results_dir: Path) -> list[str]:
     output = results_dir / f'{backend["name"]}__{workload["id"]}.json'
     if backend["name"] == "flashinfer_paged_decode":
@@ -183,6 +230,14 @@ def build_cmd(backend: dict, workload: dict, defaults: dict, results_dir: Path) 
         return vllm_attention_cmd(workload, defaults, output, "flash")
     if backend["name"] == "vllm_flashinfer":
         return vllm_attention_cmd(workload, defaults, output, "flashinfer")
+    if backend["name"] == "torch_sdpa_auto":
+        return torch_sdpa_cmd(workload, defaults, output, "auto")
+    if backend["name"] == "torch_sdpa_cudnn":
+        return torch_sdpa_cmd(workload, defaults, output, "cudnn")
+    if backend["name"] == "torch_sdpa_flash":
+        return torch_sdpa_cmd(workload, defaults, output, "flash")
+    if backend["name"] in {"tensorrt_llm_native", "sglang_serving"}:
+        return external_cmd(backend, workload, defaults, output)
     raise ValueError(f'Backend not implemented yet: {backend["name"]}')
 
 
@@ -217,6 +272,11 @@ def short_backend(name: str) -> str:
         "vllm_paged_decode": "vllm-paged",
         "vllm_flash": "vllm-flash",
         "vllm_flashinfer": "vllm-flashinfer",
+        "torch_sdpa_auto": "torch-sdpa",
+        "torch_sdpa_cudnn": "torch-cudnn",
+        "torch_sdpa_flash": "torch-flash",
+        "tensorrt_llm_native": "trtllm-native",
+        "sglang_serving": "sglang",
     }.get(name, name)
 
 

@@ -35,6 +35,11 @@ def short_backend(name: str | None) -> str:
         "vllm_paged_decode": "vllm-paged",
         "vllm_flash": "vllm-flash",
         "vllm_flashinfer": "vllm-flashinfer",
+        "torch_sdpa_auto": "torch-sdpa",
+        "torch_sdpa_cudnn": "torch-cudnn",
+        "torch_sdpa_flash": "torch-flash",
+        "tensorrt_llm_native": "trtllm-native",
+        "sglang_serving": "sglang",
     }.get(name or "-", name or "-")
 
 
@@ -104,6 +109,11 @@ def backend_order(name: str) -> tuple[int, str]:
         "vllm-paged": 8,
         "vllm-flash": 9,
         "vllm-flashinfer": 10,
+        "trtllm-native": 11,
+        "torch-cudnn": 12,
+        "torch-flash": 13,
+        "torch-sdpa": 14,
+        "sglang": 15,
     }
     return order.get(name, 100), name
 
