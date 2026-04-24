@@ -67,7 +67,7 @@ def main() -> int:
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "gpu": kernel.torch.cuda.get_device_name(0),
         "backend": "flashattn_kvcache",
-        "kernel_path": "flash_attn.flash_attn_with_kvcache",
+        "kernel_path": kernel.kernel_path,
         "layer": "kernel",
         "workload_id": os.environ.get("DECODEBENCH_WORKLOAD_ID"),
         "attention": shape.attention,
@@ -82,10 +82,10 @@ def main() -> int:
         "approx_kv_bytes_read": shape.kv_bytes,
         "approx_effective_kv_bandwidth_gb_s": bandwidth,
         "peak_allocated_gb": peak_allocated_gb,
-        "selected_backend": "flash_attn_with_kvcache",
+        "selected_backend": f"flash_attn_with_kvcache[{kernel.cache_table_arg}]",
         "fallback": False,
         "fallback_reason": None,
-        "notes": "Dense KV-cache decode benchmark via flash_attn_with_kvcache. page_size is ignored for execution and kept only for matrix compatibility.",
+        "notes": "Paged KV-cache decode benchmark via flash_attn_with_kvcache with block/page table enabled.",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
