@@ -54,6 +54,8 @@ def make_joint_candidates() -> tuple[GemmCandidate, ...]:
         for ab_stages in (2, 3, 4, 6):
             for epilogue_warps in (3, 4, 5):
                 for use_tma_store in (False, True):
+                    if not use_tma_store and epilogue_warps != 4:
+                        continue
                     store_suffix = "store" if use_tma_store else "rmem_store"
                     name = (
                         f"cfg_tile{tile_shape[0]}x{tile_shape[1]}x{tile_shape[2]}"

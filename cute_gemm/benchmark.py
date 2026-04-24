@@ -535,14 +535,15 @@ def benchmark_shape_autotuned(
                 cublaslt_workspace_mb,
                 False,
             )
-        except ValueError as error:
+        except Exception as error:
             print(
                 "AUTOTUNE_SKIP",
                 {
                     "mnk": mnk,
                     "name": candidate.name,
                     "variant": candidate.variant,
-                    "reason": str(error),
+                    "error_type": type(error).__name__,
+                    "reason": str(error).splitlines()[0],
                 },
             )
             continue

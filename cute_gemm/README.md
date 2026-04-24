@@ -53,7 +53,7 @@ Autotune 参数说明：
 - `tma_store` 也是 compile-time tuning knob，会影响 epilogue SMEM 分配和 C 的 TMA store atom。
 - `tile_shape` 是 compile-time tuning knob，`joint` group 会通过 configurable factory 直接生成 in-memory 专用 kernel 做 sweep。
 - warp specialization 数量也是 compile-time tuning knob；当前 `joint` group sweep `1 TMA warp + 1 MMA warp + 3/4/5 epilogue warps`，对应 `160/192/224 threads`。
-- `joint` group 是联合调优，不再固定其他变量逐项 sweep；候选空间现在是 `tile_shape x ab_stages x epilogue_warps x {rmem_store,tma_store}`。
+- `joint` group 是联合调优，不再固定其他变量逐项 sweep；候选空间现在是 `tile_shape x ab_stages x epilogue_warps x tma_store`，并额外保留 `rmem_store + 4 epilogue warps` 对照。
 
 单个 shape 正确性：
 
