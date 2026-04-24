@@ -10,6 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from third_party_paths import find_vllm_benchmark_dir, find_vllm_python
 from vllm_attention_kernel import DecodeShape, VLLMAttentionBenchmark
 
 
@@ -26,8 +27,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--warmup-steps", type=int, default=10)
     parser.add_argument("--repeat", type=int, default=50)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--benchmark-dir", type=Path, default=Path(os.environ.get("VLLM_BENCH_DIR", "../vllm/benchmarks/attention_benchmarks")))
-    parser.add_argument("--python-bin", default=os.environ.get("VLLM_BENCH_PYTHON", "python3"))
+    parser.add_argument("--benchmark-dir", type=Path)
+    parser.add_argument("--python-bin")
     return parser.parse_args()
 
 
@@ -45,8 +46,10 @@ def main() -> int:
     bench = VLLMAttentionBenchmark(
         backend=args.backend,
         shape=shape,
-        benchmark_dir=args.benchmark_dir,
-        python_bin=args.python_bin,
+        benchmark_dir=find_vllm_benchmark_dir(
+            str(args.benchmark_dir) if args.benchmark_dir else None
+        ),
+        python_bin=find_vllm_python(args.python_bin),
     )
     row = bench.run(repeats=args.repeat, warmup_steps=args.warmup_steps)
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CUTLASS_DSL_SRC="${ROOT}/cutlass/python/CuTeDSL"
+CUTLASS_DSL_SRC="${ROOT}/3rd/cutlass/python/CuTeDSL"
 CUTLASS_DSL_LIBS="${CUTLASS_DSL_SRC}/cutlass/_mlir/_mlir_libs"
 DEBUG_LOG_DIR="${ROOT}/cute_gemm/debug_logs"
 

@@ -74,7 +74,11 @@ class VLLMAttentionBenchmark:
 
     def run(self, repeats: int, warmup_steps: int) -> dict:
         if not self.benchmark_dir.exists():
-            raise FileNotFoundError(f"vLLM benchmark dir not found: {self.benchmark_dir}")
+            raise FileNotFoundError(
+                "vLLM benchmark dir not found. Expected benchmark source under "
+                f"{self.benchmark_dir}. Put the vLLM repo under 3rd/vllm or set "
+                "VLLM_BENCH_DIR explicitly."
+            )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             output_json = Path(tmpdir) / "vllm_attention_results.json"

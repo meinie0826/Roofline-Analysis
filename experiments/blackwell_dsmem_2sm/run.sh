@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 NVCC=${NVCC:-nvcc}
 ARCH=${ARCH:-sm_103a}
-CUTLASS_DIR=${CUTLASS_DIR:-$ROOT_DIR/../../cutlass}
+CUTLASS_DIR=${CUTLASS_DIR:-$ROOT_DIR/../../3rd/cutlass}
 REPEATS=${REPEATS:-10}
 WARMUP_REPEATS=${WARMUP_REPEATS:-3}
 ITERS=${ITERS:-2048}
@@ -193,7 +193,7 @@ if [[ "$HAVE_CUTLASS" == "1" ]]; then
 else
   echo "WARNING: CUTLASS not found at $CUTLASS_DIR"
   echo "Skipping bench_cutlass_2sm_gemm compilation and runtime sweep."
-  echo "Set CUTLASS_DIR=/path/to/cutlass to enable the hardware 1SM/2SM comparison."
+  echo "Set CUTLASS_DIR=/path/to/3rd/cutlass to enable the hardware 1SM/2SM comparison."
 fi
 
 # 只有在非 ONLY_CUTLASS 模式下才运行实验

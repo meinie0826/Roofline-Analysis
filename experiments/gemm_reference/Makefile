@@ -2,7 +2,7 @@ NVCC ?= nvcc
 ARCH ?= sm_100a
 NVCC_FLAGS ?= -std=c++17 -O3 -lineinfo -arch=$(ARCH)
 LDFLAGS ?= -lcublas
-CUTLASS_DIR ?= ../../cutlass
+CUTLASS_DIR ?= ../../3rd/cutlass
 SYNCLOG_PATCH ?= ../blackwell_dsmem_2sm/synclog_host_device.patch
 
 ifeq ($(ARCH),sm_100a)

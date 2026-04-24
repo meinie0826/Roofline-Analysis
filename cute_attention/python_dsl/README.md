@@ -33,9 +33,9 @@
 
 ## Stage 5: Full Self-Hosted Kernel
 
-- 不调用 `flash-attention/flash_attn/cute` 的执行实现
+- 不调用 `3rd/flash-attention/flash_attn/cute` 的执行实现
 - 目标: 用我们自己的 CuTe DSL kernel 覆盖 full causal forward 路径
-- `flash-attention` 和 `cutlass/examples/77_blackwell_fmha` 只作为设计和性能参考
+- `3rd/flash-attention` 和 `3rd/cutlass/examples/77_blackwell_fmha` 只作为设计和性能参考
 
 ## 对照 FA4 仍缺失的关键优化
 

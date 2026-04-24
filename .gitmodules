@@ -1,9 +1,9 @@
 [submodule "cutlass"]
-	path = cutlass
+	path = 3rd/cutlass
 	url = https://github.com/NVIDIA/cutlass.git
 [submodule "flash-attention"]
-	path = flash-attention
+	path = 3rd/flash-attention
 	url = https://github.com/Dao-AILab/flash-attention.git
 [submodule "deepgemm"]
-	path = deepgemm
+	path = 3rd/deepgemm
 	url = https://github.com/deepseek-ai/DeepGEMM.git

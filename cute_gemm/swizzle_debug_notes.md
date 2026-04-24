@@ -3,7 +3,7 @@
 文件位置：
 
 - kernel: `/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_1cta_cutedsl.py`
-- helper: `/Users/meiziyuan/cutlass/python/CuTeDSL/cutlass/utils/blackwell_helpers.py`
+- helper: `/Users/meiziyuan/Roofline-Analysis/3rd/cutlass/python/CuTeDSL/cutlass/utils/blackwell_helpers.py`
 
 ## 复现命令
 
@@ -15,7 +15,7 @@ bash cute_gemm/run.sh --mnk 128,256,64 --debug-swizzle
 ## 一次实际输出
 
 ```text
-[cute_gemm/run.sh] local CuTeDSL MLIR libs not found at /workspace/Roofline-Analysis/cutlass/python/CuTeDSL/cutlass/_mlir/_mlir_libs
+[cute_gemm/run.sh] local CuTeDSL MLIR libs not found at /workspace/Roofline-Analysis/3rd/cutlass/python/CuTeDSL/cutlass/_mlir/_mlir_libs
 [cute_gemm/run.sh] falling back to installed python package 'cutlass'
 === host swizzle debug begin ===
 a_smem_layout       = S<3,4,3> o 0 o ((128,16),1,4,1):((64,1),0,16,0)

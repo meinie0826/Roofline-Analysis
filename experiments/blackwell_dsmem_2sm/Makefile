@@ -5,7 +5,7 @@ ARCH ?= sm_100a
 NVCC_FLAGS = -std=c++17 -O3 -arch=$(ARCH) --expt-relaxed-constexpr -Xcudafe --diag_suppress=20012 -Xcudafe --diag_suppress=20013
 
 # CUTLASS path (for existing benchmarks)
-CUTLASS_PATH ?= ../../cutlass
+CUTLASS_PATH ?= ../../3rd/cutlass
 CUTLASS_INCLUDES = -I$(CUTLASS_PATH)/include -I$(CUTLASS_PATH)/tools/util/include
 
 # Benchmarks
