@@ -71,10 +71,10 @@ def kernel(
         num_threads=threads_per_cta,
     )
     tmem = utils.TmemAllocator(
-        storage.tmem_holding_buf,
+        storage.tmem_holding_buf.ptr,
         barrier_for_retrieve=tmem_alloc_barrier,
         is_two_cta=cute.size(cta_layout_vmnk, mode=[0]) > 1,
-        two_cta_tmem_dealloc_mbar_ptr=storage.tmem_dealloc_mbar,
+        two_cta_tmem_dealloc_mbar_ptr=storage.tmem_dealloc_mbar.ptr,
     )
     tmem.allocate(512)
 
