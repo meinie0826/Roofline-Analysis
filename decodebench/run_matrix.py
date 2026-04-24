@@ -267,6 +267,19 @@ def short_failure_reason(output: str) -> str:
     return lines[-1] if lines else "unknown error"
 
 
+def result_is_success(path: Path) -> bool:
+    if not path.exists():
+        return False
+    try:
+        row = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if row.get("status") == "failed" or row.get("fallback"):
+        return False
+    value = row.get("compare_latency_us") or row.get("kernel_latency_p50_us")
+    return isinstance(value, (int, float)) and value > 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run decode attention kernel benchmark matrix.")
     parser.add_argument("--config", type=Path, default=ROOT / "matrix_b200.py")
@@ -276,6 +289,7 @@ def main() -> int:
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--report", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--reference-backend", default="flashinfer_paged_decode")
+    parser.add_argument("--resume", action="store_true", help="Skip backend/workload pairs with an existing successful result JSON.")
     args = parser.parse_args()
 
     if args.dry_run == args.execute:
@@ -286,6 +300,7 @@ def main() -> int:
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     failures = 0
     executed_paths: list[Path] = []
+    skipped = 0
 
     for backend in config["backends"]:
         if not backend.get("enabled", True):
@@ -296,6 +311,13 @@ def main() -> int:
             path = output_path(backend, workload, args.results_dir)
             executed_paths.append(path)
             argv = build_cmd(backend, workload, config.get("defaults", {}), args.results_dir)
+            if args.resume and result_is_success(path):
+                skipped += 1
+                if args.dry_run:
+                    print(f"# skip existing success: {short_backend(backend['name'])} {workload['id']}")
+                else:
+                    print(f"↷ {workload['id']:<28} {short_backend(backend['name'])}  | existing result")
+                continue
             if args.dry_run:
                 print(shell(argv))
             else:
@@ -312,6 +334,9 @@ def main() -> int:
                 else:
                     print(f"✓ {workload['id']:<28} {short_backend(backend['name'])}")
 
+    if args.resume and skipped:
+        print(f"Skipped existing successful results: {skipped}")
+
     if args.execute and args.report:
         print()
         rows = []
@@ -319,7 +344,7 @@ def main() -> int:
             if not path.exists():
                 continue
             row = json.loads(path.read_text(encoding="utf-8"))
-            if row.get("run_id") not in (None, run_id):
+            if not args.resume and row.get("run_id") not in (None, run_id):
                 continue
             rows.append(row)
         if rows:
