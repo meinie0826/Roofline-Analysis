@@ -7,3 +7,6 @@
 [submodule "deepgemm"]
 	path = 3rd/deepgemm
 	url = https://github.com/deepseek-ai/DeepGEMM.git
+[submodule "vllm"]
+	path = 3rd/vllm
+	url = https://github.com/vllm-project/vllm.git

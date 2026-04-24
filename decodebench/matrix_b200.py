@@ -50,17 +50,25 @@ BACKENDS = [
     {
         "name": "vllm_flash",
         "layer": "kernel_or_framework",
-        "enabled": False,
+        "enabled": True,
         "kernel_path": "vLLM attention_benchmarks backend=flash",
-        "status": "disabled_until_locally_validated",
+        "status": "enabled_for_bf16_dense_kv_workloads",
         "supported_kv_dtypes": {"bf16", "fp16"},
+        "supported_workload_ids": {
+            "mha_bf16_b16_ctx4k_p64",
+            "gqa_bf16_b64_ctx4k_p64",
+        },
     },
     {
         "name": "vllm_flashinfer",
         "layer": "kernel_or_framework",
-        "enabled": False,
+        "enabled": True,
         "kernel_path": "vLLM attention_benchmarks backend=flashinfer",
-        "status": "disabled_until_locally_validated",
+        "status": "enabled_for_bf16_dense_kv_workloads",
+        "supported_workload_ids": {
+            "mha_bf16_b16_ctx4k_p64",
+            "gqa_bf16_b64_ctx4k_p64",
+        },
     },
 ]
 

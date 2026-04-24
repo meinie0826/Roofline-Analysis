@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -22,9 +23,28 @@ def find_vllm_benchmark_dir(explicit: str | None = None) -> Path:
     if env_path:
         return Path(env_path).expanduser()
 
-    candidates = [THIRD_PARTY_ROOT / "vllm" / "benchmarks" / "attention_benchmarks"]
+    vllm_root = THIRD_PARTY_ROOT / "vllm"
+    candidates = [
+        vllm_root / "benchmarks" / "attention_benchmarks",
+        vllm_root / "benchmarks",
+    ]
     path = _existing_path(candidates)
-    return path if path is not None else candidates[0]
+    if path is not None:
+        benchmark_py = path / "benchmark.py"
+        if benchmark_py.exists():
+            return path
+
+    if vllm_root.exists():
+        for benchmark_py in sorted(vllm_root.rglob("benchmark.py")):
+            try:
+                text = benchmark_py.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            markers = ("--backend", "--batch-specs", "--output-json")
+            if all(marker in text for marker in markers):
+                return benchmark_py.parent
+
+    return candidates[0]
 
 
 def find_vllm_python(explicit: str | None = None) -> str:
@@ -37,7 +57,7 @@ def find_vllm_python(explicit: str | None = None) -> str:
 
     candidates = [THIRD_PARTY_ROOT / "vllm" / ".venv" / "bin" / "python"]
     path = _existing_path(candidates)
-    return str(path) if path is not None else "python3"
+    return str(path) if path is not None else sys.executable
 
 
 def find_flash_attention_root(explicit: str | None = None) -> Path:
