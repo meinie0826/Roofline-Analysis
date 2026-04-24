@@ -12,6 +12,7 @@ import mma_gemm_2cta_pipeline_cutedsl as gemm_2cta_pipeline
 import mma_gemm_2cta_tma_pipeline_cutedsl as gemm_2cta_tma_pipeline
 from ref import (
     check_close,
+    make_torch_cublas_runner,
     make_inputs,
     torch_perf_gemm_with_dtype,
     torch_reference_gemm_with_dtype,
@@ -196,25 +197,31 @@ def benchmark_shape(
         warmup,
         iters,
     )
+    cublas_runner = make_torch_cublas_runner(a, b, cfg["torch_out_dtype"])
+    cublas_ms = _time_torch_kernel(cublas_runner, warmup, iters)
 
     return {
         "variant": variant,
         "mnk": mnk,
         "cute_ms": cute_ms,
         "torch_ms": torch_ms,
+        "cublas_ms": cublas_ms,
         "speedup_vs_torch": torch_ms / cute_ms,
+        "speedup_vs_cublas": cublas_ms / cute_ms,
     }
 
 
 def print_results(rows: Iterable[dict]) -> None:
-    print("variant,m,n,k,cute_ms,torch_ms,speedup_vs_torch")
+    print("variant,m,n,k,cute_ms,torch_ms,cublas_ms,speedup_vs_torch,speedup_vs_cublas")
     for row in rows:
         m, n, k = row["mnk"]
         print(
             f"{row['variant']},{m},{n},{k},"
             f"{row['cute_ms']:.6f},"
             f"{row['torch_ms']:.6f},"
-            f"{row['speedup_vs_torch']:.6f}"
+            f"{row['cublas_ms']:.6f},"
+            f"{row['speedup_vs_torch']:.6f},"
+            f"{row['speedup_vs_cublas']:.6f}"
         )
 
 
@@ -257,7 +264,9 @@ def main():
                     "mnk": mnk,
                     "cute_ms": round(row["cute_ms"], 6),
                     "torch_ms": round(row["torch_ms"], 6),
+                    "cublas_ms": round(row["cublas_ms"], 6),
                     "speedup_vs_torch": round(row["speedup_vs_torch"], 6),
+                    "speedup_vs_cublas": round(row["speedup_vs_cublas"], 6),
                 },
             )
     print_results(rows)

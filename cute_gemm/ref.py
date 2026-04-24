@@ -41,6 +41,50 @@ def torch_perf_gemm_with_dtype(
     return torch.mm(a.float(), b.float().t()).to(out_dtype)
 
 
+def make_torch_cublas_runner(
+    a: torch.Tensor,
+    b: torch.Tensor,
+    out_dtype: torch.dtype,
+):
+    b_t = b.t()
+
+    if out_dtype == torch.float16:
+        out = torch.empty((a.shape[0], b.shape[0]), device=a.device, dtype=out_dtype)
+
+        def run() -> torch.Tensor:
+            return torch.mm(a, b_t, out=out)
+
+        return run
+
+    if out_dtype == torch.float32:
+        try:
+            torch.mm(a, b_t, out_dtype=torch.float32)
+
+            def run() -> torch.Tensor:
+                return torch.mm(a, b_t, out_dtype=torch.float32)
+
+            return run
+        except (TypeError, RuntimeError):
+            a_f32 = a.float()
+            b_t_f32 = b_t.float()
+            out = torch.empty(
+                (a.shape[0], b.shape[0]), device=a.device, dtype=out_dtype
+            )
+
+            def run() -> torch.Tensor:
+                return torch.mm(a_f32, b_t_f32, out=out)
+
+            return run
+
+    out = torch.empty((a.shape[0], b.shape[0]), device=a.device, dtype=out_dtype)
+
+    def run() -> torch.Tensor:
+        out.copy_(torch.mm(a.float(), b_t.float()).to(out_dtype))
+        return out
+
+    return run
+
+
 def torch_gemm_with_dtype(
     a: torch.Tensor,
     b: torch.Tensor,
