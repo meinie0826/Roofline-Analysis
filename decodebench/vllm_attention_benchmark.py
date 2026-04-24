@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import sys
 from datetime import datetime, timezone
@@ -11,32 +10,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from flashinfer_kernel import DecodeShape, FlashInferPagedDecodeKernel
-
-
-def cuda_time_ms(torch, fn, repeat: int) -> list[float]:
-    times = []
-    start = torch.cuda.Event(enable_timing=True)
-    end = torch.cuda.Event(enable_timing=True)
-    for _ in range(repeat):
-        start.record()
-        fn()
-        end.record()
-        torch.cuda.synchronize()
-        times.append(start.elapsed_time(end))
-    return times
-
-
-def percentile(values: list[float], pct: float) -> float:
-    values = sorted(values)
-    if not values:
-        return float("nan")
-    index = min(len(values) - 1, max(0, math.ceil(pct / 100 * len(values)) - 1))
-    return values[index]
+from vllm_attention_kernel import DecodeShape, VLLMAttentionBenchmark
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Benchmark FlashInfer paged decode kernel.")
+    parser = argparse.ArgumentParser(description="Benchmark vLLM attention backend using vLLM's attention benchmark suite.")
+    parser.add_argument("--backend", required=True, choices=["flash", "flashinfer"])
     parser.add_argument("--batch-size", type=int, required=True)
     parser.add_argument("--context-len", type=int, required=True)
     parser.add_argument("--num-q-heads", type=int, required=True)
@@ -47,6 +26,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--warmup-steps", type=int, default=10)
     parser.add_argument("--repeat", type=int, default=50)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--benchmark-dir", type=Path, default=Path(os.environ.get("VLLM_BENCH_DIR", "../vllm/benchmarks/attention_benchmarks")))
+    parser.add_argument("--python-bin", default=os.environ.get("VLLM_BENCH_PYTHON", "python3"))
     return parser.parse_args()
 
 
@@ -61,25 +42,22 @@ def main() -> int:
         kv_dtype=args.kv_dtype,
         page_size=args.page_size,
     )
-    kernel = FlashInferPagedDecodeKernel(shape)
-    torch = kernel.torch
+    bench = VLLMAttentionBenchmark(
+        backend=args.backend,
+        shape=shape,
+        benchmark_dir=args.benchmark_dir,
+        python_bin=args.python_bin,
+    )
+    row = bench.run(repeats=args.repeat, warmup_steps=args.warmup_steps)
 
-    for _ in range(args.warmup_steps):
-        kernel.run()
-    torch.cuda.synchronize()
-
-    times_ms = cuda_time_ms(torch, kernel.run, args.repeat)
-    avg_ms = sum(times_ms) / len(times_ms)
-    p50_ms = percentile(times_ms, 50)
-    p95_ms = percentile(times_ms, 95)
-
+    mean_time_s = row["mean_time"]
     result = {
         "run_id": os.environ.get("DECODEBENCH_RUN_ID"),
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "gpu": torch.cuda.get_device_name(),
-        "backend": "flashinfer_paged_decode",
-        "kernel_path": "FlashInfer BatchDecodeWithPagedKVCacheWrapper",
-        "layer": "kernel",
+        "gpu": row.get("config", {}).get("device", "cuda"),
+        "backend": f"vllm_{args.backend}",
+        "kernel_path": f"vLLM attention_benchmarks backend={args.backend}",
+        "layer": "kernel_or_framework",
         "workload_id": os.environ.get("DECODEBENCH_WORKLOAD_ID"),
         "attention": shape.attention,
         "kv_dtype": shape.kv_dtype,
@@ -87,17 +65,17 @@ def main() -> int:
         "batch_size": shape.batch_size,
         "context_len": shape.context_len,
         "decode_steps": 1,
-        "compare_latency_us": p50_ms * 1000.0,
-        "kernel_latency_avg_us": avg_ms * 1000.0,
-        "kernel_latency_p50_us": p50_ms * 1000.0,
-        "kernel_latency_p95_us": p95_ms * 1000.0,
-        "approx_kv_bytes_read": shape.kv_bytes,
-        "approx_effective_kv_bandwidth_gb_s": shape.kv_bytes / (p50_ms * 1e6),
-        "peak_allocated_gb": torch.cuda.max_memory_allocated() / 1e9,
-        "selected_backend": "flashinfer_paged_decode",
-        "fallback": False,
-        "fallback_reason": None,
-        "notes": "Kernel-only paged decode benchmark. No model TPS/TPOT. Bandwidth is approximate K/V bytes divided by p50 kernel time.",
+        "compare_latency_us": mean_time_s * 1e6,
+        "kernel_latency_avg_us": mean_time_s * 1e6,
+        "kernel_latency_p50_us": mean_time_s * 1e6,
+        "kernel_latency_p95_us": row["max_time"] * 1e6,
+        "approx_kv_bytes_read": None,
+        "approx_effective_kv_bandwidth_gb_s": None,
+        "peak_allocated_gb": (row.get("memory_allocated_mb") or 0) / 1024,
+        "selected_backend": args.backend,
+        "fallback": row.get("error") is not None,
+        "fallback_reason": row.get("error"),
+        "notes": "Metric is vLLM attention benchmark mean_time, not CUDA-event p50. Useful for cross-backend comparison within vLLM benchmark suite.",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

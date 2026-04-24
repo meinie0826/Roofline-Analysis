@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from flashinfer_kernel import DecodeShape, FlashInferPagedDecodeKernel
+from trtllm_decode_kernel import DecodeShape, FlashInferTRTLLMDecodeKernel
 
 
 def cuda_time_ms(torch, fn, repeat: int) -> list[float]:
@@ -36,7 +36,7 @@ def percentile(values: list[float], pct: float) -> float:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Benchmark FlashInfer paged decode kernel.")
+    parser = argparse.ArgumentParser(description="Benchmark TRTLLM decode path exposed by FlashInfer.")
     parser.add_argument("--batch-size", type=int, required=True)
     parser.add_argument("--context-len", type=int, required=True)
     parser.add_argument("--num-q-heads", type=int, required=True)
@@ -61,7 +61,7 @@ def main() -> int:
         kv_dtype=args.kv_dtype,
         page_size=args.page_size,
     )
-    kernel = FlashInferPagedDecodeKernel(shape)
+    kernel = FlashInferTRTLLMDecodeKernel(shape)
     torch = kernel.torch
 
     for _ in range(args.warmup_steps):
@@ -77,8 +77,8 @@ def main() -> int:
         "run_id": os.environ.get("DECODEBENCH_RUN_ID"),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "gpu": torch.cuda.get_device_name(),
-        "backend": "flashinfer_paged_decode",
-        "kernel_path": "FlashInfer BatchDecodeWithPagedKVCacheWrapper",
+        "backend": "flashinfer_trtllm_decode",
+        "kernel_path": "flashinfer.decode.trtllm_batch_decode_with_kv_cache",
         "layer": "kernel",
         "workload_id": os.environ.get("DECODEBENCH_WORKLOAD_ID"),
         "attention": shape.attention,
@@ -94,10 +94,10 @@ def main() -> int:
         "approx_kv_bytes_read": shape.kv_bytes,
         "approx_effective_kv_bandwidth_gb_s": shape.kv_bytes / (p50_ms * 1e6),
         "peak_allocated_gb": torch.cuda.max_memory_allocated() / 1e9,
-        "selected_backend": "flashinfer_paged_decode",
+        "selected_backend": "flashinfer_trtllm_decode",
         "fallback": False,
         "fallback_reason": None,
-        "notes": "Kernel-only paged decode benchmark. No model TPS/TPOT. Bandwidth is approximate K/V bytes divided by p50 kernel time.",
+        "notes": "TRTLLM decode path benchmarked through FlashInfer's trtllm_batch_decode_with_kv_cache.",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

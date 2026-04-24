@@ -34,10 +34,51 @@ def flashinfer_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
     ]
 
 
+def flashinfer_trtllm_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
+    return [
+        "python3",
+        "decodebench/trtllm_decode_benchmark.py",
+        "--batch-size", str(workload["batch_size"]),
+        "--context-len", str(workload["context_len"]),
+        "--num-q-heads", str(workload["num_q_heads"]),
+        "--num-kv-heads", str(workload["num_kv_heads"]),
+        "--head-dim", str(workload["head_dim"]),
+        "--kv-dtype", workload["kv_dtype"],
+        "--page-size", str(workload["page_size"]),
+        "--warmup-steps", str(defaults.get("warmup_steps", 10)),
+        "--repeat", str(defaults.get("repeat", 50)),
+        "--output", str(output),
+    ]
+
+
+def vllm_attention_cmd(workload: dict, defaults: dict, output: Path, backend: str) -> list[str]:
+    return [
+        "python3",
+        "decodebench/vllm_attention_benchmark.py",
+        "--backend", backend,
+        "--batch-size", str(workload["batch_size"]),
+        "--context-len", str(workload["context_len"]),
+        "--num-q-heads", str(workload["num_q_heads"]),
+        "--num-kv-heads", str(workload["num_kv_heads"]),
+        "--head-dim", str(workload["head_dim"]),
+        "--kv-dtype", workload["kv_dtype"],
+        "--page-size", str(workload["page_size"]),
+        "--warmup-steps", str(defaults.get("warmup_steps", 10)),
+        "--repeat", str(defaults.get("repeat", 50)),
+        "--output", str(output),
+    ]
+
+
 def build_cmd(backend: dict, workload: dict, defaults: dict, results_dir: Path) -> list[str]:
     output = results_dir / f'{backend["name"]}__{workload["id"]}.json'
     if backend["name"] == "flashinfer_paged_decode":
         return flashinfer_cmd(workload, defaults, output)
+    if backend["name"] == "flashinfer_trtllm_decode":
+        return flashinfer_trtllm_cmd(workload, defaults, output)
+    if backend["name"] == "vllm_flash":
+        return vllm_attention_cmd(workload, defaults, output, "flash")
+    if backend["name"] == "vllm_flashinfer":
+        return vllm_attention_cmd(workload, defaults, output, "flashinfer")
     raise ValueError(f'Backend not implemented yet: {backend["name"]}')
 
 
@@ -53,6 +94,9 @@ def output_path(backend: dict, workload: dict, results_dir: Path) -> Path:
 def short_backend(name: str) -> str:
     return {
         "flashinfer_paged_decode": "flashinfer",
+        "flashinfer_trtllm_decode": "trtllm",
+        "vllm_flash": "vllm-flash",
+        "vllm_flashinfer": "vllm-flashinfer",
     }.get(name, name)
 
 

@@ -14,6 +14,28 @@ BACKENDS = [
         "kernel_path": "FlashInfer BatchDecodeWithPagedKVCacheWrapper / XQA",
         "status": "implemented",
     },
+    {
+        "name": "flashinfer_trtllm_decode",
+        "layer": "kernel",
+        "enabled": True,
+        "kernel_path": "flashinfer.decode.trtllm_batch_decode_with_kv_cache",
+        "status": "implemented",
+    },
+    {
+        "name": "vllm_flash",
+        "layer": "kernel_or_framework",
+        "enabled": True,
+        "kernel_path": "vLLM attention_benchmarks backend=flash",
+        "status": "implemented_if_vllm_bench_env_exists",
+        "supported_kv_dtypes": {"bf16", "fp16"},
+    },
+    {
+        "name": "vllm_flashinfer",
+        "layer": "kernel_or_framework",
+        "enabled": True,
+        "kernel_path": "vLLM attention_benchmarks backend=flashinfer",
+        "status": "implemented_if_vllm_bench_env_exists",
+    },
 ]
 
 
