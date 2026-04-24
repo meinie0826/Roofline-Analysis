@@ -102,8 +102,7 @@ class FlashInferTRTLLMMLAKernel:
             dtype=torch.int32,
             device=self.device,
         )
-        num_semaphores = max(4096, shape.batch_size * shape.num_q_heads)
-        self.workspace_buffer = torch.zeros((num_semaphores, 4), dtype=torch.int32, device=self.device)
+        self.workspace_buffer = torch.zeros(64 * 1024 * 1024, dtype=torch.uint8, device=self.device)
         self.output = torch.empty(
             shape.batch_size,
             1,
