@@ -160,6 +160,7 @@ python3 cute_gemm/benchmark.py --variant autotuned --autotune-group joint --shap
 
 `--variant autotuned` 会对每个 shape 先跑 `--autotune-group` 里的候选 kernel 只测 cute，选出最快的 `selected_variant`，再对最佳配置输出它和 Torch/cuBLAS/PyTorch-cuBLASLt 以及可选 C++ cuBLASLt 的对比。
 `--autotune-group joint` 使用 `mma_gemm_2cta_tma_configurable_cutedsl.py` 动态专用化 kernel；它不是 runtime 动态分支，而是在 Python 层按 config 生成 compile-time specialized CuTeDSL module。
+默认情况下，candidate 正确性验证失败会直接中断 autotune，因为这说明 kernel/config 有 bug；只有探索未知搜索空间时才建议显式加 `--skip-invalid-correctness`，此时失败候选会以 `AUTOTUNE_INVALID_CORRECTNESS` 打印并跳过。
 
 cuBLASLt C++ baseline：
 

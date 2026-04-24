@@ -520,6 +520,7 @@ def benchmark_shape_autotuned(
     cublaslt_bin: Path | None = None,
     cublaslt_algos: int = 32,
     cublaslt_workspace_mb: int = 64,
+    skip_invalid_correctness: bool = False,
 ) -> dict:
     rows = []
     for candidate in CANDIDATE_GROUPS[group]:
@@ -535,6 +536,19 @@ def benchmark_shape_autotuned(
                 cublaslt_workspace_mb,
                 False,
             )
+        except AssertionError as error:
+            if not skip_invalid_correctness:
+                raise
+            print(
+                "AUTOTUNE_INVALID_CORRECTNESS",
+                {
+                    "mnk": mnk,
+                    "name": candidate.name,
+                    "variant": candidate.variant,
+                    "reason": str(error).splitlines()[0],
+                },
+            )
+            continue
         except Exception as error:
             print(
                 "AUTOTUNE_SKIP",
@@ -691,6 +705,11 @@ def main():
         default="default",
         help="candidate group used when --variant autotuned",
     )
+    parser.add_argument(
+        "--skip-invalid-correctness",
+        action="store_true",
+        help="continue autotune when a candidate fails correctness validation",
+    )
     args = parser.parse_args()
 
     cu_driver.cuInit(0)
@@ -715,6 +734,7 @@ def main():
                 args.cublaslt_bin,
                 args.cublaslt_algos,
                 args.cublaslt_workspace_mb,
+                args.skip_invalid_correctness,
             )
             rows.append(row)
             print_result_row(row)

@@ -53,6 +53,7 @@ def autotune_shape(
     cublaslt_bin=None,
     cublaslt_algos: int = 32,
     cublaslt_workspace_mb: int = 64,
+    skip_invalid_correctness: bool = False,
 ) -> dict:
     rows = []
     for candidate in candidates:
@@ -67,6 +68,19 @@ def autotune_shape(
                 cublaslt_algos,
                 cublaslt_workspace_mb,
             )
+        except AssertionError as error:
+            if not skip_invalid_correctness:
+                raise
+            print(
+                "AUTOTUNE_INVALID_CORRECTNESS",
+                {
+                    "shape": mnk,
+                    "name": candidate.name,
+                    "variant": candidate.variant,
+                    "reason": str(error).splitlines()[0],
+                },
+            )
+            continue
         except Exception as error:
             print(
                 "AUTOTUNE_SKIP",
@@ -191,6 +205,11 @@ def main() -> None:
     )
     parser.add_argument("--cublaslt-algos", type=int, default=32)
     parser.add_argument("--cublaslt-workspace-mb", type=int, default=64)
+    parser.add_argument(
+        "--skip-invalid-correctness",
+        action="store_true",
+        help="continue autotune when a candidate fails correctness validation",
+    )
     args = parser.parse_args()
 
     candidates = _select_candidates(args.group, args.candidates)
@@ -208,6 +227,7 @@ def main() -> None:
             args.cublaslt_bin,
             args.cublaslt_algos,
             args.cublaslt_workspace_mb,
+            args.skip_invalid_correctness,
         )
         for shape in shapes
     ]
