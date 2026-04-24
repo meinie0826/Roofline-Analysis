@@ -6,7 +6,7 @@ from typing import Iterable, Tuple
 
 from cuda.bindings import driver as cu_driver
 
-from benchmark import VARIANTS, _iter_shapes, _parse_mnk, benchmark_shape
+from benchmark import VARIANTS, _iter_shapes, _parse_mnk, benchmark_candidate_shape
 from configs import CANDIDATE_GROUPS, GemmCandidate
 
 
@@ -56,16 +56,28 @@ def autotune_shape(
 ) -> dict:
     rows = []
     for candidate in candidates:
-        row = benchmark_shape(
-            candidate.variant,
-            mnk,
-            atol,
-            warmup,
-            iters,
-            cublaslt_bin,
-            cublaslt_algos,
-            cublaslt_workspace_mb,
-        )
+        try:
+            row = benchmark_candidate_shape(
+                candidate,
+                mnk,
+                atol,
+                warmup,
+                iters,
+                cublaslt_bin,
+                cublaslt_algos,
+                cublaslt_workspace_mb,
+            )
+        except ValueError as error:
+            print(
+                "AUTOTUNE_SKIP",
+                {
+                    "shape": mnk,
+                    "name": candidate.name,
+                    "variant": candidate.variant,
+                    "reason": str(error),
+                },
+            )
+            continue
         row["candidate"] = candidate.to_dict()
         rows.append(row)
         print(
@@ -83,6 +95,9 @@ def autotune_shape(
                 "speedup_vs_cublas": round(row["speedup_vs_cublas"], 6),
             },
         )
+
+    if not rows:
+        raise ValueError(f"no compatible autotune candidates for shape {mnk}")
 
     best = _best_row(rows)
     print(

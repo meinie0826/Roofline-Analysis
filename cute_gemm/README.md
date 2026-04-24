@@ -15,6 +15,7 @@
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_tile256x256x128_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_tile256x256x128_cutedsl.py): `2cta + TMA store + tile (256,256,128)` 版本
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_ws3epi_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_ws3epi_cutedsl.py): `2cta + TMA store + 3 epilogue warps` 版本
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_ws5epi_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_ws5epi_cutedsl.py): `2cta + TMA store + 5 epilogue warps` 版本
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_configurable_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_configurable_cutedsl.py): in-memory configurable kernel factory，用 `GemmConfig` 联合 sweep `tile_shape / ab_stages / epilogue_warps / tma_store`，避免继续手写大量文件
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/ref.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/ref.py): `torch` reference
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py): 正确性验证 + 性能对比，输出 Torch 分配版和预分配 cuBLAS/cuBLASLt baseline
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/configs.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/configs.py): autotune candidate 配置
@@ -50,8 +51,9 @@
 Autotune 参数说明：
 - `ab_stages` 是 compile-time tuning knob，会影响 shared storage、SMEM layout 和 `PipelineTmaUmma` stage 数。
 - `tma_store` 也是 compile-time tuning knob，会影响 epilogue SMEM 分配和 C 的 TMA store atom。
-- `tile_shape` 是 compile-time tuning knob，当前 autotune metadata 已记录，后续需要新增对应 kernel candidate 才能真正 sweep。
-- warp specialization 数量也应该调优，目前候选固定为 `1 TMA warp + 1 MMA warp + 4 epilogue warps = 192 threads`；后续可以加入 `160/192/224 threads`、`epilogue_warps=3/4/5` 等候选。
+- `tile_shape` 是 compile-time tuning knob，`joint` group 会通过 configurable factory 直接生成 in-memory 专用 kernel 做 sweep。
+- warp specialization 数量也是 compile-time tuning knob；当前 `joint` group sweep `1 TMA warp + 1 MMA warp + 3/4/5 epilogue warps`，对应 `160/192/224 threads`。
+- `joint` group 是联合调优，不再固定其他变量逐项 sweep；候选空间现在是 `tile_shape x ab_stages x epilogue_warps x {rmem_store,tma_store}`。
 
 单个 shape 正确性：
 
@@ -153,9 +155,11 @@ python3 cute_gemm/benchmark.py --variant 2cta_tma_6stage --shape-set all
 cd /Users/meiziyuan/Roofline-Analysis
 python3 cute_gemm/benchmark.py --variant autotuned --autotune-group default --shape-set all
 python3 cute_gemm/benchmark.py --variant autotuned --autotune-group default --shape-set all --cublaslt-bin cute_gemm/cublaslt_benchmark
+python3 cute_gemm/benchmark.py --variant autotuned --autotune-group joint --shapes 4096,2048,512 --warmup 50 --iters 500 --cublaslt-bin cute_gemm/cublaslt_benchmark --cublaslt-algos 64 --cublaslt-workspace-mb 256
 ```
 
-`--variant autotuned` 会对每个 shape 先跑 `--autotune-group` 里的候选 kernel，选出最快的 `selected_variant`，再输出它和 Torch/cuBLAS/PyTorch-cuBLASLt 以及可选 C++ cuBLASLt 的对比。
+`--variant autotuned` 会对每个 shape 先跑 `--autotune-group` 里的候选 kernel 只测 cute，选出最快的 `selected_variant`，再对最佳配置输出它和 Torch/cuBLAS/PyTorch-cuBLASLt 以及可选 C++ cuBLASLt 的对比。
+`--autotune-group joint` 使用 `mma_gemm_2cta_tma_configurable_cutedsl.py` 动态专用化 kernel；它不是 runtime 动态分支，而是在 Python 层按 config 生成 compile-time specialized CuTeDSL module。
 
 cuBLASLt C++ baseline：
 
@@ -173,6 +177,7 @@ python3 cute_gemm/autotune.py --group ab-stage --shape-set all
 python3 cute_gemm/autotune.py --group tma-store --shape-set all
 python3 cute_gemm/autotune.py --group default --shape-set all --warmup 10 --iters 50
 python3 cute_gemm/autotune.py --group default --shapes 4096,2048,512 --cublaslt-bin cute_gemm/cublaslt_benchmark
+python3 cute_gemm/autotune.py --group joint --shapes 4096,2048,512 --warmup 20 --iters 100 --cublaslt-bin cute_gemm/cublaslt_benchmark
 python3 cute_gemm/benchmark.py --variant autotuned --autotune-group tile-shape --shapes 4096,2048,512 --cublaslt-bin cute_gemm/cublaslt_benchmark
 python3 cute_gemm/benchmark.py --variant autotuned --autotune-group warp-spec --shapes 4096,2048,512 --cublaslt-bin cute_gemm/cublaslt_benchmark
 ```

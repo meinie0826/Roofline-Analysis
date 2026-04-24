@@ -22,6 +22,7 @@ import mma_gemm_2cta_tma_pipeline_tma_store_tile256x256x128_cutedsl as gemm_2cta
 import mma_gemm_2cta_tma_pipeline_tma_store_ws3epi_cutedsl as gemm_2cta_tma_pipeline_tma_store_ws3epi
 import mma_gemm_2cta_tma_pipeline_tma_store_ws5epi_cutedsl as gemm_2cta_tma_pipeline_tma_store_ws5epi
 from configs import CANDIDATE_GROUPS
+from mma_gemm_2cta_tma_configurable_cutedsl import GemmConfig, make_module
 from ref import (
     check_close,
     make_torch_cublas_runner,
@@ -416,6 +417,96 @@ def benchmark_shape(
     }
 
 
+
+def _module_from_candidate(candidate):
+    if candidate.factory_config is None:
+        return VARIANTS[candidate.variant]["module"]
+    return make_module(GemmConfig(**candidate.factory_config))
+
+
+def _out_dtype_from_candidate(candidate):
+    return torch.float16
+
+
+def _atol_from_candidate(candidate, atol: float | None) -> float:
+    return 1e-1 if atol is None else atol
+
+
+def benchmark_candidate_shape(
+    candidate,
+    mnk: Tuple[int, int, int],
+    atol: float | None,
+    warmup: int,
+    iters: int,
+    cublaslt_bin: Path | None = None,
+    cublaslt_algos: int = 32,
+    cublaslt_workspace_mb: int = 64,
+    include_baselines: bool = True,
+) -> dict:
+    module = _module_from_candidate(candidate)
+    module.validate_mnk(mnk)
+    a, b = make_inputs(mnk)
+    c, a_tensor, b_tensor, c_tensor = module.prepare_cute_gemm(a, b)
+
+    got = module.run_dense_gemm_prepared(c, a_tensor, b_tensor, c_tensor)
+    ref = torch_reference_gemm_with_dtype(a, b, _out_dtype_from_candidate(candidate))
+    check_close(got, ref, atol=_atol_from_candidate(candidate, atol), rtol=1e-5)
+
+    cute_ms = _time_cute_kernel(module, a, b, c, a_tensor, b_tensor, c_tensor, warmup, iters)
+    cute_tflops = _tflops(mnk, cute_ms)
+
+    if not include_baselines:
+        return {
+            "variant": candidate.variant,
+            "mnk": mnk,
+            "flops": _flops(mnk),
+            "cute_ms": cute_ms,
+            "torch_ms": None,
+            "cublas_ms": None,
+            "cublaslt_ms": None,
+            "cute_tflops": cute_tflops,
+            "torch_tflops": None,
+            "cublas_tflops": None,
+            "cublaslt_tflops": None,
+            "speedup_vs_torch": None,
+            "speedup_vs_cublas": None,
+            "speedup_vs_cublaslt": None,
+        }
+
+    torch_ms = _time_torch_kernel(
+        lambda: torch_perf_gemm_with_dtype(a, b, _out_dtype_from_candidate(candidate)),
+        warmup,
+        iters,
+    )
+    cublas_runner = make_torch_cublas_runner(a, b, _out_dtype_from_candidate(candidate))
+    cublas_ms = _time_torch_kernel(cublas_runner, warmup, iters)
+    cublaslt_ms, cublaslt_tflops = _run_cublaslt_baseline(
+        cublaslt_bin,
+        mnk,
+        warmup,
+        iters,
+        cublaslt_algos,
+        cublaslt_workspace_mb,
+    )
+    torch_tflops = _tflops(mnk, torch_ms)
+    cublas_tflops = _tflops(mnk, cublas_ms)
+    return {
+        "variant": candidate.variant,
+        "mnk": mnk,
+        "flops": _flops(mnk),
+        "cute_ms": cute_ms,
+        "torch_ms": torch_ms,
+        "cublas_ms": cublas_ms,
+        "cublaslt_ms": cublaslt_ms,
+        "cute_tflops": cute_tflops,
+        "torch_tflops": torch_tflops,
+        "cublas_tflops": cublas_tflops,
+        "cublaslt_tflops": cublaslt_tflops,
+        "speedup_vs_torch": torch_ms / cute_ms,
+        "speedup_vs_cublas": cublas_ms / cute_ms,
+        "speedup_vs_cublaslt": None if cublaslt_ms is None else cublaslt_ms / cute_ms,
+    }
+
 def _candidate_names(group: str) -> list[str]:
     return [candidate.name for candidate in CANDIDATE_GROUPS[group]]
 
@@ -433,8 +524,8 @@ def benchmark_shape_autotuned(
     rows = []
     for candidate in CANDIDATE_GROUPS[group]:
         try:
-            row = benchmark_shape(
-                candidate.variant,
+            row = benchmark_candidate_shape(
+                candidate,
                 mnk,
                 atol,
                 warmup,
@@ -442,6 +533,7 @@ def benchmark_shape_autotuned(
                 cublaslt_bin,
                 cublaslt_algos,
                 cublaslt_workspace_mb,
+                False,
             )
         except ValueError as error:
             print(
@@ -471,6 +563,25 @@ def benchmark_shape_autotuned(
         raise ValueError(f"no compatible autotune candidates for shape {mnk}")
 
     best = min(rows, key=lambda row: row["cute_ms"])
+    best_candidate = best["candidate"]
+    best_candidate_obj = next(
+        candidate
+        for candidate in CANDIDATE_GROUPS[group]
+        if candidate.name == best_candidate["name"]
+        and candidate.variant == best_candidate["variant"]
+    )
+    best = benchmark_candidate_shape(
+        best_candidate_obj,
+        mnk,
+        atol,
+        warmup,
+        iters,
+        cublaslt_bin,
+        cublaslt_algos,
+        cublaslt_workspace_mb,
+        True,
+    )
+    best["candidate"] = best_candidate
     best = dict(best)
     best["variant"] = "autotuned"
     best["selected_variant"] = best["candidate"]["variant"]

@@ -1,4 +1,5 @@
 from dataclasses import asdict, dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -13,9 +14,61 @@ class GemmCandidate:
     mma_warps: int = 1
     epilogue_warps: int = 4
     threads_per_cta: int = 192
+    factory_config: dict[str, Any] | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+def make_factory_candidate(
+    name: str,
+    *,
+    tile_shape: tuple[int, int, int] = (256, 256, 64),
+    ab_stages: int = 4,
+    epilogue_warps: int = 4,
+    use_tma_store: bool = True,
+) -> GemmCandidate:
+    return GemmCandidate(
+        name=name,
+        variant="configurable",
+        ab_stages=ab_stages,
+        use_tma_store=use_tma_store,
+        tile_shape=tile_shape,
+        epilogue_warps=epilogue_warps,
+        threads_per_cta=32 * (epilogue_warps + 2),
+        factory_config={
+            "name": name,
+            "tile_m": tile_shape[0],
+            "tile_n": tile_shape[1],
+            "tile_k": tile_shape[2],
+            "ab_stages": ab_stages,
+            "epi_warps": epilogue_warps,
+            "use_tma_store": use_tma_store,
+        },
+    )
+
+
+def make_joint_candidates() -> tuple[GemmCandidate, ...]:
+    candidates = []
+    for tile_shape in ((256, 256, 64), (256, 256, 128)):
+        for ab_stages in (2, 3, 4, 6):
+            for epilogue_warps in (3, 4, 5):
+                for use_tma_store in (False, True):
+                    store_suffix = "store" if use_tma_store else "rmem_store"
+                    name = (
+                        f"cfg_tile{tile_shape[0]}x{tile_shape[1]}x{tile_shape[2]}"
+                        f"_ab{ab_stages}_ws{epilogue_warps}epi_{store_suffix}"
+                    )
+                    candidates.append(
+                        make_factory_candidate(
+                            name,
+                            tile_shape=tile_shape,
+                            ab_stages=ab_stages,
+                            epilogue_warps=epilogue_warps,
+                            use_tma_store=use_tma_store,
+                        )
+                    )
+    return tuple(candidates)
 
 
 AB_STAGE_SWEEP = (
@@ -89,10 +142,13 @@ DEFAULT_AUTOTUNE_CANDIDATES = AB_STAGE_SWEEP + (
     ),
 )
 
+JOINT_FACTORY_SWEEP = make_joint_candidates()
+
 CANDIDATE_GROUPS = {
     "ab-stage": AB_STAGE_SWEEP,
     "tma-store": TMA_STORE_SWEEP,
     "tile-shape": TILE_SHAPE_SWEEP,
     "warp-spec": WARP_SPEC_SWEEP,
+    "joint": JOINT_FACTORY_SWEEP,
     "default": DEFAULT_AUTOTUNE_CANDIDATES,
 }
