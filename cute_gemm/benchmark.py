@@ -9,6 +9,7 @@ import mma_gemm_1cta_cutedsl as gemm_1cta
 import mma_gemm_2cta_commit_cutedsl as gemm_2cta_commit
 import mma_gemm_2cta_manual_phase_mask_cutedsl as gemm_2cta_manual
 import mma_gemm_2cta_pipeline_cutedsl as gemm_2cta_pipeline
+import mma_gemm_2cta_tma_pipeline_cutedsl as gemm_2cta_tma_pipeline
 from ref import (
     check_close,
     make_inputs,
@@ -65,6 +66,21 @@ VARIANTS: dict[str, dict] = {
     },
     "2cta_manual": {
         "module": gemm_2cta_manual,
+        "small_shapes": [
+            (256, 256, 64),
+            (512, 256, 64),
+            (512, 512, 128),
+        ],
+        "large_shapes": [
+            (1024, 1024, 256),
+            (2048, 2048, 256),
+            (4096, 2048, 512),
+        ],
+        "torch_out_dtype": torch.float16,
+        "default_atol": 1e-1,
+    },
+    "2cta_tma_pipeline": {
+        "module": gemm_2cta_tma_pipeline,
         "small_shapes": [
             (256, 256, 64),
             (512, 256, 64),
