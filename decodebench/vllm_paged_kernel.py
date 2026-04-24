@@ -94,10 +94,10 @@ class VLLMPagedDecodeKernel:
             dtype=torch.int32,
             device=self.device,
         )
-        self._populate_cache()
-        self.output, self.exp_sums, self.max_logits, self.tmp_out = self._make_outputs()
         self.k_scale = torch.tensor(1.0, dtype=torch.float32, device=self.device)
         self.v_scale = torch.tensor(1.0, dtype=torch.float32, device=self.device)
+        self._populate_cache()
+        self.output, self.exp_sums, self.max_logits, self.tmp_out = self._make_outputs()
 
     def _make_kv_cache(self):
         torch = self.torch
