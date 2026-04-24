@@ -1,0 +1,7 @@
+{
+  "NVIDIA B200|(1, 16, 2048, 128)|torch.float16|64|64|3": {
+    "block_m": 64,
+    "block_n": 64,
+    "num_stages_kv": 3
+  }
+}

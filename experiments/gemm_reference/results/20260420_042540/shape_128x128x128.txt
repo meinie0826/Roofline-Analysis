@@ -1,0 +1,7 @@
+INFO device=0 name=NVIDIA B200 sm=100 max_threads_per_block=1024 multi_processor_count=148
+CONFIG m=128 n=128 k=128 warmup=5 iters=20 block_m=16 block_n=16 alpha=1 beta=0 atol=0.001 rtol=0.001 backend=all check=1
+CHECK benchmark=bench_gemm_reference backend=naive m=128 n=128 k=128 pass=1 atol=1.000000e-03 rtol=1.000000e-03 max_abs=0.000000e+00 max_rel=0.000000e+00 l2_rel=0.000000e+00 fail_count=0
+CHECK benchmark=bench_gemm_reference backend=simt m=128 n=128 k=128 pass=1 atol=1.000000e-03 rtol=1.000000e-03 max_abs=0.000000e+00 max_rel=0.000000e+00 l2_rel=0.000000e+00 fail_count=0
+RESULT benchmark=bench_gemm_reference backend=naive m=128 n=128 k=128 warmup=5 iters=20 avg_ms=0.012005 median_ms=0.011952 min_ms=0.010784 gflops=350.929057 tflops=0.350929 checksum=-292.461313
+RESULT benchmark=bench_gemm_reference backend=simt m=128 n=128 k=128 warmup=5 iters=20 avg_ms=0.008056 median_ms=0.007920 min_ms=0.007584 gflops=529.583854 tflops=0.529584 checksum=-292.461313
+RESULT benchmark=bench_gemm_reference backend=cublas m=128 n=128 k=128 warmup=5 iters=20 avg_ms=0.013986 median_ms=0.013904 min_ms=0.011744 gflops=301.661687 tflops=0.301662 checksum=-292.461313
