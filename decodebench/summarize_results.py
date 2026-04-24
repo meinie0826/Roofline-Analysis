@@ -36,6 +36,19 @@ def short_backend(name: str | None) -> str:
     }.get(name or "-", name or "-")
 
 
+def display_backend(row: dict) -> str:
+    name = row.get("backend")
+    selected = str(row.get("selected_backend") or "")
+    if name == "flashattn_kvcache":
+        if selected.startswith("fa4"):
+            return "flash-attn-fa4"
+        if selected.startswith("fa3"):
+            return "flash-attn-fa3"
+        if selected.startswith("fa2"):
+            return "flash-attn-fa2"
+    return short_backend(name)
+
+
 def workload_key(row: dict) -> tuple:
     return (
         row.get("attention"),
@@ -81,7 +94,8 @@ def print_summary(rows: list[dict], reference_backend: str | None = None) -> Non
     for row in rows:
         groups[workload_key(row)].append(row)
 
-    print("Operator: decode_attention  Performance Test (mode=kernel, level=sota)")
+    mode = "kernel" if all(row.get("layer") == "kernel" for row in rows) else "mixed"
+    print(f"Operator: decode_attention  Performance Test (mode={mode}, level=sota)")
     print(
         f"{'Status':<12}"
         f"{'Latency (us)':>16}"
@@ -100,7 +114,7 @@ def print_summary(rows: list[dict], reference_backend: str | None = None) -> Non
             key=lambda row: (
                 row_status(row) != "SUCCESS",
                 compare_latency_us(row) if compare_latency_us(row) is not None else float("inf"),
-                short_backend(row.get("backend")),
+                display_backend(row),
             ),
         )
         for row in ordered:
@@ -116,7 +130,7 @@ def print_summary(rows: list[dict], reference_backend: str | None = None) -> Non
                 f"{format_metric(latency, 1):>16}"
                 f"{format_metric(speedup, 3):>12}"
                 f"{format_bw(cand_bw):>10}"
-                f"{short_backend(row.get('backend')):>18}  "
+                f"{display_backend(row):>18}  "
                 f"{workload_name(key)}"
             )
 

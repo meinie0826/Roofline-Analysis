@@ -146,6 +146,9 @@ def build_cmd(backend: dict, workload: dict, defaults: dict, results_dir: Path) 
 
 
 def is_supported(backend: dict, workload: dict) -> bool:
+    supported_attention = backend.get("supported_attention")
+    if supported_attention is not None and workload["attention"] not in supported_attention:
+        return False
     supported_kv_dtypes = backend.get("supported_kv_dtypes")
     if supported_kv_dtypes is not None and workload["kv_dtype"] not in supported_kv_dtypes:
         return False
@@ -188,6 +191,7 @@ def write_failure(path: Path, backend: dict, workload: dict, returncode: int, co
         "python_executable": PYTHON_BIN,
         "backend": backend["name"],
         "kernel_path": backend.get("kernel_path"),
+        "layer": backend.get("layer"),
         "workload_id": workload["id"],
         "attention": workload["attention"],
         "kv_dtype": workload["kv_dtype"],
