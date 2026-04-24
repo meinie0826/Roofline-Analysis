@@ -89,7 +89,75 @@ def format_bw(value: float | None) -> str:
     return "-" if value is None else f"{value:.0f}"
 
 
-def print_summary(rows: list[dict], reference_backend: str | None = None) -> None:
+def backend_order(name: str) -> tuple[int, str]:
+    order = {
+        "trtllm": 0,
+        "flashinfer": 1,
+        "flash-attn-fa4": 2,
+        "flash-attn-fa3": 3,
+        "flash-attn-fa2": 4,
+        "flashmla": 5,
+        "vllm-paged": 6,
+        "vllm-flash": 7,
+        "vllm-flashinfer": 8,
+    }
+    return order.get(name, 100), name
+
+
+def table_cell(row: dict | None, best_latency: float | None) -> str:
+    if row is None:
+        return "-"
+    status = row_status(row)
+    if status != "SUCCESS":
+        reason = str(row.get("short_reason") or row.get("fallback_reason") or status)
+        if "Unsupported block size" in reason:
+            return "FAIL:block"
+        if "ImportError" in reason or "ModuleNotFoundError" in reason:
+            return "FAIL:import"
+        return "FAIL"
+    latency = compare_latency_us(row)
+    if latency is None:
+        return "-"
+    if best_latency and latency > 0:
+        return f"{latency:.1f}/{best_latency / latency:.2f}x"
+    return f"{latency:.1f}"
+
+
+def print_pivot_summary(rows: list[dict]) -> None:
+    groups = defaultdict(list)
+    backends = set()
+    for row in rows:
+        groups[workload_key(row)].append(row)
+        backends.add(display_backend(row))
+
+    backend_names = sorted(backends, key=backend_order)
+    mode = "kernel" if all(row.get("layer") == "kernel" for row in rows) else "mixed"
+    print(f"Operator: decode_attention  Performance Test (mode={mode}, level=sota)")
+    print("Cell: latency_us/vs_best_x; '-' means not scheduled for that backend/workload")
+
+    workload_width = max(28, max((len(workload_name(key)) for key in groups), default=28))
+    cell_width = 16
+    header = f"{'Workload':<{workload_width}}" + "".join(f"{name:>{cell_width}}" for name in backend_names)
+    print(header)
+    print("-" * len(header))
+
+    for key in sorted(groups):
+        group = groups[key]
+        valid_rows = [row for row in group if row_status(row) == "SUCCESS"]
+        best_latency = min((compare_latency_us(row) for row in valid_rows), default=None)
+        by_backend = {}
+        for row in group:
+            backend = display_backend(row)
+            previous = by_backend.get(backend)
+            if previous is None or (compare_latency_us(row) or float("inf")) < (compare_latency_us(previous) or float("inf")):
+                by_backend[backend] = row
+        line = f"{workload_name(key):<{workload_width}}" + "".join(
+            f"{table_cell(by_backend.get(name), best_latency):>{cell_width}}" for name in backend_names
+        )
+        print(line)
+
+
+def print_long_summary(rows: list[dict]) -> None:
     groups = defaultdict(list)
     for row in rows:
         groups[workload_key(row)].append(row)
@@ -135,19 +203,27 @@ def print_summary(rows: list[dict], reference_backend: str | None = None) -> Non
             )
 
 
+def print_summary(rows: list[dict], reference_backend: str | None = None) -> None:
+    print_pivot_summary(rows)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Print compact DecodeBench result summary.")
     parser.add_argument("--results-dir", type=Path, default=Path("decodebench/results"))
     parser.add_argument("--run-id")
     parser.add_argument("--latest-run-only", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--reference-backend", default="flashinfer_paged_decode")
+    parser.add_argument("--format", choices=["pivot", "long"], default="pivot")
     args = parser.parse_args()
 
     rows = load_rows(args.results_dir, run_id=args.run_id, latest_run_only=args.latest_run_only)
     if not rows:
         print(f"No JSON results found in {args.results_dir}")
         return 1
-    print_summary(rows, args.reference_backend)
+    if args.format == "long":
+        print_long_summary(rows)
+    else:
+        print_summary(rows, args.reference_backend)
     return 0
 
 
