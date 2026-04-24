@@ -14,6 +14,8 @@
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_tma_store_cutedsl.py): `2cta + TMA load A/B + AB pipeline + TMA store C` 版本
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/ref.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/ref.py): `torch` reference
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py): 正确性验证 + 性能对比，输出 Torch 分配版和预分配 cuBLAS/cuBLASLt baseline
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/configs.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/configs.py): autotune candidate 配置
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/autotune.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/autotune.py): 逐 shape 测候选 kernel 并选择最快配置
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/run.sh](/Users/meiziyuan/Roofline-Analysis/cute_gemm/run.sh): 统一运行入口
 
 当前约束：
@@ -40,6 +42,11 @@
 6. `2cta_tma_6stage`: A/B TMA load 加 6-stage AB pipeline，确认更深 pipeline 是否被 SMEM/同步开销抵消。
 7. `2cta_tma_pipeline_tma_store`: 保持 4-stage AB pipeline，把 C 写回改成 SMEM staging + TMA store。
 8. 后续候选：2-stage/4-stage epilogue、只 multicast A/B 单边对照、tile shape sweep、persistent scheduler。
+
+Autotune 参数说明：
+- `ab_stages` 是 compile-time tuning knob，会影响 shared storage、SMEM layout 和 `PipelineTmaUmma` stage 数。
+- `tma_store` 也是 compile-time tuning knob，会影响 epilogue SMEM 分配和 C 的 TMA store atom。
+- warp specialization 数量也应该调优，目前候选固定为 `1 TMA warp + 1 MMA warp + 4 epilogue warps = 192 threads`；后续可以加入 `160/192/224 threads`、`epilogue_warps=3/4/5` 等候选。
 
 单个 shape 正确性：
 
@@ -131,3 +138,14 @@ python3 cute_gemm/benchmark.py --variant 2cta_tma_3stage --shape-set all
 python3 cute_gemm/benchmark.py --variant 2cta_tma_pipeline --shape-set all
 python3 cute_gemm/benchmark.py --variant 2cta_tma_6stage --shape-set all
 ```
+
+Autotune：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis
+python3 cute_gemm/autotune.py --group ab-stage --shape-set all
+python3 cute_gemm/autotune.py --group tma-store --shape-set all
+python3 cute_gemm/autotune.py --group default --shape-set all --warmup 10 --iters 50
+```
+
+autotune 结果会写到 `cute_gemm/autotune_results/latest.json`，同时保留带时间戳的 JSON。
