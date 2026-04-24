@@ -7,10 +7,14 @@ import json
 import os
 import shlex
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+
+from summarize_results import print_summary
 
 
 def shell(argv: list[str]) -> str:
@@ -136,6 +140,8 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--report", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--reference-backend", default="flashinfer_paged_decode")
     args = parser.parse_args()
 
     if args.dry_run == args.execute:
@@ -168,6 +174,14 @@ def main() -> int:
                     print(f"✗ {workload['id']:<28} {short_backend(backend['name'])}")
                 else:
                     print(f"✓ {workload['id']:<28} {short_backend(backend['name'])}")
+
+    if args.execute and args.report:
+        print()
+        rows = []
+        for path in sorted(args.results_dir.glob("*.json")):
+            rows.append(json.loads(path.read_text(encoding="utf-8")))
+        if rows:
+            print_summary(rows, args.reference_backend)
 
     return 1 if failures else 0
 
