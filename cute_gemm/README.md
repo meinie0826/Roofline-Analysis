@@ -47,6 +47,7 @@
 Autotune 参数说明：
 - `ab_stages` 是 compile-time tuning knob，会影响 shared storage、SMEM layout 和 `PipelineTmaUmma` stage 数。
 - `tma_store` 也是 compile-time tuning knob，会影响 epilogue SMEM 分配和 C 的 TMA store atom。
+- `tile_shape` 是 compile-time tuning knob，当前 autotune metadata 已记录，后续需要新增对应 kernel candidate 才能真正 sweep。
 - warp specialization 数量也应该调优，目前候选固定为 `1 TMA warp + 1 MMA warp + 4 epilogue warps = 192 threads`；后续可以加入 `160/192/224 threads`、`epilogue_warps=3/4/5` 等候选。
 
 单个 shape 正确性：
@@ -129,6 +130,8 @@ python3 cute_gemm/benchmark.py --variant 2cta_tma_pipeline_tma_store --shape-set
 python3 cute_gemm/benchmark.py --variant 2cta_tma_pipeline --shape-set large
 ```
 
+benchmark 输出包含 `flops`、各 backend 的 `*_tflops`，并可通过 `--cublaslt-bin cute_gemm/cublaslt_benchmark` 追加 C++ cuBLASLt baseline。
+
 AB stage sweep：
 
 ```bash
@@ -155,6 +158,7 @@ cd /Users/meiziyuan/Roofline-Analysis
 python3 cute_gemm/autotune.py --group ab-stage --shape-set all
 python3 cute_gemm/autotune.py --group tma-store --shape-set all
 python3 cute_gemm/autotune.py --group default --shape-set all --warmup 10 --iters 50
+python3 cute_gemm/autotune.py --group default --shapes 4096,2048,512 --cublaslt-bin cute_gemm/cublaslt_benchmark
 ```
 
 autotune 结果会写到 `cute_gemm/autotune_results/latest.json`，同时保留带时间戳的 JSON。

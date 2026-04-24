@@ -1,4 +1,7 @@
 import argparse
+import re
+import subprocess
+from pathlib import Path
 from typing import Iterable, Tuple
 
 import cutlass.cute as cute
@@ -178,6 +181,60 @@ VARIANTS: dict[str, dict] = {
 }
 
 
+
+def _flops(mnk: Tuple[int, int, int]) -> float:
+    m, n, k = mnk
+    return 2.0 * m * n * k
+
+
+def _tflops(mnk: Tuple[int, int, int], ms: float | None) -> float | None:
+    if ms is None or ms <= 0.0:
+        return None
+    return _flops(mnk) / (ms * 1e-3) / 1e12
+
+
+def _format_optional(value: float | None) -> str:
+    if value is None:
+        return ""
+    return f"{value:.6f}"
+
+
+def _run_cublaslt_baseline(
+    binary: Path | None,
+    mnk: Tuple[int, int, int],
+    warmup: int,
+    iters: int,
+    algos: int,
+    workspace_mb: int,
+) -> tuple[float | None, float | None]:
+    if binary is None:
+        return None, None
+    if not binary.exists():
+        raise FileNotFoundError(f"cuBLASLt benchmark binary not found: {binary}")
+
+    proc = subprocess.run(
+        [
+            str(binary),
+            "--mnk",
+            ",".join(str(x) for x in mnk),
+            "--warmup",
+            str(warmup),
+            "--iters",
+            str(iters),
+            "--algos",
+            str(algos),
+            "--workspace-mb",
+            str(workspace_mb),
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    match = re.search(r"RESULT benchmark=cublaslt .*? ms=([0-9.]+) tflops=([0-9.]+)", proc.stdout)
+    if not match:
+        raise RuntimeError(f"failed to parse cuBLASLt output:\n{proc.stdout}")
+    return float(match.group(1)), float(match.group(2))
+
 def _parse_mnk(text: str) -> Tuple[int, int, int]:
     parts = [int(x.strip()) for x in text.split(",")]
     if len(parts) != 3:
@@ -248,6 +305,9 @@ def benchmark_shape(
     atol: float | None,
     warmup: int,
     iters: int,
+    cublaslt_bin: Path | None = None,
+    cublaslt_algos: int = 32,
+    cublaslt_workspace_mb: int = 64,
 ) -> dict:
     cfg = VARIANTS[variant]
     module = cfg["module"]
@@ -279,29 +339,58 @@ def benchmark_shape(
     )
     cublas_runner = make_torch_cublas_runner(a, b, cfg["torch_out_dtype"])
     cublas_ms = _time_torch_kernel(cublas_runner, warmup, iters)
+    cublaslt_ms, cublaslt_tflops = _run_cublaslt_baseline(
+        cublaslt_bin,
+        mnk,
+        warmup,
+        iters,
+        cublaslt_algos,
+        cublaslt_workspace_mb,
+    )
 
+    cute_tflops = _tflops(mnk, cute_ms)
+    torch_tflops = _tflops(mnk, torch_ms)
+    cublas_tflops = _tflops(mnk, cublas_ms)
     return {
         "variant": variant,
         "mnk": mnk,
+        "flops": _flops(mnk),
         "cute_ms": cute_ms,
         "torch_ms": torch_ms,
         "cublas_ms": cublas_ms,
+        "cublaslt_ms": cublaslt_ms,
+        "cute_tflops": cute_tflops,
+        "torch_tflops": torch_tflops,
+        "cublas_tflops": cublas_tflops,
+        "cublaslt_tflops": cublaslt_tflops,
         "speedup_vs_torch": torch_ms / cute_ms,
         "speedup_vs_cublas": cublas_ms / cute_ms,
+        "speedup_vs_cublaslt": None if cublaslt_ms is None else cublaslt_ms / cute_ms,
     }
 
 
 def print_results(rows: Iterable[dict]) -> None:
-    print("variant,m,n,k,cute_ms,torch_ms,cublas_ms,speedup_vs_torch,speedup_vs_cublas")
+    print(
+        "variant,m,n,k,flops,"
+        "cute_ms,torch_ms,cublas_ms,cublaslt_ms,"
+        "cute_tflops,torch_tflops,cublas_tflops,cublaslt_tflops,"
+        "speedup_vs_torch,speedup_vs_cublas,speedup_vs_cublaslt"
+    )
     for row in rows:
         m, n, k = row["mnk"]
         print(
-            f"{row['variant']},{m},{n},{k},"
+            f"{row['variant']},{m},{n},{k},{row['flops']:.0f},"
             f"{row['cute_ms']:.6f},"
             f"{row['torch_ms']:.6f},"
             f"{row['cublas_ms']:.6f},"
+            f"{_format_optional(row['cublaslt_ms'])},"
+            f"{_format_optional(row['cute_tflops'])},"
+            f"{_format_optional(row['torch_tflops'])},"
+            f"{_format_optional(row['cublas_tflops'])},"
+            f"{_format_optional(row['cublaslt_tflops'])},"
             f"{row['speedup_vs_torch']:.6f},"
-            f"{row['speedup_vs_cublas']:.6f}"
+            f"{row['speedup_vs_cublas']:.6f},"
+            f"{_format_optional(row['speedup_vs_cublaslt'])}"
         )
 
 
@@ -328,6 +417,14 @@ def main():
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--iters", type=int, default=20)
     parser.add_argument("--atol", type=float, default=None)
+    parser.add_argument(
+        "--cublaslt-bin",
+        type=Path,
+        default=None,
+        help="optional path to compiled cute_gemm/cublaslt_benchmark binary",
+    )
+    parser.add_argument("--cublaslt-algos", type=int, default=32)
+    parser.add_argument("--cublaslt-workspace-mb", type=int, default=64)
     args = parser.parse_args()
 
     cu_driver.cuInit(0)
@@ -335,18 +432,34 @@ def main():
     rows = []
     for variant in _iter_variants(args.variant):
         for mnk in _iter_shapes(variant, args.shape_set, args.shapes):
-            row = benchmark_shape(variant, mnk, args.atol, args.warmup, args.iters)
+            row = benchmark_shape(
+                variant,
+                mnk,
+                args.atol,
+                args.warmup,
+                args.iters,
+                args.cublaslt_bin,
+                args.cublaslt_algos,
+                args.cublaslt_workspace_mb,
+            )
             rows.append(row)
             print(
                 "RESULT",
                 {
                     "variant": variant,
                     "mnk": mnk,
+                    "flops": row["flops"],
                     "cute_ms": round(row["cute_ms"], 6),
                     "torch_ms": round(row["torch_ms"], 6),
                     "cublas_ms": round(row["cublas_ms"], 6),
+                    "cublaslt_ms": None if row["cublaslt_ms"] is None else round(row["cublaslt_ms"], 6),
+                    "cute_tflops": None if row["cute_tflops"] is None else round(row["cute_tflops"], 3),
+                    "torch_tflops": None if row["torch_tflops"] is None else round(row["torch_tflops"], 3),
+                    "cublas_tflops": None if row["cublas_tflops"] is None else round(row["cublas_tflops"], 3),
+                    "cublaslt_tflops": None if row["cublaslt_tflops"] is None else round(row["cublaslt_tflops"], 3),
                     "speedup_vs_torch": round(row["speedup_vs_torch"], 6),
                     "speedup_vs_cublas": round(row["speedup_vs_cublas"], 6),
+                    "speedup_vs_cublaslt": None if row["speedup_vs_cublaslt"] is None else round(row["speedup_vs_cublaslt"], 6),
                 },
             )
     print_results(rows)

@@ -50,10 +50,22 @@ def autotune_shape(
     atol: float | None,
     warmup: int,
     iters: int,
+    cublaslt_bin=None,
+    cublaslt_algos: int = 32,
+    cublaslt_workspace_mb: int = 64,
 ) -> dict:
     rows = []
     for candidate in candidates:
-        row = benchmark_shape(candidate.variant, mnk, atol, warmup, iters)
+        row = benchmark_shape(
+            candidate.variant,
+            mnk,
+            atol,
+            warmup,
+            iters,
+            cublaslt_bin,
+            cublaslt_algos,
+            cublaslt_workspace_mb,
+        )
         row["candidate"] = candidate.to_dict()
         rows.append(row)
         print(
@@ -63,7 +75,11 @@ def autotune_shape(
                 "name": candidate.name,
                 "variant": candidate.variant,
                 "cute_ms": round(row["cute_ms"], 6),
+                "cute_tflops": None if row["cute_tflops"] is None else round(row["cute_tflops"], 3),
                 "cublas_ms": round(row["cublas_ms"], 6),
+                "cublas_tflops": None if row["cublas_tflops"] is None else round(row["cublas_tflops"], 3),
+                "cublaslt_ms": None if row["cublaslt_ms"] is None else round(row["cublaslt_ms"], 6),
+                "cublaslt_tflops": None if row["cublaslt_tflops"] is None else round(row["cublaslt_tflops"], 3),
                 "speedup_vs_cublas": round(row["speedup_vs_cublas"], 6),
             },
         )
@@ -76,6 +92,7 @@ def autotune_shape(
             "name": best["candidate"]["name"],
             "variant": best["variant"],
             "cute_ms": round(best["cute_ms"], 6),
+            "cute_tflops": None if best["cute_tflops"] is None else round(best["cute_tflops"], 3),
         },
     )
     return {"mnk": mnk, "best": best, "candidates": rows}
@@ -93,8 +110,14 @@ def write_results(result: dict, output: Path | None) -> Path:
     return output
 
 
+def _fmt(value: float | None) -> str:
+    if value is None:
+        return ""
+    return f"{value:.6f}"
+
+
 def print_summary(results: list[dict]) -> None:
-    print("mnk,best_name,best_variant,cute_ms,cublas_ms,speedup_vs_cublas")
+    print("mnk,best_name,best_variant,flops,cute_ms,cute_tflops,cublas_ms,cublas_tflops,cublaslt_ms,cublaslt_tflops,speedup_vs_cublas,speedup_vs_cublaslt")
     for result in results:
         best = result["best"]
         m, n, k = result["mnk"]
@@ -102,9 +125,15 @@ def print_summary(results: list[dict]) -> None:
             f"{m}x{n}x{k},"
             f"{best['candidate']['name']},"
             f"{best['variant']},"
+            f"{best['flops']:.0f},"
             f"{best['cute_ms']:.6f},"
+            f"{_fmt(best['cute_tflops'])},"
             f"{best['cublas_ms']:.6f},"
-            f"{best['speedup_vs_cublas']:.6f}"
+            f"{_fmt(best['cublas_tflops'])},"
+            f"{_fmt(best['cublaslt_ms'])},"
+            f"{_fmt(best['cublaslt_tflops'])},"
+            f"{best['speedup_vs_cublas']:.6f},"
+            f"{_fmt(best['speedup_vs_cublaslt'])}"
         )
 
 
@@ -138,6 +167,14 @@ def main() -> None:
     parser.add_argument("--iters", type=int, default=20)
     parser.add_argument("--atol", type=float, default=None)
     parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument(
+        "--cublaslt-bin",
+        type=Path,
+        default=None,
+        help="optional path to compiled cute_gemm/cublaslt_benchmark binary",
+    )
+    parser.add_argument("--cublaslt-algos", type=int, default=32)
+    parser.add_argument("--cublaslt-workspace-mb", type=int, default=64)
     args = parser.parse_args()
 
     candidates = _select_candidates(args.group, args.candidates)
@@ -146,7 +183,16 @@ def main() -> None:
     cu_driver.cuInit(0)
     shapes = list(_iter_shapes(args.base_variant, args.shape_set, args.shapes))
     results = [
-        autotune_shape(shape, candidates, args.atol, args.warmup, args.iters)
+        autotune_shape(
+            shape,
+            candidates,
+            args.atol,
+            args.warmup,
+            args.iters,
+            args.cublaslt_bin,
+            args.cublaslt_algos,
+            args.cublaslt_workspace_mb,
+        )
         for shape in shapes
     ]
     payload = {
