@@ -48,11 +48,11 @@ BACKENDS = [
         },
     },
     {
-        "name": "vllm_flash",
-        "layer": "kernel_or_framework",
+        "name": "vllm_paged_decode",
+        "layer": "kernel",
         "enabled": True,
-        "kernel_path": "vLLM attention_benchmarks backend=flash",
-        "status": "enabled_for_bf16_dense_kv_workloads",
+        "kernel_path": "vllm._custom_ops.paged_attention_v2",
+        "status": "implemented_if_vllm_is_installed",
         "supported_kv_dtypes": {"bf16", "fp16"},
         "supported_workload_ids": {
             "mha_bf16_b16_ctx4k_p64",
@@ -60,15 +60,19 @@ BACKENDS = [
         },
     },
     {
+        "name": "vllm_flash",
+        "layer": "kernel_or_framework",
+        "enabled": False,
+        "kernel_path": "vLLM attention_benchmarks backend=flash",
+        "status": "disabled_because_not_kernel_only",
+        "supported_kv_dtypes": {"bf16", "fp16"},
+    },
+    {
         "name": "vllm_flashinfer",
         "layer": "kernel_or_framework",
-        "enabled": True,
+        "enabled": False,
         "kernel_path": "vLLM attention_benchmarks backend=flashinfer",
-        "status": "enabled_for_bf16_dense_kv_workloads",
-        "supported_workload_ids": {
-            "mha_bf16_b16_ctx4k_p64",
-            "gqa_bf16_b64_ctx4k_p64",
-        },
+        "status": "disabled_because_not_kernel_only",
     },
 ]
 
