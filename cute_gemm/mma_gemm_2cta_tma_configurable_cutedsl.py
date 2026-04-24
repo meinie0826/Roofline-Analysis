@@ -1,6 +1,11 @@
 from dataclasses import dataclass
 from functools import lru_cache
+import hashlib
+import importlib.util
 from pathlib import Path
+import re
+import sys
+import tempfile
 from types import ModuleType
 
 
@@ -77,10 +82,32 @@ def _specialize_source(config: GemmConfig) -> str:
     return source
 
 
+def _module_cache_path(config: GemmConfig) -> Path:
+    safe_name = re.sub(r"[^0-9A-Za-z_]", "_", config.name)
+    digest = hashlib.sha1(repr(config).encode("utf-8")).hexdigest()[:12]
+    cache_dir = Path(tempfile.gettempdir()) / "cute_gemm_configurable"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir / f"{safe_name}_{digest}.py"
+
+
+def _write_module_source(config: GemmConfig) -> Path:
+    path = _module_cache_path(config)
+    source = _specialize_source(config)
+    if not path.exists() or path.read_text(encoding="utf-8") != source:
+        path.write_text(source, encoding="utf-8")
+    return path
+
+
 @lru_cache(maxsize=None)
 def make_module(config: GemmConfig) -> ModuleType:
-    module = ModuleType(f"cute_gemm_config_{config.name}")
-    module.__file__ = f"<cute_gemm_config:{config.name}>"
-    exec(compile(_specialize_source(config), module.__file__, "exec"), module.__dict__)
+    path = _write_module_source(config)
+    module_name = f"cute_gemm_config_{path.stem}"
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"failed to create module spec for {path}")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
     module.CONFIG = config
     return module
