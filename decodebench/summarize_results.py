@@ -21,6 +21,8 @@ def short_backend(name: str | None) -> str:
     return {
         "flashinfer_paged_decode": "flashinfer",
         "flashinfer_trtllm_decode": "trtllm",
+        "flashattn_kvcache": "flash-attn",
+        "flashmla_decode": "flashmla",
         "vllm_flash": "vllm-flash",
         "vllm_flashinfer": "vllm-flashinfer",
     }.get(name or "-", name or "-")

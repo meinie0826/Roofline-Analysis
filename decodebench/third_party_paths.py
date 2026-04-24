@@ -38,3 +38,14 @@ def find_vllm_python(explicit: str | None = None) -> str:
     candidates = [THIRD_PARTY_ROOT / "vllm" / ".venv" / "bin" / "python"]
     path = _existing_path(candidates)
     return str(path) if path is not None else "python3"
+
+
+def find_flash_attention_root(explicit: str | None = None) -> Path:
+    if explicit:
+        return Path(explicit).expanduser()
+
+    env_path = os.environ.get("FLASH_ATTN_SRC_DIR")
+    if env_path:
+        return Path(env_path).expanduser()
+
+    return THIRD_PARTY_ROOT / "flash-attention"

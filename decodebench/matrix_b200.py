@@ -37,6 +37,17 @@ BACKENDS = [
         },
     },
     {
+        "name": "flashattn_kvcache",
+        "layer": "kernel",
+        "enabled": True,
+        "kernel_path": "flash_attn.flash_attn_with_kvcache",
+        "status": "implemented_if_flash_attention_is_installed",
+        "supported_workload_ids": {
+            "mha_bf16_b16_ctx4k_p64",
+            "gqa_bf16_b64_ctx4k_p64",
+        },
+    },
+    {
         "name": "vllm_flash",
         "layer": "kernel_or_framework",
         "enabled": False,
