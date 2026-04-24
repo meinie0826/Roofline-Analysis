@@ -210,6 +210,23 @@ def external_cmd(backend: dict, workload: dict, defaults: dict, output: Path) ->
     ]
 
 
+def trtllm_native_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
+    return [
+        PYTHON_BIN,
+        "decodebench/trtllm_native_benchmark.py",
+        "--batch-size", str(workload["batch_size"]),
+        "--context-len", str(workload["context_len"]),
+        "--num-q-heads", str(workload["num_q_heads"]),
+        "--num-kv-heads", str(workload["num_kv_heads"]),
+        "--head-dim", str(workload["head_dim"]),
+        "--kv-dtype", workload["kv_dtype"],
+        "--page-size", str(workload["page_size"]),
+        "--warmup-steps", str(defaults.get("warmup_steps", 10)),
+        "--repeat", str(defaults.get("repeat", 50)),
+        "--output", str(output),
+    ]
+
+
 def build_cmd(backend: dict, workload: dict, defaults: dict, results_dir: Path) -> list[str]:
     output = results_dir / f'{backend["name"]}__{workload["id"]}.json'
     if backend["name"] == "flashinfer_paged_decode":
@@ -236,7 +253,9 @@ def build_cmd(backend: dict, workload: dict, defaults: dict, results_dir: Path) 
         return torch_sdpa_cmd(workload, defaults, output, "cudnn")
     if backend["name"] == "torch_sdpa_flash":
         return torch_sdpa_cmd(workload, defaults, output, "flash")
-    if backend["name"] in {"tensorrt_llm_native", "sglang_serving"}:
+    if backend["name"] == "tensorrt_llm_native":
+        return trtllm_native_cmd(workload, defaults, output)
+    if backend["name"] == "sglang_serving":
         return external_cmd(backend, workload, defaults, output)
     raise ValueError(f'Backend not implemented yet: {backend["name"]}')
 

@@ -4,9 +4,8 @@ This matrix is intentionally separate from the kernel-only SOTA matrix. It is
 for dense PyTorch SDPA/cuDNN references and framework/native runners whose
 measurement boundaries are not identical to the direct kernel wrappers.
 
-External backends are enabled by setting command-template environment variables:
+External serving backends are enabled by setting command-template environment variables:
 
-- ``TRTLLM_NATIVE_BENCH_CMD`` for TensorRT-LLM's native benchmark harness.
 - ``SGLANG_BENCH_CMD`` for an SGLang serving/paged decode benchmark harness.
 
 Templates receive these placeholders: ``{batch_size}``, ``{context_len}``,
@@ -56,14 +55,13 @@ BACKENDS = [
     },
     {
         "name": "tensorrt_llm_native",
-        "layer": "native_framework_benchmark",
-        "enabled": bool(os.environ.get("TRTLLM_NATIVE_BENCH_CMD")),
-        "kernel_path": "TensorRT-LLM native benchmark command",
-        "status": "enabled_when_TRTLLM_NATIVE_BENCH_CMD_is_set",
-        "command_template_env": "TRTLLM_NATIVE_BENCH_CMD",
-        "supported_attention": {"MHA", "GQA", "MQA", "MLA"},
-        "supported_kv_dtypes": {"bf16", "fp16", "fp8"},
-        "supported_page_sizes": {64, 128},
+        "layer": "kernel",
+        "enabled": True,
+        "kernel_path": "tensorrt_llm._torch.attention_backend.trtllm.TrtllmAttentionWrapper native thop.attention",
+        "status": "implemented_if_tensorrt_llm_is_installed",
+        "supported_attention": {"MHA", "GQA", "MQA"},
+        "supported_kv_dtypes": {"bf16", "fp16"},
+        "supported_page_sizes": {16, 32, 64, 128},
     },
     {
         "name": "sglang_serving",

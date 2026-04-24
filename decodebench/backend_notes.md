@@ -23,7 +23,7 @@ Use `decodebench/matrix_b200_framework.py` for non-kernel-only comparisons:
 - `torch_sdpa_cudnn`: PyTorch SDPA forced to cuDNN attention when available.
 - `torch_sdpa_flash`: PyTorch SDPA forced to FlashAttention backend when available.
 - `torch_sdpa_auto`: PyTorch SDPA default dispatcher reference.
-- `tensorrt_llm_native`: external TensorRT-LLM native command adapter. This is separate from `flashinfer_trtllm_decode` so it can bypass FlashInfer wrapper dispatch limits.
+- `tensorrt_llm_native`: built-in TensorRT-LLM native `TrtllmAttentionWrapper` benchmark. It forces `TRTLLM_ENABLE_TRTLLM_GEN_ATTENTION=0`, so it bypasses the FlashInfer TRTLLM-GEN wrapper dispatch path.
 - `sglang_serving`: external SGLang command adapter for framework/serving measurements.
 
 Example SDPA run:
@@ -32,10 +32,9 @@ Example SDPA run:
 python decodebench/run_matrix.py --config decodebench/matrix_b200_framework.py --execute --resume
 ```
 
-TensorRT-LLM native and SGLang are enabled only when their command template env vars are set. The template must write DecodeBench-compatible JSON to `{output}` with at least `compare_latency_us` or `kernel_latency_p50_us`. TensorRT-LLM native templates can also use MLA placeholders `{head_dim_v}`, `{qk_nope_head_dim}`, `{kv_lora_rank}`, and `{qk_rope_head_dim}`.
+SGLang is enabled only when its command template env var is set. The template must write DecodeBench-compatible JSON to `{output}` with at least `compare_latency_us` or `kernel_latency_p50_us`.
 
 ```bash
-export TRTLLM_NATIVE_BENCH_CMD='python /path/to/trtllm_native_decode.py --batch-size {batch_size} --context-len {context_len} --num-q-heads {num_q_heads} --num-kv-heads {num_kv_heads} --head-dim {head_dim} --kv-dtype {kv_dtype} --page-size {page_size} --warmup {warmup_steps} --repeat {repeat} --output {output}'
 export SGLANG_BENCH_CMD='python /path/to/sglang_decode.py --batch-size {batch_size} --context-len {context_len} --num-q-heads {num_q_heads} --num-kv-heads {num_kv_heads} --head-dim {head_dim} --kv-dtype {kv_dtype} --page-size {page_size} --warmup {warmup_steps} --repeat {repeat} --output {output}'
 python decodebench/run_matrix.py --config decodebench/matrix_b200_framework.py --execute --resume
 ```
