@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from collections import defaultdict
 from pathlib import Path
 
@@ -41,15 +42,20 @@ def workload_name(key: tuple) -> str:
 
 
 def compare_latency_us(row: dict) -> float | None:
-    return row.get("compare_latency_us") or row.get("kernel_latency_p50_us")
+    value = row.get("compare_latency_us") or row.get("kernel_latency_p50_us")
+    if not isinstance(value, (int, float)) or not math.isfinite(value):
+        return None
+    return float(value)
 
 
-def failed_rows(group: list[dict]) -> list[dict]:
-    return [row for row in group if row.get("status") == "failed"]
-
-
-def ok_rows(group: list[dict]) -> list[dict]:
-    return [row for row in group if row.get("status") != "failed" and compare_latency_us(row) is not None]
+def row_status(row: dict) -> str:
+    if row.get("status") == "failed":
+        return "FAILED"
+    if row.get("fallback"):
+        return "FALLBACK"
+    if compare_latency_us(row) is None:
+        return "INVALID"
+    return "SUCCESS"
 
 
 def format_metric(value: float | None, digits: int = 3) -> str:
@@ -60,7 +66,7 @@ def format_bw(value: float | None) -> str:
     return "-" if value is None else f"{value:.0f}"
 
 
-def print_summary(rows: list[dict], reference_backend: str) -> None:
+def print_summary(rows: list[dict], reference_backend: str | None = None) -> None:
     groups = defaultdict(list)
     for row in rows:
         groups[workload_key(row)].append(row)
@@ -68,36 +74,38 @@ def print_summary(rows: list[dict], reference_backend: str) -> None:
     print("Operator: decode_attention  Performance Test (mode=kernel, level=sota)")
     print(
         f"{'Status':<12}"
-        f"{'Ref Latency (us)':>18}"
-        f"{'Cand Latency (us)':>20}"
-        f"{'Cand Speedup':>16}"
-        f"{'Ref GB/s':>12}"
-        f"{'Cand GB/s':>12}"
+        f"{'Latency (us)':>16}"
+        f"{'Vs Best':>12}"
+        f"{'GB/s':>10}"
         f"{'Compare':>18}  "
         f"Workload Detail"
     )
-    print("-" * 140)
+    print("-" * 108)
     for key in sorted(groups):
         group = groups[key]
-        ref = next((row for row in group if row.get("backend") == reference_backend), None)
-        ref_latency = compare_latency_us(ref) if ref else None
-        ref_bw = ref.get("approx_effective_kv_bandwidth_gb_s") if ref else None
-        ordered = sorted(group, key=lambda row: short_backend(row.get("backend")))
+        valid_rows = [row for row in group if row_status(row) == "SUCCESS"]
+        best_latency = min((compare_latency_us(row) for row in valid_rows), default=None)
+        ordered = sorted(
+            group,
+            key=lambda row: (
+                row_status(row) != "SUCCESS",
+                compare_latency_us(row) if compare_latency_us(row) is not None else float("inf"),
+                short_backend(row.get("backend")),
+            ),
+        )
         for row in ordered:
-            cand_latency = compare_latency_us(row)
+            latency = compare_latency_us(row)
             cand_bw = row.get("approx_effective_kv_bandwidth_gb_s")
-            status = "FAILED" if row.get("status") == "failed" else "SUCCESS"
-            if status == "SUCCESS" and ref_latency and cand_latency:
-                speedup = ref_latency / cand_latency
+            status = row_status(row)
+            if status == "SUCCESS" and best_latency and latency:
+                speedup = best_latency / latency
             else:
                 speedup = None
             print(
                 f"{status:<12}"
-                f"{format_metric(ref_latency, 1):>18}"
-                f"{format_metric(cand_latency, 1):>20}"
-                f"{format_metric(speedup):>16}"
-                f"{format_bw(ref_bw):>12}"
-                f"{format_bw(cand_bw):>12}"
+                f"{format_metric(latency, 1):>16}"
+                f"{format_metric(speedup, 3):>12}"
+                f"{format_bw(cand_bw):>10}"
                 f"{short_backend(row.get('backend')):>18}  "
                 f"{workload_name(key)}"
             )

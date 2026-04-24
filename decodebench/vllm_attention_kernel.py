@@ -44,12 +44,16 @@ class VLLMAttentionBenchmark:
         self.python_bin = python_bin
 
     def command(self, output_json: Path, repeats: int, warmup_steps: int) -> list[str]:
+        backend_name = {
+            "flash": "FLASH_ATTN",
+            "flashinfer": "FLASHINFER",
+        }.get(self.backend, self.backend)
         kv_cache_dtype = "fp8" if self.shape.kv_dtype == "fp8" else "auto"
         return [
             self.python_bin,
             "benchmark.py",
             "--backend",
-            self.backend,
+            backend_name,
             "--batch-specs",
             make_batch_spec(self.shape),
             "--num-layers",

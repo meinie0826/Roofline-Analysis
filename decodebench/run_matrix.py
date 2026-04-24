@@ -181,7 +181,7 @@ def main() -> int:
         for path in sorted(args.results_dir.glob("*.json")):
             rows.append(json.loads(path.read_text(encoding="utf-8")))
         if rows:
-            print_summary(rows, args.reference_backend)
+            print_summary(rows)
 
     return 1 if failures else 0
 
