@@ -1,6 +1,19 @@
-from typing import Tuple
+from typing import Any, Tuple
 
 import torch
+
+
+def _to_torch_dtype(dtype: Any) -> torch.dtype:
+    if isinstance(dtype, torch.dtype):
+        return dtype
+    dtype_name = getattr(dtype, "__name__", None) or str(dtype)
+    if "Float16" in dtype_name or "float16" in dtype_name:
+        return torch.float16
+    if "Float32" in dtype_name or "float32" in dtype_name:
+        return torch.float32
+    if "BFloat16" in dtype_name or "bfloat16" in dtype_name:
+        return torch.bfloat16
+    raise TypeError(f"unsupported dtype for torch reference: {dtype!r}")
 
 
 def make_inputs(mnk: Tuple[int, int, int], seed: int = 0):
@@ -20,6 +33,7 @@ def torch_reference_gemm_with_dtype(
     b: torch.Tensor,
     out_dtype: torch.dtype,
 ) -> torch.Tensor:
+    out_dtype = _to_torch_dtype(out_dtype)
     out = torch.einsum("mk,nk->mn", a.float(), b.float())
     return out.to(out_dtype)
 
@@ -29,6 +43,7 @@ def torch_perf_gemm_with_dtype(
     b: torch.Tensor,
     out_dtype: torch.dtype,
 ) -> torch.Tensor:
+    out_dtype = _to_torch_dtype(out_dtype)
     if out_dtype == torch.float16:
         return torch.mm(a, b.t())
 
@@ -46,6 +61,7 @@ def make_torch_cublas_runner(
     b: torch.Tensor,
     out_dtype: torch.dtype,
 ):
+    out_dtype = _to_torch_dtype(out_dtype)
     b_t = b.t()
 
     if out_dtype == torch.float16:
