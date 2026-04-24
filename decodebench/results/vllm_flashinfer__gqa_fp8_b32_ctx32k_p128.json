@@ -1,0 +1,15 @@
+{
+  "status": "failed",
+  "timestamp": "2026-04-24T08:40:21.313417+00:00",
+  "backend": "vllm_flashinfer",
+  "kernel_path": "vLLM attention_benchmarks backend=flashinfer",
+  "workload_id": "gqa_fp8_b32_ctx32k_p128",
+  "attention": "GQA",
+  "kv_dtype": "fp8",
+  "page_size": 128,
+  "batch_size": 32,
+  "context_len": 32768,
+  "returncode": 1,
+  "command": "python3 decodebench/vllm_attention_benchmark.py --backend flashinfer --batch-size 32 --context-len 32768 --num-q-heads 32 --num-kv-heads 8 --head-dim 128 --kv-dtype fp8 --page-size 128 --warmup-steps 20 --repeat 100 --output /workspace/Roofline-Analysis/decodebench/results/vllm_flashinfer__gqa_fp8_b32_ctx32k_p128.json",
+  "output": "Traceback (most recent call last):\n  File \"/workspace/Roofline-Analysis/decodebench/vllm_attention_benchmark.py\", line 87, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/vllm_attention_benchmark.py\", line 51, in main\n    row = bench.run(repeats=args.repeat, warmup_steps=args.warmup_steps)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/vllm_attention_kernel.py\", line 77, in run\n    raise FileNotFoundError(f\"vLLM benchmark dir not found: {self.benchmark_dir}\")\nFileNotFoundError: vLLM benchmark dir not found: ../vllm/benchmarks/attention_benchmarks\n"
+}

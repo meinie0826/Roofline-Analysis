@@ -1,0 +1,15 @@
+{
+  "status": "failed",
+  "timestamp": "2026-04-24T08:39:38.476863+00:00",
+  "backend": "flashinfer_paged_decode",
+  "kernel_path": "FlashInfer BatchDecodeWithPagedKVCacheWrapper / XQA",
+  "workload_id": "mqa_fp8_b128_ctx8k_p64",
+  "attention": "MQA",
+  "kv_dtype": "fp8",
+  "page_size": 64,
+  "batch_size": 128,
+  "context_len": 8192,
+  "returncode": 1,
+  "command": "python3 decodebench/flashinfer_benchmark.py --batch-size 128 --context-len 8192 --num-q-heads 32 --num-kv-heads 1 --head-dim 128 --kv-dtype fp8 --page-size 64 --warmup-steps 20 --repeat 100 --output /workspace/Roofline-Analysis/decodebench/results/flashinfer_paged_decode__mqa_fp8_b128_ctx8k_p64.json",
+  "output": "Traceback (most recent call last):\n  File \"/workspace/Roofline-Analysis/decodebench/flashinfer_benchmark.py\", line 109, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/flashinfer_benchmark.py\", line 64, in main\n    kernel = FlashInferPagedDecodeKernel(shape)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/flashinfer_kernel.py\", line 73, in __init__\n    self.wrapper = self._make_wrapper()\n                   ^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/flashinfer_kernel.py\", line 101, in _make_wrapper\n    wrapper.plan(\n  File \"/workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/flashinfer/decode.py\", line 1126, in plan\n    self._plan_info = self._cached_module.plan(\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"python/tvm_ffi/cython/function.pxi\", line 929, in tvm_ffi.core.Function.__call__\nRuntimeError: Error in function 'operator()' at /root/.cache/flashinfer/0.6.8.post1/100a/generated/batch_decode_with_kv_cache_dtype_q_f16_dtype_kv_e4m3_dtype_o_f16_dtype_idx_i32_head_dim_qk_128_head_dim_vo_128_posenc_0_use_swa_False_use_logits_cap_False/batch_decode.cu:63: Unsupported group_size: 32\n"
+}
