@@ -82,10 +82,10 @@ def main() -> int:
         "approx_kv_bytes_read": shape.kv_bytes,
         "approx_effective_kv_bandwidth_gb_s": bandwidth,
         "peak_allocated_gb": peak_allocated_gb,
-        "selected_backend": f"flash_attn_with_kvcache[{kernel.cache_table_arg}]",
+        "selected_backend": f"{kernel.flash_attn_api}[{kernel.cache_table_arg}]",
         "fallback": False,
         "fallback_reason": None,
-        "notes": "Paged KV-cache decode benchmark via flash_attn_with_kvcache with block/page table enabled.",
+        "notes": "Paged KV-cache decode benchmark via FlashAttention FA4 when available, otherwise FA3/FA2 fallback.",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
