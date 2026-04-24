@@ -19,7 +19,6 @@ def load_rows(results_dir: Path) -> list[dict]:
 def short_backend(name: str | None) -> str:
     return {
         "flashinfer_paged_decode": "flashinfer",
-        "torch_sdpa_decode": "sdpa",
     }.get(name or "-", name or "-")
 
 
@@ -38,15 +37,39 @@ def workload_name(key: tuple) -> str:
     return f"{attention:<3} {kv_dtype:<4} b{batch_size:<3} ctx{context_len:<5} p{page_size:<3}"
 
 
-def row_summary(row: dict, best_us: float | None) -> str:
-    if row.get("status") == "failed":
-        return f"{short_backend(row.get('backend'))}: FAIL"
-    p50 = row.get("kernel_latency_p50_us")
-    bandwidth = row.get("approx_effective_kv_bandwidth_gb_s")
-    if p50 is None:
-        return f"{short_backend(row.get('backend'))}: -"
-    tag = "best" if best_us == p50 else f"{p50 / best_us:.2f}x" if best_us else "-"
-    return f"{short_backend(row.get('backend'))}: {p50:.1f}us, {bandwidth:.0f}GB/s, {tag}"
+def ok_rows(group: list[dict]) -> list[dict]:
+    return [row for row in group if row.get("status") != "failed" and row.get("kernel_latency_p50_us") is not None]
+
+
+def failed_rows(group: list[dict]) -> list[dict]:
+    return [row for row in group if row.get("status") == "failed"]
+
+
+def winner_summary(group: list[dict]) -> str:
+    valid = sorted(ok_rows(group), key=lambda row: row["kernel_latency_p50_us"])
+    failed = failed_rows(group)
+    if not valid:
+        if failed:
+            names = ", ".join(short_backend(row.get("backend")) for row in failed)
+            return f"FAIL ({names})"
+        return "-"
+
+    winner = valid[0]
+    winner_text = (
+        f"winner {short_backend(winner.get('backend'))}: "
+        f"{winner['kernel_latency_p50_us']:.1f}us, "
+        f"{winner['approx_effective_kv_bandwidth_gb_s']:.0f}GB/s"
+    )
+
+    if len(valid) == 1 and not failed:
+        return winner_text
+
+    parts = [winner_text]
+    for row in valid[1:]:
+        parts.append(f"{short_backend(row.get('backend'))} {row['kernel_latency_p50_us'] / winner['kernel_latency_p50_us']:.2f}x")
+    for row in failed:
+        parts.append(f"{short_backend(row.get('backend'))} FAIL")
+    return " | ".join(parts)
 
 
 def print_summary(rows: list[dict]) -> None:
@@ -54,17 +77,10 @@ def print_summary(rows: list[dict]) -> None:
     for row in rows:
         groups[workload_key(row)].append(row)
 
-    print(f"{'workload':<30} result")
-    print("-" * 96)
+    print(f"{'workload':<30} summary")
+    print("-" * 88)
     for key in sorted(groups):
-        group = sorted(
-            groups[key],
-            key=lambda row: row.get("kernel_latency_p50_us") if row.get("kernel_latency_p50_us") is not None else float("inf"),
-        )
-        ok_latencies = [row["kernel_latency_p50_us"] for row in group if row.get("kernel_latency_p50_us") is not None]
-        best_us = min(ok_latencies) if ok_latencies else None
-        result = " | ".join(row_summary(row, best_us) for row in group)
-        print(f"{workload_name(key):<30} {result}")
+        print(f"{workload_name(key):<30} {winner_summary(groups[key])}")
 
 
 def main() -> int:

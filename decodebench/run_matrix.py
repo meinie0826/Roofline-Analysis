@@ -34,29 +34,10 @@ def flashinfer_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
     ]
 
 
-def torch_sdpa_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
-    return [
-        "python3",
-        "decodebench/torch_sdpa_benchmark.py",
-        "--batch-size", str(workload["batch_size"]),
-        "--context-len", str(workload["context_len"]),
-        "--num-q-heads", str(workload["num_q_heads"]),
-        "--num-kv-heads", str(workload["num_kv_heads"]),
-        "--head-dim", str(workload["head_dim"]),
-        "--kv-dtype", workload["kv_dtype"],
-        "--page-size", str(workload["page_size"]),
-        "--warmup-steps", str(defaults.get("warmup_steps", 10)),
-        "--repeat", str(defaults.get("repeat", 50)),
-        "--output", str(output),
-    ]
-
-
 def build_cmd(backend: dict, workload: dict, defaults: dict, results_dir: Path) -> list[str]:
     output = results_dir / f'{backend["name"]}__{workload["id"]}.json'
     if backend["name"] == "flashinfer_paged_decode":
         return flashinfer_cmd(workload, defaults, output)
-    if backend["name"] == "torch_sdpa_decode":
-        return torch_sdpa_cmd(workload, defaults, output)
     raise ValueError(f'Backend not implemented yet: {backend["name"]}')
 
 
@@ -72,7 +53,6 @@ def output_path(backend: dict, workload: dict, results_dir: Path) -> Path:
 def short_backend(name: str) -> str:
     return {
         "flashinfer_paged_decode": "flashinfer",
-        "torch_sdpa_decode": "sdpa",
     }.get(name, name)
 
 
