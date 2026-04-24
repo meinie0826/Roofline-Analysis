@@ -22,7 +22,6 @@ import mma_gemm_2cta_tma_pipeline_tma_store_tile256x256x128_cutedsl as gemm_2cta
 import mma_gemm_2cta_tma_pipeline_tma_store_ws3epi_cutedsl as gemm_2cta_tma_pipeline_tma_store_ws3epi
 import mma_gemm_2cta_tma_pipeline_tma_store_ws5epi_cutedsl as gemm_2cta_tma_pipeline_tma_store_ws5epi
 from configs import CANDIDATE_GROUPS
-from mma_gemm_2cta_tma_configurable_cutedsl import GemmConfig, make_module
 from ref import (
     check_close,
     make_torch_cublas_runner,
@@ -247,6 +246,20 @@ def _format_optional(value: float | None) -> str:
     return f"{value:.6f}"
 
 
+def _format_metric(value: float | None, digits: int = 6) -> str:
+    if value is None:
+        return "-"
+    return f"{value:.{digits}f}"
+
+
+def _display_variant(row: dict) -> str:
+    if row["variant"] == "autotuned":
+        selected_variant = row.get("selected_variant") or "-"
+        selected_name = row.get("selected_name") or "-"
+        return f"{selected_variant}/{selected_name}"
+    return row["variant"]
+
+
 def _run_cublaslt_baseline(
     binary: Path | None,
     mnk: Tuple[int, int, int],
@@ -419,9 +432,7 @@ def benchmark_shape(
 
 
 def _module_from_candidate(candidate):
-    if candidate.factory_config is None:
-        return VARIANTS[candidate.variant]["module"]
-    return make_module(GemmConfig(**candidate.factory_config))
+    return VARIANTS[candidate.variant]["module"]
 
 
 def _out_dtype_from_candidate(candidate):
@@ -617,30 +628,31 @@ def benchmark_shape_autotuned(
 
 
 def print_results(rows: Iterable[dict]) -> None:
+    rows = list(rows)
+    if not rows:
+        return
+
+    print("Operator: cute_gemm  Performance Test (mode=kernel, level=core)")
     print(
-        "variant,selected_variant,selected_name,m,n,k,flops,"
-        "cute_ms,torch_ms,cublas_ms,cublaslt_ms,"
-        "cute_tflops,torch_tflops,cublas_tflops,cublaslt_tflops,"
-        "speedup_vs_torch,speedup_vs_cublas,speedup_vs_cublaslt"
+        f"{'Status':<12}"
+        f"{'Torch Latency (ms)':>20}"
+        f"{'Cute Latency (ms)':>20}"
+        f"{'Cute Speedup':>18}"
+        f"{'TFLOPS':>14}"
+        f"{'Variant':>34}  "
+        f"Size Detail"
     )
+    print("-" * 146)
     for row in rows:
         m, n, k = row["mnk"]
         print(
-            f"{row['variant']},"
-            f"{row.get('selected_variant', '')},"
-            f"{row.get('selected_name', '')},"
-            f"{m},{n},{k},{row['flops']:.0f},"
-            f"{row['cute_ms']:.6f},"
-            f"{row['torch_ms']:.6f},"
-            f"{row['cublas_ms']:.6f},"
-            f"{_format_optional(row['cublaslt_ms'])},"
-            f"{_format_optional(row['cute_tflops'])},"
-            f"{_format_optional(row['torch_tflops'])},"
-            f"{_format_optional(row['cublas_tflops'])},"
-            f"{_format_optional(row['cublaslt_tflops'])},"
-            f"{row['speedup_vs_torch']:.6f},"
-            f"{row['speedup_vs_cublas']:.6f},"
-            f"{_format_optional(row['speedup_vs_cublaslt'])}"
+            f"{'SUCCESS':<12}"
+            f"{_format_metric(row['torch_ms']):>20}"
+            f"{_format_metric(row['cute_ms']):>20}"
+            f"{_format_metric(row['speedup_vs_torch'], 3):>18}"
+            f"{_format_metric(row['cute_tflops'], 3):>14}"
+            f"{_display_variant(row):>34}  "
+            f"[torch.Size([{m}, {n}]), k={k}]"
         )
 
 
