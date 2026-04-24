@@ -10,3 +10,6 @@
 [submodule "vllm"]
 	path = 3rd/vllm
 	url = https://github.com/vllm-project/vllm.git
+[submodule "FlashMLA"]
+	path = 3rd/FlashMLA
+	url = https://github.com/deepseek-ai/FlashMLA.git
