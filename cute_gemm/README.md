@@ -16,6 +16,7 @@
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py): 正确性验证 + 性能对比，输出 Torch 分配版和预分配 cuBLAS/cuBLASLt baseline
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/configs.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/configs.py): autotune candidate 配置
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/autotune.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/autotune.py): 逐 shape 测候选 kernel 并选择最快配置
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/cublaslt_benchmark.cu](/Users/meiziyuan/Roofline-Analysis/cute_gemm/cublaslt_benchmark.cu): cuBLASLt C++ algo heuristic baseline
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/run.sh](/Users/meiziyuan/Roofline-Analysis/cute_gemm/run.sh): 统一运行入口
 
 当前约束：
@@ -137,6 +138,14 @@ python3 cute_gemm/benchmark.py --variant 2cta_tma_2stage --shape-set all
 python3 cute_gemm/benchmark.py --variant 2cta_tma_3stage --shape-set all
 python3 cute_gemm/benchmark.py --variant 2cta_tma_pipeline --shape-set all
 python3 cute_gemm/benchmark.py --variant 2cta_tma_6stage --shape-set all
+```
+
+cuBLASLt C++ baseline：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis
+nvcc -O3 -std=c++17 cute_gemm/cublaslt_benchmark.cu -lcublasLt -lcublas -o cute_gemm/cublaslt_benchmark
+./cute_gemm/cublaslt_benchmark --mnk 4096,2048,512 --warmup 20 --iters 100 --algos 32 --workspace-mb 64
 ```
 
 Autotune：
