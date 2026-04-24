@@ -1,6 +1,6 @@
 {
-  "run_id": "20260424T093641Z",
-  "timestamp": "2026-04-24T09:38:23.801641+00:00",
+  "run_id": "20260424T105838Z",
+  "timestamp": "2026-04-24T10:59:34.555281+00:00",
   "gpu": "cuda:0",
   "backend": "vllm_flash",
   "kernel_path": "vLLM attention_benchmarks backend=flash",
@@ -21,6 +21,6 @@
   "peak_allocated_gb": 0.0,
   "selected_backend": "flash",
   "fallback": true,
-  "fallback_reason": "Unknown backend: flash. Valid backends: ['FLASH_ATTN', 'FLASH_ATTN_DIFFKV', 'TRITON_ATTN', 'ROCM_ATTN', 'ROCM_AITER_MLA', 'ROCM_AITER_TRITON_MLA', 'ROCM_AITER_FA', 'ROCM_AITER_MLA_SPARSE', 'XPU_MLA_SPARSE', 'TORCH_SDPA', 'FLASHINFER', 'FLASHINFER_MLA', 'FLASHINFER_MLA_SPARSE', 'TRITON_MLA', 'CUTLASS_MLA', 'FLASHMLA', 'FLASHMLA_SPARSE', 'FLASH_ATTN_MLA', 'NO_ATTENTION', 'FLEX_ATTENTION', 'TREE_ATTN', 'ROCM_AITER_UNIFIED_ATTN', 'CPU_ATTN', 'TURBOQUANT']",
+  "fallback_reason": "You are trying to access a gated repo.\nMake sure to have access to it at https://huggingface.co/meta-llama/Meta-Llama-3-8B.\n401 Client Error. (Request ID: Root=1-69eb4d15-0865cf604a8756e95c1bbe5a;8070d569-2ed6-4977-83b8-4fc107d54d62)\n\nCannot access gated repo for url https://huggingface.co/meta-llama/Meta-Llama-3-8B/resolve/main/config.json.\nAccess to model meta-llama/Meta-Llama-3-8B is restricted. You must have access to it and be authenticated to access it. Please log in.",
   "notes": "Metric is vLLM attention benchmark mean_time, not CUDA-event p50. Useful for cross-backend comparison within vLLM benchmark suite."
 }
