@@ -6,6 +6,7 @@
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_1cta_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_1cta_cutedsl.py): 只用 `tcgen05.mma` 的 `1cta` CuTeDSL GEMM
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_pipeline_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_pipeline_cutedsl.py): 用 `PipelineUmmaAsync` 做 `2cta` 同步的版本
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_commit_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_commit_cutedsl.py): 用底层 `commit` 协议做 `2cta` 同步的版本
+- [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_nopipeline_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_nopipeline_cutedsl.py): `2cta + TMA load A/B + 单 stage` 对照版本
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_cutedsl.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/mma_gemm_2cta_tma_pipeline_cutedsl.py): `2cta + TMA load A/B + AB pipeline` 版本
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/ref.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/ref.py): `torch` reference
 - [/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py](/Users/meiziyuan/Roofline-Analysis/cute_gemm/benchmark.py): 正确性验证 + 性能对比，输出 Torch 分配版和预分配 cuBLAS/cuBLASLt baseline
@@ -39,6 +40,7 @@ bash cute_gemm/run.sh --mnk 128,256,64
 cd /Users/meiziyuan/Roofline-Analysis
 python3 cute_gemm/mma_gemm_2cta_pipeline_cutedsl.py --mnk 256,256,64
 python3 cute_gemm/mma_gemm_2cta_commit_cutedsl.py --mnk 256,256,64
+python3 cute_gemm/mma_gemm_2cta_tma_nopipeline_cutedsl.py --mnk 256,256,64
 python3 cute_gemm/mma_gemm_2cta_tma_pipeline_cutedsl.py --mnk 256,256,64
 ```
 
@@ -88,7 +90,9 @@ python3 cute_gemm/benchmark.py --variant 2cta --shapes 256,256,64 1024,1024,256
 
 ```bash
 cd /Users/meiziyuan/Roofline-Analysis
+python3 cute_gemm/mma_gemm_2cta_tma_nopipeline_cutedsl.py --mnk 256,256,64
 python3 cute_gemm/mma_gemm_2cta_tma_pipeline_cutedsl.py --mnk 256,256,64
+python3 cute_gemm/benchmark.py --variant 2cta_tma_nopipeline --shape-set small
 python3 cute_gemm/benchmark.py --variant 2cta_tma_pipeline --shape-set small
 python3 cute_gemm/benchmark.py --variant 2cta_tma_pipeline --shape-set large
 ```
