@@ -6,7 +6,7 @@
 - `flashinfer_trtllm_decode`: FlashInfer wrapper around TRTLLM-GEN/XQA-style decode; strong B200 path, currently restricted to `page_size=64` because `page_size=128` misses TRTLLM-GEN kernels in the tested package.
 - `flashattn_kvcache`: Tri Dao FlashAttention, preferring FA4 CuTE paged-varlen (`flash_attn.cute.interface.flash_attn_varlen_func`) with `page_table`.
 - `vllm_paged_decode`: direct vLLM paged attention op; useful baseline, limited to `page_size={16,32}` and BF16/FP16.
-- `flashinfer_trtllm_mla_decode`: FlashInfer TRTLLM-GEN MLA API for B200-capable MLA decode.
+- `flashinfer_trtllm_mla_decode`: FlashInfer TRTLLM-GEN MLA API for B200-capable MLA decode; current tested FlashInfer package is treated as BF16-only because FP16 MLA dispatch misses the TRTLLM-GEN kernel.
 
 ## Implemented but disabled by default on B200
 

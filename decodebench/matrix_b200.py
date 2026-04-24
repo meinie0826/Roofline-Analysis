@@ -78,9 +78,9 @@ BACKENDS = [
         "layer": "kernel",
         "enabled": True,
         "kernel_path": "flashinfer.mla.trtllm_batch_decode_with_kv_cache_mla",
-        "status": "implemented_if_flashinfer_trtllm_mla_is_available",
+        "status": "implemented_if_flashinfer_trtllm_mla_is_available_bf16_only_in_tested_b200_package",
         "supported_attention": {"MLA"},
-        "supported_kv_dtypes": {"bf16", "fp16"},
+        "supported_kv_dtypes": {"bf16"},
         "supported_page_sizes": {64, 128},
     },
     {
@@ -131,8 +131,17 @@ def workload(
             kv_lora_rank = 512 if head_dim_v is None else head_dim_v
         if qk_rope_head_dim is None:
             qk_rope_head_dim = head_dim
+        mla_suffix = ""
+        if (
+            num_q_heads != 128
+            or qk_nope_head_dim != 128
+            or kv_lora_rank != 512
+            or qk_rope_head_dim != 64
+            or (head_dim_v is not None and head_dim_v != 512)
+        ):
+            mla_suffix = f"_qh{num_q_heads}_nope{qk_nope_head_dim}_r{kv_lora_rank}_rope{qk_rope_head_dim}_v{512 if head_dim_v is None else head_dim_v}"
         item = {
-            "id": f"mla_{kv_dtype}_b{batch_size}_ctx{ctx_label(context_len)}_p{page_size}",
+            "id": f"mla_{kv_dtype}_b{batch_size}_ctx{ctx_label(context_len)}_p{page_size}{mla_suffix}",
             "attention": attention,
             "num_q_heads": num_q_heads,
             "num_kv_heads": num_kv_heads,
@@ -150,8 +159,12 @@ def workload(
 
     if num_kv_heads is None:
         num_kv_heads = {"MHA": num_q_heads, "GQA": 8, "MQA": 1}[attention]
+    default_num_kv_heads = {"MHA": num_q_heads, "GQA": 8, "MQA": 1}[attention]
+    shape_suffix = ""
+    if num_q_heads != 32 or num_kv_heads != default_num_kv_heads or head_dim != 128:
+        shape_suffix = f"_qh{num_q_heads}_kvh{num_kv_heads}_hd{head_dim}"
     return {
-        "id": f"{attention.lower()}_{kv_dtype}_b{batch_size}_ctx{ctx_label(context_len)}_p{page_size}",
+        "id": f"{attention.lower()}_{kv_dtype}_b{batch_size}_ctx{ctx_label(context_len)}_p{page_size}{shape_suffix}",
         "attention": attention,
         "num_q_heads": num_q_heads,
         "num_kv_heads": num_kv_heads,

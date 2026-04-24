@@ -34,7 +34,6 @@ WORKLOADS = [
 
     # Head-dimension sensitivity.
     workload("GQA", "bf16", batch_size=64, context_len=4096, page_size=64, head_dim=64),
-    workload("GQA", "bf16", batch_size=64, context_len=4096, page_size=64, head_dim=128),
     workload("GQA", "bf16", batch_size=64, context_len=4096, page_size=64, head_dim=192),
     workload("GQA", "fp16", batch_size=64, context_len=4096, page_size=64, head_dim=64),
     workload("GQA", "fp16", batch_size=64, context_len=4096, page_size=64, head_dim=128),

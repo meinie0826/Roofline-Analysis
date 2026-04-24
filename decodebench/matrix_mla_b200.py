@@ -2,7 +2,8 @@
 
 FlashMLA dense decode and Tri Dao's Hopper qv/page_table MLA path are kept in
 this file but disabled for B200 because the currently tested kernels are SM90a
-or Hopper-oriented. The B200 MLA default is FlashInfer's TRTLLM-GEN MLA API.
+or Hopper-oriented. The B200 MLA default is FlashInfer's TRTLLM-GEN MLA API;
+the tested FlashInfer package only ships the BF16 MLA kernel variant.
 """
 
 DEFAULTS = {
@@ -17,9 +18,9 @@ BACKENDS = [
         "layer": "kernel",
         "enabled": True,
         "kernel_path": "flashinfer.mla.trtllm_batch_decode_with_kv_cache_mla",
-        "status": "implemented_if_flashinfer_trtllm_mla_is_available",
+        "status": "implemented_if_flashinfer_trtllm_mla_is_available_bf16_only_in_tested_b200_package",
         "supported_attention": {"MLA"},
-        "supported_kv_dtypes": {"bf16", "fp16"},
+        "supported_kv_dtypes": {"bf16"},
         "supported_page_sizes": {64, 128},
     },
     {
@@ -83,7 +84,8 @@ WORKLOADS = [
     workload("bf16", batch_size=64, context_len=4096, page_size=64),
     workload("bf16", batch_size=32, context_len=32768, page_size=64),
     workload("bf16", batch_size=16, context_len=65536, page_size=64),
-    workload("fp16", batch_size=64, context_len=4096, page_size=64),
+    # FP16 MLA is intentionally absent: the tested FlashInfer TRTLLM-GEN package
+    # reports a missing kernel for kernelType=3/headDimQk=576/headDimV=512.
 ]
 
 CONFIG = {
