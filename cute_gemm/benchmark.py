@@ -10,6 +10,8 @@ import mma_gemm_2cta_commit_cutedsl as gemm_2cta_commit
 import mma_gemm_2cta_manual_phase_mask_cutedsl as gemm_2cta_manual
 import mma_gemm_2cta_pipeline_cutedsl as gemm_2cta_pipeline
 import mma_gemm_2cta_tma_2stage_cutedsl as gemm_2cta_tma_2stage
+import mma_gemm_2cta_tma_3stage_cutedsl as gemm_2cta_tma_3stage
+import mma_gemm_2cta_tma_6stage_cutedsl as gemm_2cta_tma_6stage
 import mma_gemm_2cta_tma_nopipeline_cutedsl as gemm_2cta_tma_nopipeline
 import mma_gemm_2cta_tma_pipeline_cutedsl as gemm_2cta_tma_pipeline
 import mma_gemm_2cta_tma_pipeline_tma_store_cutedsl as gemm_2cta_tma_pipeline_tma_store
@@ -115,6 +117,36 @@ VARIANTS: dict[str, dict] = {
     },
     "2cta_tma_2stage": {
         "module": gemm_2cta_tma_2stage,
+        "small_shapes": [
+            (256, 256, 64),
+            (512, 256, 64),
+            (512, 512, 128),
+        ],
+        "large_shapes": [
+            (1024, 1024, 256),
+            (2048, 2048, 256),
+            (4096, 2048, 512),
+        ],
+        "torch_out_dtype": torch.float16,
+        "default_atol": 1e-1,
+    },
+    "2cta_tma_3stage": {
+        "module": gemm_2cta_tma_3stage,
+        "small_shapes": [
+            (256, 256, 64),
+            (512, 256, 64),
+            (512, 512, 128),
+        ],
+        "large_shapes": [
+            (1024, 1024, 256),
+            (2048, 2048, 256),
+            (4096, 2048, 512),
+        ],
+        "torch_out_dtype": torch.float16,
+        "default_atol": 1e-1,
+    },
+    "2cta_tma_6stage": {
+        "module": gemm_2cta_tma_6stage,
         "small_shapes": [
             (256, 256, 64),
             (512, 256, 64),
