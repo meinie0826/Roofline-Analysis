@@ -18,6 +18,7 @@ import mma_gemm_2cta_tma_6stage_cutedsl as gemm_2cta_tma_6stage
 import mma_gemm_2cta_tma_nopipeline_cutedsl as gemm_2cta_tma_nopipeline
 import mma_gemm_2cta_tma_pipeline_cutedsl as gemm_2cta_tma_pipeline
 import mma_gemm_2cta_tma_pipeline_tma_store_cutedsl as gemm_2cta_tma_pipeline_tma_store
+from configs import CANDIDATE_GROUPS
 from ref import (
     check_close,
     make_torch_cublas_runner,
@@ -369,9 +370,68 @@ def benchmark_shape(
     }
 
 
+def _candidate_names(group: str) -> list[str]:
+    return [candidate.name for candidate in CANDIDATE_GROUPS[group]]
+
+
+def benchmark_shape_autotuned(
+    mnk: Tuple[int, int, int],
+    group: str,
+    atol: float | None,
+    warmup: int,
+    iters: int,
+    cublaslt_bin: Path | None = None,
+    cublaslt_algos: int = 32,
+    cublaslt_workspace_mb: int = 64,
+) -> dict:
+    rows = []
+    for candidate in CANDIDATE_GROUPS[group]:
+        row = benchmark_shape(
+            candidate.variant,
+            mnk,
+            atol,
+            warmup,
+            iters,
+            cublaslt_bin,
+            cublaslt_algos,
+            cublaslt_workspace_mb,
+        )
+        row["candidate"] = candidate.to_dict()
+        rows.append(row)
+        print(
+            "AUTOTUNE_CANDIDATE",
+            {
+                "mnk": mnk,
+                "name": candidate.name,
+                "variant": candidate.variant,
+                "cute_ms": round(row["cute_ms"], 6),
+                "cute_tflops": None if row["cute_tflops"] is None else round(row["cute_tflops"], 3),
+            },
+        )
+
+    best = min(rows, key=lambda row: row["cute_ms"])
+    best = dict(best)
+    best["variant"] = "autotuned"
+    best["selected_variant"] = best["candidate"]["variant"]
+    best["selected_name"] = best["candidate"]["name"]
+    best["autotune_group"] = group
+    best["autotune_candidates"] = [row["candidate"] for row in rows]
+    print(
+        "AUTOTUNE_BEST",
+        {
+            "mnk": mnk,
+            "name": best["selected_name"],
+            "variant": best["selected_variant"],
+            "cute_ms": round(best["cute_ms"], 6),
+            "cute_tflops": None if best["cute_tflops"] is None else round(best["cute_tflops"], 3),
+        },
+    )
+    return best
+
+
 def print_results(rows: Iterable[dict]) -> None:
     print(
-        "variant,m,n,k,flops,"
+        "variant,selected_variant,selected_name,m,n,k,flops,"
         "cute_ms,torch_ms,cublas_ms,cublaslt_ms,"
         "cute_tflops,torch_tflops,cublas_tflops,cublaslt_tflops,"
         "speedup_vs_torch,speedup_vs_cublas,speedup_vs_cublaslt"
@@ -379,7 +439,10 @@ def print_results(rows: Iterable[dict]) -> None:
     for row in rows:
         m, n, k = row["mnk"]
         print(
-            f"{row['variant']},{m},{n},{k},{row['flops']:.0f},"
+            f"{row['variant']},"
+            f"{row.get('selected_variant', '')},"
+            f"{row.get('selected_name', '')},"
+            f"{m},{n},{k},{row['flops']:.0f},"
             f"{row['cute_ms']:.6f},"
             f"{row['torch_ms']:.6f},"
             f"{row['cublas_ms']:.6f},"
@@ -394,13 +457,37 @@ def print_results(rows: Iterable[dict]) -> None:
         )
 
 
+
+def print_result_row(row: dict) -> None:
+    print(
+        "RESULT",
+        {
+            "variant": row["variant"],
+            "selected_variant": row.get("selected_variant"),
+            "selected_name": row.get("selected_name"),
+            "mnk": row["mnk"],
+            "flops": row["flops"],
+            "cute_ms": round(row["cute_ms"], 6),
+            "torch_ms": round(row["torch_ms"], 6),
+            "cublas_ms": round(row["cublas_ms"], 6),
+            "cublaslt_ms": None if row["cublaslt_ms"] is None else round(row["cublaslt_ms"], 6),
+            "cute_tflops": None if row["cute_tflops"] is None else round(row["cute_tflops"], 3),
+            "torch_tflops": None if row["torch_tflops"] is None else round(row["torch_tflops"], 3),
+            "cublas_tflops": None if row["cublas_tflops"] is None else round(row["cublas_tflops"], 3),
+            "cublaslt_tflops": None if row["cublaslt_tflops"] is None else round(row["cublaslt_tflops"], 3),
+            "speedup_vs_torch": round(row["speedup_vs_torch"], 6),
+            "speedup_vs_cublas": round(row["speedup_vs_cublas"], 6),
+            "speedup_vs_cublaslt": None if row["speedup_vs_cublaslt"] is None else round(row["speedup_vs_cublaslt"], 6),
+        },
+    )
+
 def main():
     from cuda.bindings import driver as cu_driver
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--variant",
-        choices=["all", *VARIANTS.keys()],
+        choices=["all", "autotuned", *VARIANTS.keys()],
         default="all",
     )
     parser.add_argument(
@@ -425,16 +512,30 @@ def main():
     )
     parser.add_argument("--cublaslt-algos", type=int, default=32)
     parser.add_argument("--cublaslt-workspace-mb", type=int, default=64)
+    parser.add_argument(
+        "--autotune-group",
+        choices=sorted(CANDIDATE_GROUPS.keys()),
+        default="default",
+        help="candidate group used when --variant autotuned",
+    )
     args = parser.parse_args()
 
     cu_driver.cuInit(0)
 
     rows = []
-    for variant in _iter_variants(args.variant):
-        for mnk in _iter_shapes(variant, args.shape_set, args.shapes):
-            row = benchmark_shape(
-                variant,
+    if args.variant == "autotuned":
+        print(
+            "AUTOTUNE",
+            {
+                "group": args.autotune_group,
+                "candidates": _candidate_names(args.autotune_group),
+            },
+        )
+        shape_source = "2cta_tma_pipeline"
+        for mnk in _iter_shapes(shape_source, args.shape_set, args.shapes):
+            row = benchmark_shape_autotuned(
                 mnk,
+                args.autotune_group,
                 args.atol,
                 args.warmup,
                 args.iters,
@@ -443,25 +544,22 @@ def main():
                 args.cublaslt_workspace_mb,
             )
             rows.append(row)
-            print(
-                "RESULT",
-                {
-                    "variant": variant,
-                    "mnk": mnk,
-                    "flops": row["flops"],
-                    "cute_ms": round(row["cute_ms"], 6),
-                    "torch_ms": round(row["torch_ms"], 6),
-                    "cublas_ms": round(row["cublas_ms"], 6),
-                    "cublaslt_ms": None if row["cublaslt_ms"] is None else round(row["cublaslt_ms"], 6),
-                    "cute_tflops": None if row["cute_tflops"] is None else round(row["cute_tflops"], 3),
-                    "torch_tflops": None if row["torch_tflops"] is None else round(row["torch_tflops"], 3),
-                    "cublas_tflops": None if row["cublas_tflops"] is None else round(row["cublas_tflops"], 3),
-                    "cublaslt_tflops": None if row["cublaslt_tflops"] is None else round(row["cublaslt_tflops"], 3),
-                    "speedup_vs_torch": round(row["speedup_vs_torch"], 6),
-                    "speedup_vs_cublas": round(row["speedup_vs_cublas"], 6),
-                    "speedup_vs_cublaslt": None if row["speedup_vs_cublaslt"] is None else round(row["speedup_vs_cublaslt"], 6),
-                },
-            )
+            print_result_row(row)
+    else:
+        for variant in _iter_variants(args.variant):
+            for mnk in _iter_shapes(variant, args.shape_set, args.shapes):
+                row = benchmark_shape(
+                    variant,
+                    mnk,
+                    args.atol,
+                    args.warmup,
+                    args.iters,
+                    args.cublaslt_bin,
+                    args.cublaslt_algos,
+                    args.cublaslt_workspace_mb,
+                )
+                rows.append(row)
+                print_result_row(row)
     print_results(rows)
 
 

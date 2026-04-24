@@ -143,6 +143,17 @@ python3 cute_gemm/benchmark.py --variant 2cta_tma_pipeline --shape-set all
 python3 cute_gemm/benchmark.py --variant 2cta_tma_6stage --shape-set all
 ```
 
+
+一键 autotuned benchmark：
+
+```bash
+cd /Users/meiziyuan/Roofline-Analysis
+python3 cute_gemm/benchmark.py --variant autotuned --autotune-group default --shape-set all
+python3 cute_gemm/benchmark.py --variant autotuned --autotune-group default --shape-set all --cublaslt-bin cute_gemm/cublaslt_benchmark
+```
+
+`--variant autotuned` 会对每个 shape 先跑 `--autotune-group` 里的候选 kernel，选出最快的 `selected_variant`，再输出它和 Torch/cuBLAS/PyTorch-cuBLASLt 以及可选 C++ cuBLASLt 的对比。
+
 cuBLASLt C++ baseline：
 
 ```bash
