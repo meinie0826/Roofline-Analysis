@@ -13,6 +13,14 @@ BACKENDS = [
         "enabled": True,
         "kernel_path": "FlashInfer BatchDecodeWithPagedKVCacheWrapper / XQA",
         "status": "implemented",
+        "supported_workload_ids": {
+            "mha_bf16_b16_ctx4k_p64",
+            "gqa_bf16_b64_ctx4k_p64",
+            "gqa_fp8_b64_ctx4k_p64",
+            "gqa_fp8_b64_ctx4k_p128",
+            "gqa_fp8_b32_ctx32k_p64",
+            "gqa_fp8_b32_ctx32k_p128",
+        },
     },
     {
         "name": "flashinfer_trtllm_decode",
@@ -20,21 +28,28 @@ BACKENDS = [
         "enabled": True,
         "kernel_path": "flashinfer.decode.trtllm_batch_decode_with_kv_cache",
         "status": "implemented",
+        "supported_workload_ids": {
+            "mha_bf16_b16_ctx4k_p64",
+            "gqa_bf16_b64_ctx4k_p64",
+            "gqa_fp8_b64_ctx4k_p64",
+            "gqa_fp8_b32_ctx32k_p64",
+            "mqa_fp8_b128_ctx8k_p64",
+        },
     },
     {
         "name": "vllm_flash",
         "layer": "kernel_or_framework",
-        "enabled": True,
+        "enabled": False,
         "kernel_path": "vLLM attention_benchmarks backend=flash",
-        "status": "implemented_if_vllm_bench_env_exists",
+        "status": "disabled_until_locally_validated",
         "supported_kv_dtypes": {"bf16", "fp16"},
     },
     {
         "name": "vllm_flashinfer",
         "layer": "kernel_or_framework",
-        "enabled": True,
+        "enabled": False,
         "kernel_path": "vLLM attention_benchmarks backend=flashinfer",
-        "status": "implemented_if_vllm_bench_env_exists",
+        "status": "disabled_until_locally_validated",
     },
 ]
 

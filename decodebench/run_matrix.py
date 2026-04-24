@@ -89,7 +89,12 @@ def build_cmd(backend: dict, workload: dict, defaults: dict, results_dir: Path) 
 
 def is_supported(backend: dict, workload: dict) -> bool:
     supported_kv_dtypes = backend.get("supported_kv_dtypes")
-    return supported_kv_dtypes is None or workload["kv_dtype"] in supported_kv_dtypes
+    if supported_kv_dtypes is not None and workload["kv_dtype"] not in supported_kv_dtypes:
+        return False
+    supported_workload_ids = backend.get("supported_workload_ids")
+    if supported_workload_ids is not None and workload["id"] not in supported_workload_ids:
+        return False
+    return True
 
 
 def output_path(backend: dict, workload: dict, results_dir: Path) -> Path:
