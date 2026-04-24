@@ -16,12 +16,11 @@ def load_rows(results_dir: Path) -> list[dict]:
     return rows
 
 
-def fmt(value, suffix: str = "", digits: int = 1) -> str:
-    if value is None:
-        return "-"
-    if isinstance(value, float):
-        return f"{value:.{digits}f}{suffix}"
-    return f"{value}{suffix}"
+def short_backend(name: str | None) -> str:
+    return {
+        "flashinfer_paged_decode": "flashinfer",
+        "torch_sdpa_decode": "sdpa",
+    }.get(name or "-", name or "-")
 
 
 def workload_key(row: dict) -> tuple:
@@ -34,41 +33,42 @@ def workload_key(row: dict) -> tuple:
     )
 
 
-def print_table(rows: list[dict]) -> None:
+def workload_name(key: tuple) -> str:
+    attention, kv_dtype, batch_size, context_len, page_size = key
+    return f"{attention:<3} {kv_dtype:<4} b{batch_size:<3} ctx{context_len:<5} p{page_size:<3}"
+
+
+def row_summary(row: dict, best_us: float | None) -> str:
+    if row.get("status") == "failed":
+        return f"{short_backend(row.get('backend'))}: FAIL"
+    p50 = row.get("kernel_latency_p50_us")
+    bandwidth = row.get("approx_effective_kv_bandwidth_gb_s")
+    if p50 is None:
+        return f"{short_backend(row.get('backend'))}: -"
+    tag = "best" if best_us == p50 else f"{p50 / best_us:.2f}x" if best_us else "-"
+    return f"{short_backend(row.get('backend'))}: {p50:.1f}us, {bandwidth:.0f}GB/s, {tag}"
+
+
+def print_summary(rows: list[dict]) -> None:
     groups = defaultdict(list)
     for row in rows:
         groups[workload_key(row)].append(row)
 
+    print(f"{'workload':<30} result")
+    print("-" * 96)
     for key in sorted(groups):
-        attention, kv_dtype, batch_size, context_len, page_size = key
-        print(f"\n[{attention} {kv_dtype} b{batch_size} ctx{context_len} p{page_size}]")
-        print(f"{'backend':<24} {'status':<8} {'p50_us':>10} {'p95_us':>10} {'GB/s':>10} {'alloc_GB':>10}  notes")
-        print("-" * 96)
         group = sorted(
             groups[key],
             key=lambda row: row.get("kernel_latency_p50_us") if row.get("kernel_latency_p50_us") is not None else float("inf"),
         )
-        best = group[0].get("kernel_latency_p50_us") if group and group[0].get("kernel_latency_p50_us") is not None else None
-        for row in group:
-            p50 = row.get("kernel_latency_p50_us")
-            ratio = ""
-            if best and p50:
-                ratio = " winner" if p50 == best else f" {p50 / best:.2f}x"
-            status = row.get("status", "ok")
-            notes = row.get("notes") or row.get("command") or ""
-            print(
-                f"{row.get('backend', '-'):<24} "
-                f"{status:<8} "
-                f"{fmt(p50, digits=1):>10} "
-                f"{fmt(row.get('kernel_latency_p95_us'), digits=1):>10} "
-                f"{fmt(row.get('approx_effective_kv_bandwidth_gb_s'), digits=1):>10} "
-                f"{fmt(row.get('peak_allocated_gb'), digits=2):>10}  "
-                f"{ratio}{(' | ' + notes) if notes else ''}"
-            )
+        ok_latencies = [row["kernel_latency_p50_us"] for row in group if row.get("kernel_latency_p50_us") is not None]
+        best_us = min(ok_latencies) if ok_latencies else None
+        result = " | ".join(row_summary(row, best_us) for row in group)
+        print(f"{workload_name(key):<30} {result}")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Print DecodeBench JSON results as readable tables.")
+    parser = argparse.ArgumentParser(description="Print compact DecodeBench result summary.")
     parser.add_argument("--results-dir", type=Path, default=Path("decodebench/results"))
     args = parser.parse_args()
 
@@ -76,7 +76,7 @@ def main() -> int:
     if not rows:
         print(f"No JSON results found in {args.results_dir}")
         return 1
-    print_table(rows)
+    print_summary(rows)
     return 0
 
 

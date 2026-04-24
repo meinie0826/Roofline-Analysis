@@ -69,6 +69,13 @@ def output_path(backend: dict, workload: dict, results_dir: Path) -> Path:
     return results_dir / f'{backend["name"]}__{workload["id"]}.json'
 
 
+def short_backend(name: str) -> str:
+    return {
+        "flashinfer_paged_decode": "flashinfer",
+        "torch_sdpa_decode": "sdpa",
+    }.get(name, name)
+
+
 def write_failure(path: Path, backend: dict, workload: dict, returncode: int, command: list[str], output: str) -> None:
     result = {
         "status": "failed",
@@ -134,9 +141,9 @@ def main() -> int:
                 if completed.returncode != 0:
                     failures += 1
                     write_failure(output_path(backend, workload, args.results_dir), backend, workload, completed.returncode, argv, completed.stdout)
-                    print(f"FAIL {backend['name']} {workload['id']} -> {output_path(backend, workload, args.results_dir)}")
+                    print(f"✗ {workload['id']:<28} {short_backend(backend['name'])}")
                 else:
-                    print(f"OK   {backend['name']} {workload['id']} -> {output_path(backend, workload, args.results_dir)}")
+                    print(f"✓ {workload['id']:<28} {short_backend(backend['name'])}")
 
     return 1 if failures else 0
 
