@@ -38,3 +38,23 @@ SGLang is enabled only when its command template env var is set. The template mu
 export SGLANG_BENCH_CMD='python /path/to/sglang_decode.py --batch-size {batch_size} --context-len {context_len} --num-q-heads {num_q_heads} --num-kv-heads {num_kv_heads} --head-dim {head_dim} --kv-dtype {kv_dtype} --page-size {page_size} --warmup {warmup_steps} --repeat {repeat} --output {output}'
 python decodebench/run_matrix.py --config decodebench/matrix_b200_framework.py --execute --resume
 ```
+
+## Nsight Compute profiling
+
+Use `decodebench/profile_ncu.py` for kernel-level profiling without changing normal matrix results. It wraps an existing backend/workload command with `ncu`, writes the benchmark JSON, raw NCU CSV, and a summarized profile JSON.
+
+Example FA4 vs FlashInfer Tensor Core profiling on B200:
+
+```bash
+python decodebench/profile_ncu.py \
+  --config decodebench/matrix_b200.py \
+  --workload-id gqa_bf16_b64_ctx4k_p64 \
+  --backend flashinfer_paged_decode \
+  --backend flashattn_kvcache \
+  --launch-count 1 \
+  --warmup-steps 5 \
+  --repeat 5 \
+  --force
+```
+
+The summary JSON contains `ncu_tensor_core_util_pct`, plus per-metric details in `ncu_tensor_core_summary`. Defaults request time, SM throughput, DRAM throughput, and several Tensor Core activity metrics; the script queries NCU first and skips unavailable defaults. If Nsight Compute on a new GPU/driver still needs a different Tensor Core metric, pass explicit metrics with repeated `--metric ...` after checking available names with `ncu --query-metrics | grep -Ei 'tensor|hmma|wgmma|mma'`.
