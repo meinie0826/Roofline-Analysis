@@ -71,3 +71,17 @@ python decodebench/run_matrix.py \
 ```
 
 With `--profile-ncu`, each normal result JSON gets extra fields including `ncu_profiled`, `ncu_csv`, `ncu_tensor_core_util_pct`, and `ncu_tensor_core_summary`; the summary table also shows `latency/vs_best/tc%` when those fields are present. `--resume` skips only results that already have both a valid benchmark latency and NCU profile fields.
+
+## Per-backend Python selection
+
+`decodebench/run_matrix.py` can run different backends with different Python interpreters. By default, all backends use the Python that launches `run_matrix.py`, except `tensorrt_llm_native`, which auto-uses `.venv-trtllm/bin/python` when that file exists.
+
+Override any backend with `DECODEBENCH_PYTHON_<BACKEND_NAME_IN_UPPERCASE>` where non-alnum chars become `_`:
+
+```bash
+export DECODEBENCH_PYTHON_TENSORRT_LLM_NATIVE=/workspace/Roofline-Analysis/.venv-trtllm/bin/python
+export DECODEBENCH_PYTHON_FLASHATTN_KVCACHE=/workspace/Roofline-Analysis/.venv/bin/python
+python decodebench/run_matrix.py --config decodebench/matrix_b200_framework.py --execute --resume
+```
+
+For TensorRT-LLM native, the shorter aliases `TRTLLM_PYTHON` and `DECODEBENCH_PYTHON_TRTLLM_NATIVE` are also accepted.

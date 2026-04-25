@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 PYTHON_BIN = sys.executable or "python3"
+REPO_ROOT = ROOT.parent
 
 from summarize_results import print_summary
 from ncu_utils import DEFAULT_NCU_METRICS, resolve_metrics, summarize_ncu
@@ -21,6 +22,43 @@ from ncu_utils import DEFAULT_NCU_METRICS, resolve_metrics, summarize_ncu
 
 def shell(argv: list[str]) -> str:
     return " ".join(shlex.quote(item) for item in argv)
+
+
+def env_key_for_backend(backend_name: str) -> str:
+    safe = "".join(ch if ch.isalnum() else "_" for ch in backend_name.upper())
+    return f"DECODEBENCH_PYTHON_{safe}"
+
+
+def default_python_for_backend(backend_name: str) -> str:
+    if backend_name == "tensorrt_llm_native":
+        trtllm_python = REPO_ROOT / ".venv-trtllm" / "bin" / "python"
+        if trtllm_python.exists():
+            return str(trtllm_python)
+    return PYTHON_BIN
+
+
+def python_env_keys_for_backend(backend: dict) -> list[str]:
+    backend_name = backend["name"]
+    keys = []
+    if backend.get("python_env"):
+        keys.append(backend["python_env"])
+    keys.append(env_key_for_backend(backend_name))
+    if backend_name == "tensorrt_llm_native":
+        keys += ["DECODEBENCH_PYTHON_TRTLLM_NATIVE", "TRTLLM_PYTHON"]
+    return list(dict.fromkeys(keys))
+
+
+def python_for_backend(backend: dict) -> str:
+    for env_key in python_env_keys_for_backend(backend):
+        if os.environ.get(env_key):
+            return os.environ[env_key]
+    return backend.get("python") or default_python_for_backend(backend["name"])
+
+
+def apply_backend_python(argv: list[str], backend: dict) -> list[str]:
+    if not argv:
+        return argv
+    return [python_for_backend(backend), *argv[1:]]
 
 
 def flashinfer_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
@@ -231,33 +269,33 @@ def trtllm_native_cmd(workload: dict, defaults: dict, output: Path) -> list[str]
 def build_cmd(backend: dict, workload: dict, defaults: dict, results_dir: Path) -> list[str]:
     output = results_dir / f'{backend["name"]}__{workload["id"]}.json'
     if backend["name"] == "flashinfer_paged_decode":
-        return flashinfer_cmd(workload, defaults, output)
+        return apply_backend_python(flashinfer_cmd(workload, defaults, output), backend)
     if backend["name"] == "flashinfer_trtllm_decode":
-        return flashinfer_trtllm_cmd(workload, defaults, output)
+        return apply_backend_python(flashinfer_trtllm_cmd(workload, defaults, output), backend)
     if backend["name"] == "flashattn_kvcache":
-        return flashattn_kvcache_cmd(workload, defaults, output)
+        return apply_backend_python(flashattn_kvcache_cmd(workload, defaults, output), backend)
     if backend["name"] == "flashmla_decode":
-        return flashmla_cmd(workload, defaults, output)
+        return apply_backend_python(flashmla_cmd(workload, defaults, output), backend)
     if backend["name"] == "flashattn_mla_decode":
-        return flashattn_mla_cmd(workload, defaults, output)
+        return apply_backend_python(flashattn_mla_cmd(workload, defaults, output), backend)
     if backend["name"] == "flashinfer_trtllm_mla_decode":
-        return trtllm_mla_cmd(workload, defaults, output)
+        return apply_backend_python(trtllm_mla_cmd(workload, defaults, output), backend)
     if backend["name"] == "vllm_paged_decode":
-        return vllm_paged_cmd(workload, defaults, output)
+        return apply_backend_python(vllm_paged_cmd(workload, defaults, output), backend)
     if backend["name"] == "vllm_flash":
-        return vllm_attention_cmd(workload, defaults, output, "flash")
+        return apply_backend_python(vllm_attention_cmd(workload, defaults, output, "flash"), backend)
     if backend["name"] == "vllm_flashinfer":
-        return vllm_attention_cmd(workload, defaults, output, "flashinfer")
+        return apply_backend_python(vllm_attention_cmd(workload, defaults, output, "flashinfer"), backend)
     if backend["name"] == "torch_sdpa_auto":
-        return torch_sdpa_cmd(workload, defaults, output, "auto")
+        return apply_backend_python(torch_sdpa_cmd(workload, defaults, output, "auto"), backend)
     if backend["name"] == "torch_sdpa_cudnn":
-        return torch_sdpa_cmd(workload, defaults, output, "cudnn")
+        return apply_backend_python(torch_sdpa_cmd(workload, defaults, output, "cudnn"), backend)
     if backend["name"] == "torch_sdpa_flash":
-        return torch_sdpa_cmd(workload, defaults, output, "flash")
+        return apply_backend_python(torch_sdpa_cmd(workload, defaults, output, "flash"), backend)
     if backend["name"] == "tensorrt_llm_native":
-        return trtllm_native_cmd(workload, defaults, output)
+        return apply_backend_python(trtllm_native_cmd(workload, defaults, output), backend)
     if backend["name"] == "sglang_serving":
-        return external_cmd(backend, workload, defaults, output)
+        return apply_backend_python(external_cmd(backend, workload, defaults, output), backend)
     raise ValueError(f'Backend not implemented yet: {backend["name"]}')
 
 
@@ -361,7 +399,7 @@ def write_failure(path: Path, backend: dict, workload: dict, returncode: int, co
         "run_id": os.environ.get("DECODEBENCH_RUN_ID"),
         "status": "failed",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "python_executable": PYTHON_BIN,
+        "python_executable": command[0] if command else PYTHON_BIN,
         "backend": backend["name"],
         "kernel_path": backend.get("kernel_path"),
         "layer": backend.get("layer"),
