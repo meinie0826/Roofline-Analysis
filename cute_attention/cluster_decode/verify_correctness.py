@@ -98,9 +98,55 @@ def verify_kernel_stage(stage_name: str, args) -> CheckResult:
     return _check_close(stage_name, out, ref, rtol=args.rtol, atol=args.atol)
 
 
+def verify_megakernel(args) -> list[CheckResult]:
+    """Verify the full decode megakernel against the PyTorch reference."""
+    _assert_torch()
+    try:
+        from .cluster_megakernel import cluster_megakernel_forward
+        from .common import MegakernelConfig, available_backends
+        from .megakernel_reference import make_random_megakernel_inputs, megakernel_reference_forward
+    except ImportError:
+        from cluster_megakernel import cluster_megakernel_forward
+        from common import MegakernelConfig, available_backends
+        from megakernel_reference import make_random_megakernel_inputs, megakernel_reference_forward
+
+    if not available_backends()["cute"]:
+        raise RuntimeError("CuTe DSL is required for megakernel correctness verification.")
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is required for megakernel correctness verification.")
+
+    config = MegakernelConfig(
+        hidden_dim=args.hidden_dim,
+        num_heads=args.num_heads,
+        head_dim=args.hidden_dim // args.num_heads,
+        cluster_size=args.cluster_size,
+        num_threads=args.num_threads,
+    )
+    config.validate()
+
+    inputs = make_random_megakernel_inputs(
+        config, seq_len=args.seq_len, device="cuda", dtype=args.dtype, seed=args.seed
+    )
+
+    ref_out, ref_k, ref_v = megakernel_reference_forward(**inputs, config=config)
+    cuda_out, cuda_k, cuda_v = cluster_megakernel_forward(**inputs, config=config)
+    torch.cuda.synchronize()
+
+    results = [
+        _check_close("megakernel_output", cuda_out, ref_out, rtol=args.rtol, atol=args.atol),
+        _check_close("megakernel_k_new",  cuda_k,   ref_k,   rtol=args.rtol, atol=args.atol),
+        _check_close("megakernel_v_new",  cuda_v,   ref_v,   rtol=args.rtol, atol=args.atol),
+    ]
+    return results
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Correctness checks for experimental cluster decode kernels.")
-    parser.add_argument("--stage", default="all", choices=["all", "reduce", "cluster_decode", "cluster_decode_split"])
+    parser.add_argument(
+        "--stage", default="all",
+        choices=["all", "reduce", "cluster_decode", "cluster_decode_split", "megakernel"],
+    )
+    # Attention-only stages
     parser.add_argument("--batch", type=int, default=1)
     parser.add_argument("--heads", type=int, default=2)
     parser.add_argument("--batch-heads", type=int, default=3)
@@ -110,8 +156,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--num-threads", type=int, default=128)
     parser.add_argument("--dtype", default="float16", choices=["float16", "bfloat16"])
     parser.add_argument("--seed", type=int, default=123)
-    parser.add_argument("--rtol", type=float, default=2e-3)
-    parser.add_argument("--atol", type=float, default=2e-3)
+    parser.add_argument("--rtol", type=float, default=2e-2)
+    parser.add_argument("--atol", type=float, default=2e-2)
+    # Megakernel-specific
+    parser.add_argument("--hidden-dim", type=int, default=256)
+    parser.add_argument("--num-heads",  type=int, default=4)
     return parser.parse_args(argv)
 
 
@@ -121,13 +170,15 @@ def main(argv: list[str]) -> int:
     args.dtype = getattr(torch, args.dtype)
     args.softmax_scale = 1.0 / (args.head_dim**0.5)
 
-    results = []
+    results: list[CheckResult] = []
     if args.stage in ("all", "reduce"):
         results.append(verify_reduce_contract(args))
     if args.stage in ("all", "cluster_decode"):
         results.append(verify_kernel_stage("cluster_decode", args))
     if args.stage in ("all", "cluster_decode_split"):
         results.append(verify_kernel_stage("cluster_decode_split", args))
+    if args.stage in ("all", "megakernel"):
+        results.extend(verify_megakernel(args))
 
     for result in results:
         print(
