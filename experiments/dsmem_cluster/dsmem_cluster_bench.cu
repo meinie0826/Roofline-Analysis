@@ -69,15 +69,10 @@ int sm_count() {
 }
 
 int max_blocks_per_cluster() {
-  int device = 0;
-  check_cuda(cudaGetDevice(&device), "cudaGetDevice");
-  int value = 0;
-  cudaError_t err = cudaDeviceGetAttribute(&value, cudaDevAttrMaxBlocksPerCluster, device);
-  if (err != cudaSuccess) {
-    cudaGetLastError();
-    return 0;
-  }
-  return value;
+  // Some CUDA 12.x headers that can compile Blackwell targets do not expose
+  // cudaDevAttrMaxBlocksPerCluster. The benchmark still validates each tested
+  // cluster size by launching it, so keep this metadata field best-effort.
+  return 0;
 }
 
 double sm_clock_ghz() {
@@ -145,20 +140,20 @@ __global__ void init_pointer_chase(unsigned int* data, size_t elems, unsigned in
 }
 
 __global__ void dsmem_latency_kernel(LatencyResult* out, int iters, int elems, int peer_delta) {
-  extern __shared__ unsigned int smem[];
+  extern __shared__ unsigned int latency_smem[];
   cg::cluster_group cluster = cg::this_cluster();
   const int rank = static_cast<int>(cluster.block_rank());
   const int cluster_size = static_cast<int>(cluster.num_blocks());
   const unsigned int stride = 131u;
 
   for (int i = threadIdx.x; i < elems; i += blockDim.x) {
-    smem[i] = static_cast<unsigned int>((i + stride) % elems);
+    latency_smem[i] = static_cast<unsigned int>((i + stride) % elems);
   }
   cluster.sync();
 
   if (rank == 0 && threadIdx.x == 0) {
     const int peer_rank = (cluster_size == 1) ? 0 : ((rank + peer_delta) % cluster_size);
-    volatile unsigned int* peer = reinterpret_cast<volatile unsigned int*>(cluster.map_shared_rank(smem, peer_rank));
+    volatile unsigned int* peer = reinterpret_cast<volatile unsigned int*>(cluster.map_shared_rank(latency_smem, peer_rank));
     unsigned int index = static_cast<unsigned int>(peer[0]);
     unsigned long long start = clock64();
     for (int iter = 0; iter < iters; ++iter) {
@@ -185,7 +180,7 @@ __global__ void global_latency_kernel(LatencyResult* out, const unsigned int* da
 }
 
 __global__ void dsmem_bandwidth_kernel(unsigned long long* sinks, int iters, int buffer_bytes) {
-  extern __shared__ __align__(16) unsigned char smem[];
+  extern __shared__ __align__(16) unsigned char bandwidth_smem[];
   cg::cluster_group cluster = cg::this_cluster();
   const int rank = static_cast<int>(cluster.block_rank());
   const int cluster_size = static_cast<int>(cluster.num_blocks());
@@ -193,12 +188,12 @@ __global__ void dsmem_bandwidth_kernel(unsigned long long* sinks, int iters, int
   for (int i = threadIdx.x * 16; i < buffer_bytes; i += blockDim.x * 16) {
     uint4 value{static_cast<unsigned int>(rank + i), static_cast<unsigned int>(rank + i + 1),
                 static_cast<unsigned int>(rank + i + 2), static_cast<unsigned int>(rank + i + 3)};
-    *reinterpret_cast<uint4*>(smem + i) = value;
+    *reinterpret_cast<uint4*>(bandwidth_smem + i) = value;
   }
   cluster.sync();
 
   const int peer_rank = (cluster_size == 1) ? rank : ((rank + 1) % cluster_size);
-  const unsigned char* peer = reinterpret_cast<const unsigned char*>(cluster.map_shared_rank(smem, peer_rank));
+  const unsigned char* peer = reinterpret_cast<const unsigned char*>(cluster.map_shared_rank(bandwidth_smem, peer_rank));
   const int vec_count = buffer_bytes / 16;
   const uint4* vec = reinterpret_cast<const uint4*>(peer);
   unsigned long long checksum = 0;
