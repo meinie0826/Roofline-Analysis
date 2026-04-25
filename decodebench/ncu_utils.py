@@ -42,6 +42,21 @@ def normalize_metric_value(value: str) -> float | str | None:
         return value.strip()
 
 
+def is_wide_metric_column(name: str) -> bool:
+    if "__" not in name:
+        return False
+    return name.startswith((
+        "gpu__",
+        "sm__",
+        "smsp__",
+        "dram__",
+        "l1tex__",
+        "lts__",
+        "launch__",
+        "profiler__",
+    ))
+
+
 def load_ncu_rows(csv_path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     with csv_path.open("r", encoding="utf-8", errors="replace", newline="") as handle:
@@ -50,13 +65,28 @@ def load_ncu_rows(csv_path: Path) -> list[dict[str, Any]]:
                 continue
             header = next(csv.reader([raw_line]))
             reader = csv.DictReader(handle, fieldnames=header)
+            narrow_format = "Metric Name" in header or "Metric" in header
+            metric_columns = [name for name in header if is_wide_metric_column(name)]
             for row in reader:
                 if not row.get("ID"):
                     continue
-                metric_name = row.get("Metric Name") or row.get("Metric") or ""
-                if not metric_name:
+                if narrow_format:
+                    metric_name = row.get("Metric Name") or row.get("Metric") or ""
+                    if metric_name:
+                        rows.append(row)
                     continue
-                rows.append(row)
+                kernel_name = row.get("Kernel Name") or row.get("launch__kernel_name") or row.get("Kernel") or "unknown_kernel"
+                for metric_name in metric_columns:
+                    value = row.get(metric_name, "")
+                    if value == "":
+                        continue
+                    rows.append({
+                        "ID": row.get("ID"),
+                        "Kernel Name": kernel_name,
+                        "Metric Name": metric_name,
+                        "Metric Unit": "%" if "pct" in metric_name else "",
+                        "Metric Value": value,
+                    })
             break
     return rows
 
