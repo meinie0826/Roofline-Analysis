@@ -9,7 +9,7 @@ Pipeline per cluster (= per attention head):
   Stage 0 – RMSNorm (hidden slice per CTA + DSM scalar reduce)
   Stage 1 – W_qkv GEMM (hidden slice per CTA + DSM vector reduce)
   Stage 2 – RoPE (GPT-J style)
-  Stage 3 – Flash-decode attention (full KV cache)
+  Stage 3 – Flash-decode attention (KV slice per CTA + DSM reductions)
   Stage 4 – W_o GEMM (attn_out @ W_o partial, per head)
   Output: sum across heads (done in Python)
 """
@@ -31,6 +31,7 @@ _MEGAKERNEL_COMPILED_CACHE: dict = {}
 
 if HAS_CUTE:
     from .cluster_primitives import (
+        cluster_reduce_scalar_max_mbarrier,
         cluster_reduce_scalar_sum_mbarrier,
         cluster_reduce_vector_sum_mbarrier,
     )
@@ -47,6 +48,7 @@ if HAS_CUTE:
         cluster_size = config.cluster_size
         cluster_shape = (cluster_size, 1, 1)
         qkv_elems = 3 * head_dim
+        kv_per_cta = (seq_len + cluster_size - 1) // cluster_size
 
         @cute.kernel
         def _megakernel(
@@ -84,6 +86,12 @@ if HAS_CUTE:
             local_qkv     = cute.make_tensor(local_qkv_ptr, cute.make_layout((3 * head_dim,)))
             qkv_recv_ptr = smem.allocate_array(cutlass.Float32, num_elems=cluster_size * qkv_elems)
             qkv_mbar_ptr = smem.allocate_array(cutlass.Int64, num_elems=1)
+            attn_max_ptr = smem.allocate_array(cutlass.Float32, num_elems=cluster_size)
+            attn_max_mbar_ptr = smem.allocate_array(cutlass.Int64, num_elems=1)
+            attn_sum_ptr = smem.allocate_array(cutlass.Float32, num_elems=cluster_size)
+            attn_sum_mbar_ptr = smem.allocate_array(cutlass.Int64, num_elems=1)
+            attn_recv_ptr = smem.allocate_array(cutlass.Float32, num_elems=cluster_size * head_dim)
+            attn_mbar_ptr = smem.allocate_array(cutlass.Int64, num_elems=1)
 
             # ============================================================ #
             # Stage 0 – RMSNorm                                            #
@@ -177,7 +185,9 @@ if HAS_CUTE:
                 v_out[0, head_id, tidx] = local_qkv[2 * head_dim + tidx].to(cutlass.Float16)
 
             # ============================================================ #
-            # Stage 3 – Flash-decoding attention (full KV cache)          #
+            # Stage 3 – Flash-decoding attention                           #
+            # Each CTA owns a KV slice, then cluster-reduces online-softmax #
+            # max/sum and the scaled output vector.                        #
             # ============================================================ #
             local_max = -cutlass.Float32.inf
             local_sum =  cutlass.Float32(0.0)
@@ -189,7 +199,12 @@ if HAS_CUTE:
                 acc_o[tidx] = cutlass.Float32(0.0)
             cute.arch.barrier()
 
-            for kv_idx in range(seq_len):
+            kv_start = cta_rank * kv_per_cta
+            kv_stop = kv_start + kv_per_cta
+            if kv_stop > seq_len:
+                kv_stop = seq_len
+
+            for kv_idx in range(kv_start, kv_stop):
                 if tidx < head_dim:
                     # Q·K for this KV row
                     qk = cutlass.Float32(0.0)
@@ -206,9 +221,40 @@ if HAS_CUTE:
                     prob = cute.math.exp(qk - local_max)
                     acc_o[tidx] = acc_o[tidx] * scale_old + prob * v_cache[kv_idx, head_id, tidx].to(cutlass.Float32)
 
+            global_max = cluster_reduce_scalar_max_mbarrier(
+                attn_max_ptr,
+                attn_max_mbar_ptr,
+                local_max,
+                tidx,
+                cluster_size,
+            )
+
+            if tidx < head_dim:
+                local_scale = cute.math.exp(local_max - global_max)
+                local_sum = local_sum * local_scale
+                acc_o[tidx] = acc_o[tidx] * local_scale
+
+            global_sum = cluster_reduce_scalar_sum_mbarrier(
+                attn_sum_ptr,
+                attn_sum_mbar_ptr,
+                local_sum,
+                tidx,
+                cluster_size,
+            )
+
+            cluster_reduce_vector_sum_mbarrier(
+                acc_ptr,
+                attn_recv_ptr,
+                attn_mbar_ptr,
+                head_dim,
+                tidx,
+                cluster_size,
+                num_threads,
+            )
+
             # Normalize
             cute.arch.barrier()
-            inv_sum = cutlass.Float32(1.0) / local_sum
+            inv_sum = cutlass.Float32(1.0) / global_sum
             if tidx < head_dim:
                 acc_o[tidx] = acc_o[tidx] * inv_sum
                 # Store attn output to V slot of local_qkv (reuse)

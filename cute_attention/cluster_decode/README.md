@@ -12,12 +12,12 @@ in Python/CuTeDSL instead of raw CUDA C++.
 ### Current implementation status
 
 `cluster_megakernel.py` currently matches ClusterFusion's launch topology
-(`cluster_size` CTAs per attention head). Stage 0 RMSNorm and Stage 1 QKV GEMM
-use the ClusterFusion ownership model: each CTA scans its `DIM_PER_BLOCK`
-hidden slice and DSM-reduces the partial L2 scalar / `3*head_dim` QKV vector via
-inline PTX `st.async.shared::cluster` plus mbarrier. Later stages are still
-correctness baselines: each CTA computes the full per-head attention/W_o path
-and only CTA rank 0 writes K/V and W_o partials.
+(`cluster_size` CTAs per attention head). Stages 0/1/3 use the ClusterFusion
+ownership model: each CTA scans its `DIM_PER_BLOCK` hidden slice for RMSNorm/QKV
+and its KV slice for attention, then DSM-reduces the L2 scalar, `3*head_dim` QKV
+vector, softmax max/sum scalars, and attention output vector via inline PTX
+`st.async.shared::cluster` plus mbarrier. W_o is still a correctness baseline:
+each CTA computes the full per-head W_o path and only CTA rank 0 writes partials.
 
 `cluster_primitives.py` keeps the older high-level `mapa + cluster atomic_add`
 helper isolated as an experimental path because it currently hits an NVVM ICE

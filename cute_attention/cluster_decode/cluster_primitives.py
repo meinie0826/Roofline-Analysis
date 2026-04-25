@@ -135,6 +135,44 @@ if HAS_CUTE:
         return vals_ptr[0]
 
     @cute.jit
+    def cluster_reduce_scalar_max_mbarrier(
+        vals_ptr,       # shared float32 array with cluster_size elements
+        mbar_ptr,       # shared int64 mbarrier storage with 1 element
+        local_val,      # cutlass.Float32 contribution from this CTA
+        tidx,
+        cluster_size: int,
+    ):
+        """Reduce one float32 scalar across a CTA cluster by taking max."""
+        cta_rank = cute.arch.make_warp_uniform(cute.arch.block_idx_in_cluster())
+
+        if tidx == 0:
+            for i in range(cluster_size):
+                vals_ptr[i] = -cutlass.Float32.inf
+            cute.arch.mbarrier_init(mbar_ptr, 1)
+        cute.arch.mbarrier_init_fence()
+        cute.arch.cluster_arrive_relaxed()
+        cute.arch.cluster_wait()
+
+        if tidx == 0:
+            cute.arch.mbarrier_arrive_and_expect_tx(mbar_ptr, cluster_size * 4)
+
+        if tidx < cluster_size:
+            dst_ptr = vals_ptr + cta_rank
+            _store_shared_remote_f32(local_val, dst_ptr, mbar_ptr, tidx)
+
+        cute.arch.mbarrier_wait(mbar_ptr, phase=0)
+
+        if tidx == 0:
+            max_val = -cutlass.Float32.inf
+            for i in range(cluster_size):
+                val = vals_ptr[i]
+                max_val = val if max_val < val else max_val
+            vals_ptr[0] = max_val
+
+        cute.arch.barrier()
+        return vals_ptr[0]
+
+    @cute.jit
     def cluster_reduce_scalar_sum_atomic_inplace(
         smem_scalar_ptr,  # cute Pointer to __shared__ float32  (1 element)
         local_val,        # cutlass.Float32 – this CTA's contribution
