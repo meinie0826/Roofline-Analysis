@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 PYTHON_BIN = sys.executable or "python3"
 
 from summarize_results import print_summary
+from ncu_utils import DEFAULT_NCU_METRICS, resolve_metrics, summarize_ncu
 
 
 def shell(argv: list[str]) -> str:
@@ -299,6 +300,56 @@ def short_backend(name: str) -> str:
     }.get(name, name)
 
 
+def safe_profile_name(text: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in "_.-" else "_" for ch in text)
+
+
+def ncu_csv_path(profile_dir: Path, backend: dict, workload: dict) -> Path:
+    return profile_dir / f'{safe_profile_name(backend["name"])}__{safe_profile_name(workload["id"])}.ncu.csv'
+
+
+def wrap_ncu_cmd(
+    argv: list[str],
+    csv_path: Path,
+    ncu_bin: str,
+    metrics: list[str],
+    sections: list[str],
+    launch_skip: int,
+    launch_count: int,
+    kernel_name: str | None,
+) -> list[str]:
+    wrapped = [
+        ncu_bin,
+        "--target-processes", "all",
+        "--csv",
+        "--page", "raw",
+        "--launch-skip", str(launch_skip),
+        "--launch-count", str(launch_count),
+        "--log-file", str(csv_path),
+    ]
+    for section in sections:
+        wrapped += ["--section", section]
+    if metrics:
+        wrapped += ["--metrics", ",".join(metrics)]
+    if kernel_name:
+        wrapped += ["--kernel-name", kernel_name]
+    return wrapped + argv
+
+
+def merge_ncu_result(result_path: Path, csv_path: Path, command: list[str], metrics: list[str], warnings: list[str]) -> None:
+    try:
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        result = {}
+    result.update(summarize_ncu(csv_path))
+    result["ncu_profiled"] = True
+    result["ncu_csv"] = str(csv_path)
+    result["ncu_command"] = shell(command)
+    result["ncu_metrics_requested"] = metrics
+    result["ncu_metric_warnings"] = warnings
+    result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 def write_failure(path: Path, backend: dict, workload: dict, returncode: int, command: list[str], output: str) -> None:
     short_reason = ""
     lines = [line.strip() for line in output.splitlines() if line.strip()]
@@ -346,6 +397,16 @@ def short_failure_reason(output: str) -> str:
     return lines[-1] if lines else "unknown error"
 
 
+def result_has_ncu_profile(path: Path) -> bool:
+    if not path.exists():
+        return False
+    try:
+        row = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return row.get("ncu_profiled") is True and isinstance(row.get("ncu_tensor_core_summary"), dict)
+
+
 def result_is_success(path: Path) -> bool:
     if not path.exists():
         return False
@@ -369,6 +430,15 @@ def main() -> int:
     parser.add_argument("--report", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--reference-backend", default="flashinfer_paged_decode")
     parser.add_argument("--resume", action="store_true", help="Skip backend/workload pairs with an existing successful result JSON.")
+    parser.add_argument("--profile-ncu", action="store_true", help="Wrap each benchmark with Nsight Compute and merge Tensor Core metrics into the normal result JSON.")
+    parser.add_argument("--ncu", default="ncu", help="Nsight Compute CLI path used with --profile-ncu.")
+    parser.add_argument("--ncu-profile-dir", type=Path, default=None, help="Directory for raw NCU CSV files. Defaults to <results-dir>/ncu.")
+    parser.add_argument("--ncu-metric", action="append", dest="ncu_metrics", help="NCU metric to collect. May be repeated. Defaults include TC/SM/DRAM/time metrics.")
+    parser.add_argument("--ncu-section", action="append", dest="ncu_sections", default=[], help="Optional NCU section. May be repeated.")
+    parser.add_argument("--ncu-kernel-name", default=None, help="Optional NCU --kernel-name regex filter.")
+    parser.add_argument("--ncu-launch-skip", type=int, default=0)
+    parser.add_argument("--ncu-launch-count", type=int, default=1)
+    parser.add_argument("--ncu-query-metrics", action=argparse.BooleanOptionalAction, default=True, help="Query NCU and keep only available default metrics before profiling.")
     args = parser.parse_args()
 
     if args.dry_run == args.execute:
@@ -376,6 +446,14 @@ def main() -> int:
 
     config = load_config(args.config)
     args.results_dir.mkdir(parents=True, exist_ok=True)
+    ncu_metrics: list[str] = []
+    ncu_metric_warnings: list[str] = []
+    ncu_profile_dir = args.ncu_profile_dir or (args.results_dir / "ncu")
+    if args.profile_ncu:
+        ncu_profile_dir.mkdir(parents=True, exist_ok=True)
+        ncu_metrics, ncu_metric_warnings = resolve_metrics(args.ncu, args.ncu_metrics or DEFAULT_NCU_METRICS, args.ncu_query_metrics)
+        for warning in ncu_metric_warnings:
+            print(f"# {warning}")
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     failures = 0
     executed_paths: list[Path] = []
@@ -390,7 +468,20 @@ def main() -> int:
             path = output_path(backend, workload, args.results_dir)
             executed_paths.append(path)
             argv = build_cmd(backend, workload, config.get("defaults", {}), args.results_dir)
-            if args.resume and result_is_success(path):
+            run_argv = argv
+            csv_path = ncu_csv_path(ncu_profile_dir, backend, workload)
+            if args.profile_ncu:
+                run_argv = wrap_ncu_cmd(
+                    argv,
+                    csv_path,
+                    args.ncu,
+                    ncu_metrics,
+                    args.ncu_sections,
+                    args.ncu_launch_skip,
+                    args.ncu_launch_count,
+                    args.ncu_kernel_name,
+                )
+            if args.resume and result_is_success(path) and (not args.profile_ncu or result_has_ncu_profile(path)):
                 skipped += 1
                 if args.dry_run:
                     print(f"# skip existing success: {short_backend(backend['name'])} {workload['id']}")
@@ -398,20 +489,33 @@ def main() -> int:
                     print(f"↷ {workload['id']:<28} {short_backend(backend['name'])}  | existing result")
                 continue
             if args.dry_run:
-                print(shell(argv))
+                print(shell(run_argv))
             else:
                 env = os.environ.copy()
                 env["DECODEBENCH_RUN_ID"] = run_id
                 env["DECODEBENCH_WORKLOAD_ID"] = workload["id"]
-                completed = subprocess.run(argv, check=False, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                completed = subprocess.run(run_argv, check=False, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
                 if args.verbose and completed.stdout:
                     print(completed.stdout, end="")
                 if completed.returncode != 0:
                     failures += 1
-                    write_failure(path, backend, workload, completed.returncode, argv, completed.stdout)
+                    write_failure(path, backend, workload, completed.returncode, run_argv, completed.stdout)
                     print(f"✗ {workload['id']:<28} {short_backend(backend['name'])}  | {short_failure_reason(completed.stdout)}")
                 else:
-                    print(f"✓ {workload['id']:<28} {short_backend(backend['name'])}")
+                    if args.profile_ncu:
+                        if csv_path.exists():
+                            merge_ncu_result(path, csv_path, run_argv, ncu_metrics, ncu_metric_warnings)
+                            try:
+                                tc_util = json.loads(path.read_text(encoding="utf-8")).get("ncu_tensor_core_util_pct")
+                            except (OSError, json.JSONDecodeError):
+                                tc_util = None
+                            print(f"✓ {workload['id']:<28} {short_backend(backend['name'])}  | TC {tc_util}")
+                        else:
+                            failures += 1
+                            write_failure(path, backend, workload, completed.returncode, run_argv, completed.stdout + "\nNCU CSV was not produced.")
+                            print(f"✗ {workload['id']:<28} {short_backend(backend['name'])}  | NCU CSV was not produced")
+                    else:
+                        print(f"✓ {workload['id']:<28} {short_backend(backend['name'])}")
 
     if args.resume and skipped:
         print(f"Skipped existing successful results: {skipped}")

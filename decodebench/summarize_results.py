@@ -118,7 +118,7 @@ def backend_order(name: str) -> tuple[int, str]:
     return order.get(name, 100), name
 
 
-def table_cell(row: dict | None, best_latency: float | None) -> str:
+def table_cell(row: dict | None, best_latency: float | None, show_tc: bool = False) -> str:
     if row is None:
         return "-"
     status = row_status(row)
@@ -133,8 +133,16 @@ def table_cell(row: dict | None, best_latency: float | None) -> str:
     if latency is None:
         return "-"
     if best_latency and latency > 0:
-        return f"{latency:.1f}/{best_latency / latency:.2f}x"
-    return f"{latency:.1f}"
+        text = f"{latency:.1f}/{best_latency / latency:.2f}x"
+    else:
+        text = f"{latency:.1f}"
+    if show_tc:
+        tc_util = row.get("ncu_tensor_core_util_pct")
+        if isinstance(tc_util, (int, float)) and math.isfinite(tc_util):
+            text += f"/{tc_util:.1f}%tc"
+        else:
+            text += "/-tc"
+    return text
 
 
 def print_pivot_summary(rows: list[dict]) -> None:
@@ -146,11 +154,15 @@ def print_pivot_summary(rows: list[dict]) -> None:
 
     backend_names = sorted(backends, key=backend_order)
     mode = "kernel" if all(row.get("layer") == "kernel" for row in rows) else "mixed"
+    show_tc = any(row.get("ncu_profiled") or row.get("ncu_tensor_core_util_pct") is not None for row in rows)
     print(f"Operator: decode_attention  Performance Test (mode={mode}, level=sota)")
-    print("Cell: latency_us/vs_best_x; '-' means not scheduled for that backend/workload")
+    if show_tc:
+        print("Cell: latency_us/vs_best_x/tc_util_pct; '-' means not scheduled for that backend/workload")
+    else:
+        print("Cell: latency_us/vs_best_x; '-' means not scheduled for that backend/workload")
 
     workload_width = max(28, max((len(workload_name(key)) for key in groups), default=28))
-    cell_width = 16
+    cell_width = 24 if show_tc else 16
     header = f"{'Workload':<{workload_width}}" + "".join(f"{name:>{cell_width}}" for name in backend_names)
     print(header)
     print("-" * len(header))
@@ -166,7 +178,7 @@ def print_pivot_summary(rows: list[dict]) -> None:
             if previous is None or (compare_latency_us(row) or float("inf")) < (compare_latency_us(previous) or float("inf")):
                 by_backend[backend] = row
         line = f"{workload_name(key):<{workload_width}}" + "".join(
-            f"{table_cell(by_backend.get(name), best_latency):>{cell_width}}" for name in backend_names
+            f"{table_cell(by_backend.get(name), best_latency, show_tc):>{cell_width}}" for name in backend_names
         )
         print(line)
 
@@ -183,6 +195,7 @@ def print_long_summary(rows: list[dict]) -> None:
         f"{'Latency (us)':>16}"
         f"{'Vs Best':>12}"
         f"{'GB/s':>10}"
+        f"{'TC %':>10}"
         f"{'Compare':>18}  "
         f"Workload Detail"
     )
@@ -202,6 +215,9 @@ def print_long_summary(rows: list[dict]) -> None:
         for row in ordered:
             latency = compare_latency_us(row)
             cand_bw = row.get("approx_effective_kv_bandwidth_gb_s")
+            tc_util = row.get("ncu_tensor_core_util_pct")
+            if not isinstance(tc_util, (int, float)) or not math.isfinite(tc_util):
+                tc_util = None
             status = row_status(row)
             if status == "SUCCESS" and best_latency and latency:
                 speedup = best_latency / latency
@@ -212,6 +228,7 @@ def print_long_summary(rows: list[dict]) -> None:
                 f"{format_metric(latency, 1):>16}"
                 f"{format_metric(speedup, 3):>12}"
                 f"{format_bw(cand_bw):>10}"
+                f"{format_metric(tc_util, 1):>10}"
                 f"{display_backend(row):>18}  "
                 f"{workload_name(key)}"
             )

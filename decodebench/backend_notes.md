@@ -58,3 +58,16 @@ python decodebench/profile_ncu.py \
 ```
 
 The summary JSON contains `ncu_tensor_core_util_pct`, plus per-metric details in `ncu_tensor_core_summary`. Defaults request time, SM throughput, DRAM throughput, and several Tensor Core activity metrics; the script queries NCU first and skips unavailable defaults. If Nsight Compute on a new GPU/driver still needs a different Tensor Core metric, pass explicit metrics with repeated `--metric ...` after checking available names with `ncu --query-metrics | grep -Ei 'tensor|hmma|wgmma|mma'`.
+
+You can also keep using the normal matrix runner and add Tensor Core profiling fields directly to the usual result JSON files:
+
+```bash
+python decodebench/run_matrix.py \
+  --config decodebench/matrix_b200.py \
+  --execute \
+  --resume \
+  --profile-ncu \
+  --ncu-launch-count 1
+```
+
+With `--profile-ncu`, each normal result JSON gets extra fields including `ncu_profiled`, `ncu_csv`, `ncu_tensor_core_util_pct`, and `ncu_tensor_core_summary`; the summary table also shows `latency/vs_best/tc%` when those fields are present. `--resume` skips only results that already have both a valid benchmark latency and NCU profile fields.
