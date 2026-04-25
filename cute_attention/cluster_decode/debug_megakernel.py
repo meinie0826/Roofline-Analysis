@@ -122,6 +122,48 @@ def debug_megakernel():
     print(f"\ncuda_out stats: mean={cuda_out.float().mean():.4f}, std={cuda_out.float().std():.4f}")
     print(f"cuda_out sample [0, 0:8]: {cuda_out[0, 0:8].float()}")
 
+    # ---- Manual reference computation for comparison ----
+    h_f = inputs["hidden_states"].float()                # (1, D)
+    w_qkv_f = inputs["w_qkv"].float()                   # (3D, D)
+    w_o_f = inputs["w_o"].float()                       # (D, D)
+
+    # RMSNorm
+    rms_weight_f = inputs["rms_weight"].float()
+    total_l2_ref = h_f.pow(2).sum(dim=-1).item()
+    mean_l2_ref = total_l2_ref / hidden_dim
+    rms_rcp_ref = 1.0 / (mean_l2_ref ** 0.5 + 1e-6) ** 0.5  # wrong
+    rms_rcp_ref = (mean_l2_ref + 1e-6) ** (-0.5)
+    h_norm = h_f * rms_rcp_ref * rms_weight_f
+
+    print(f"\n=== DETAILED REFERENCE ===")
+    print(f"total l2 (sum of x^2): {total_l2_ref:.4f}")
+    print(f"mean l2: {mean_l2_ref:.4f}")
+    print(f"rms_rcp: {rms_rcp_ref:.4f}")
+    print(f"h_norm[0, 0:4]: {h_norm[0, 0:4]}")
+
+    # QKV
+    qkv_ref = h_norm @ w_qkv_f.T
+    Q0 = qkv_ref[0, 0:head_dim]  # head 0 Q
+    print(f"Q head 0 [0:4]: {Q0[0:4]}")
+
+    # Attn per head
+    Q_rot = Q_ref  # from earlier computation
+    print(f"Q_rot head 0 [0:4] (after RoPE, cos=1 sin=0): {Q_rot[0, 0, 0:4]}")
+
+    # Attention scores for head 0
+    k_f = inputs["k_cache"].float()
+    v_f = inputs["v_cache"].float()
+    q0 = Q_rot[0, 0]  # (head_dim,)
+    scores0 = (q0 @ k_f[:, 0, :].T) * scale.item() if hasattr(scale, 'item') else (q0 @ k_f[:, 0, :].T) * config.resolve_scale()
+    print(f"attn scores head 0 max: {scores0.max():.4f}, mean: {scores0.mean():.4f}")
+    probs0 = torch.softmax(scores0, dim=-1)
+    attn_out0 = probs0 @ v_f[:, 0, :]
+    print(f"attn_out head 0 [0:4]: {attn_out0[0:4]}")
+
+    # W_o for head 0: attn_out0 @ w_o[0:head_dim, :].T
+    wo_head0_out = attn_out0 @ w_o_f[0:head_dim, :].T
+    print(f"W_o output head 0 [0:4]: {wo_head0_out[0:4]}")
+
     print("\n=== COMPARISON ===")
     diff = (cuda_out.float() - ref_out.float()).abs()
     print(f"max abs diff: {diff.max():.4f}")

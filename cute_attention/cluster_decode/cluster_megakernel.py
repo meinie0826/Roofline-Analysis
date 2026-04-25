@@ -103,11 +103,13 @@ if HAS_CUTE:
             # Write partial l2 to global scratch, then cluster sync
             if tidx == 0:
                 scratch_l2[head_id, cta_rank] = local_l2
-
+            # Ensure global memory writes visible to all CTAs before cluster sync
+            cute.arch.fence_acq_rel_gpu()
             cute.arch.cluster_arrive()
             cute.arch.cluster_wait()
 
             # Leader CTA reads all partials and computes RMSNorm
+            cute.arch.fence_acq_rel_gpu()
             if cta_rank == 0:
                 cluster_l2 = cutlass.Float32(0.0)
                 for c in range(cluster_size):
@@ -126,6 +128,9 @@ if HAS_CUTE:
                     scratch_l2[head_id, 0] = cluster_l2  # reuse slot 0 for total
 
             # All CTAs read the total l2
+            if tidx == 0:
+                scratch_l2[head_id, 0] = cluster_l2  # reuse slot 0 for total
+            cute.arch.fence_acq_rel_gpu()
             cute.arch.cluster_arrive()
             cute.arch.cluster_wait()
 
@@ -222,10 +227,12 @@ if HAS_CUTE:
                 scratch_sum[head_id, cta_rank] = local_sum
 
             # Ensure all writes visible across cluster
+            cute.arch.fence_acq_rel_gpu()
             cute.arch.cluster_arrive()
             cute.arch.cluster_wait()
 
             # Leader CTA reads all partials and reduces
+            cute.arch.fence_acq_rel_gpu()
             if cta_rank == 0:
                 # Global max
                 global_max = -cutlass.Float32.inf
