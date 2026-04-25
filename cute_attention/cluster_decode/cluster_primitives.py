@@ -46,6 +46,7 @@ if HAS_CUTE:
     # Scalar cluster reductions (for RMSNorm sum, flash-decode max/sum)   #
     # ------------------------------------------------------------------ #
 
+    @cute.jit
     def cluster_reduce_scalar_sum_inplace(
         smem_scalar_ptr,  # cute Pointer to __shared__ float32  (1 element)
         local_val,        # cutlass.Float32 – this CTA's contribution
@@ -78,6 +79,7 @@ if HAS_CUTE:
             cute.arch.cluster_arrive()
             cute.arch.cluster_wait()
 
+    @cute.jit
     def cluster_reduce_scalar_max_inplace(
         smem_scalar_ptr,  # cute Pointer to __shared__ float32
         local_val,        # cutlass.Float32
@@ -102,6 +104,7 @@ if HAS_CUTE:
     # Vector cluster reductions (LINEAR / ATTN stages)                    #
     # ------------------------------------------------------------------ #
 
+    @cute.jit
     def cluster_reduce_vector_add_inplace(
         src_ptr,        # Pointer to local SMEM vector (num_halfs elements)
         num_halfs: int, # total number of float16 elements
