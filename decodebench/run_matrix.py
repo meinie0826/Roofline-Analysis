@@ -603,10 +603,19 @@ def main() -> int:
                         if csv_path.exists():
                             merge_ncu_result(path, csv_path, run_argv, ncu_metrics, ncu_metric_warnings)
                             try:
-                                tc_util = json.loads(path.read_text(encoding="utf-8")).get("ncu_tensor_core_util_pct")
+                                row = json.loads(path.read_text(encoding="utf-8"))
+                                tc_util = row.get("ncu_tensor_core_util_pct")
+                                max_tc = row.get("ncu_tensor_core_max_kernel_util_pct")
+                                max_kernel = row.get("ncu_tensor_core_max_kernel_name")
                             except (OSError, json.JSONDecodeError):
                                 tc_util = None
-                            print(f"✓ {workload['id']:<28} {short_backend(backend['name'])}  | TC {tc_util}")
+                                max_tc = None
+                                max_kernel = None
+                            if max_tc is not None and max_kernel:
+                                kernel_short = str(max_kernel).split("(", 1)[0][:96]
+                                print(f"✓ {workload['id']:<28} {short_backend(backend['name'])}  | TC {tc_util} max {max_tc} kernel {kernel_short}")
+                            else:
+                                print(f"✓ {workload['id']:<28} {short_backend(backend['name'])}  | TC {tc_util}")
                         else:
                             failures += 1
                             write_failure(path, backend, workload, completed.returncode, run_argv, completed.stdout + "\nNCU CSV was not produced.")

@@ -149,21 +149,41 @@ def summarize_ncu(csv_path: Path) -> dict[str, Any]:
         }
 
     selected_tc = None
+    selected_tc_metric = None
     for preferred in DEFAULT_NCU_METRICS:
         if preferred in tensor_core_summary:
             item = tensor_core_summary[preferred]
             selected_tc = item["time_weighted_pct"] if item["time_weighted_pct"] is not None else item["max_pct"]
+            selected_tc_metric = preferred
             break
     if selected_tc is None and tensor_core_summary:
-        first = next(iter(tensor_core_summary.values()))
+        selected_tc_metric, first = next(iter(tensor_core_summary.items()))
         selected_tc = first["time_weighted_pct"] if first["time_weighted_pct"] is not None else first["max_pct"]
+
+    best_kernel = None
+    best_kernel_tc = None
+    best_kernel_metric = None
+    for kernel in by_kernel.values():
+        for metric_name in pct_metric_names:
+            metric = kernel["metrics"].get(metric_name)
+            if not metric or not isinstance(metric.get("value"), float):
+                continue
+            value = metric["value"]
+            if best_kernel_tc is None or value > best_kernel_tc:
+                best_kernel_tc = value
+                best_kernel = kernel["kernel_name"]
+                best_kernel_metric = metric_name
 
     return {
         "ncu_metric_rows": len(rows),
         "ncu_kernel_count": len(by_kernel),
         "ncu_tensor_core_metric_names": tc_metric_names,
         "ncu_tensor_core_util_pct": selected_tc,
+        "ncu_tensor_core_metric": selected_tc_metric,
         "ncu_tensor_core_summary": tensor_core_summary,
+        "ncu_tensor_core_max_kernel_util_pct": best_kernel_tc,
+        "ncu_tensor_core_max_kernel_name": best_kernel,
+        "ncu_tensor_core_max_kernel_metric": best_kernel_metric,
         "ncu_kernels": list(by_kernel.values()),
     }
 
