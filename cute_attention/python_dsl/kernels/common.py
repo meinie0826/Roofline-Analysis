@@ -41,6 +41,7 @@ class AttentionConfig:
     block_n: int = 128
     num_threads: int = 128
     num_stages_kv: int = 0
+    cluster_size: int = 2
     autotune: bool = False
 
     def resolve_scale(self, head_dim: int) -> float:

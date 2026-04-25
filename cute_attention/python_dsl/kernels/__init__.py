@@ -1,5 +1,11 @@
 from .baseline_fa4 import baseline_fa4_forward
 from .baseline_sdpa import baseline_sdpa_forward
+from .cluster_decode import cluster_decode_forward
+from .cluster_decode_reduce import (
+    leader_reduce_payload_floats,
+    split_kv_decode_reference,
+)
+from .cluster_decode_split import cluster_decode_split_forward
 from .common import AttentionConfig, available_backends
 from .reference import (
     causal_attention_blocked_reference,
@@ -37,6 +43,10 @@ __all__ = [
     "available_backends",
     "baseline_fa4_forward",
     "baseline_sdpa_forward",
+    "cluster_decode_forward",
+    "leader_reduce_payload_floats",
+    "split_kv_decode_reference",
+    "cluster_decode_split_forward",
     "causal_attention_reference",
     "causal_attention_online_reference",
     "causal_attention_blocked_reference",

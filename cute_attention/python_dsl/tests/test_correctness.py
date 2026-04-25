@@ -7,6 +7,10 @@ sys.path.insert(0, ".")
 import pytest
 
 from kernels import AttentionConfig, available_backends, run_stage
+from kernels.cluster_decode_reduce import (
+    leader_reduce_payload_floats,
+    split_kv_decode_reference,
+)
 from kernels.reference import (
     causal_attention_reference,
 )
@@ -21,6 +25,55 @@ def make_inputs(shape, dtype):
     k = torch.randn(*shape, device="cuda", dtype=dtype)
     v = torch.randn(*shape, device="cuda", dtype=dtype)
     return q, k, v
+
+
+def make_decode_inputs(batch, heads, seqlen_k, head_dim, dtype):
+    q = torch.randn(batch, heads, 1, head_dim, device="cuda", dtype=dtype)
+    k = torch.randn(batch, heads, seqlen_k, head_dim, device="cuda", dtype=dtype)
+    v = torch.randn(batch, heads, seqlen_k, head_dim, device="cuda", dtype=dtype)
+    return q, k, v
+
+
+@pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
+@pytest.mark.skipif(not backends["cute"], reason="CuTe DSL is not installed")
+def test_cluster_decode_v0_matches_decode_reference():
+    q, k, v = make_decode_inputs(batch=1, heads=2, seqlen_k=128, head_dim=128, dtype=torch.float16)
+    config = AttentionConfig(causal=False, block_n=64, num_threads=128, cluster_size=2)
+    scores = torch.matmul(q.to(torch.float32), k.to(torch.float32).transpose(-2, -1))
+    probs = torch.softmax(scores * config.resolve_scale(q.shape[-1]), dim=-1)
+    ref = torch.matmul(probs, v.to(torch.float32)).to(dtype=q.dtype)
+    out = run_stage("cluster_decode", q, k, v, config)
+    torch.testing.assert_close(out, ref, rtol=2e-3, atol=2e-3)
+
+
+@pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
+@pytest.mark.skipif(not backends["cute"], reason="CuTe DSL is not installed")
+@pytest.mark.parametrize("cluster_size", [2, 4])
+def test_cluster_decode_split_skeleton_matches_decode_reference(cluster_size):
+    q, k, v = make_decode_inputs(batch=1, heads=2, seqlen_k=128, head_dim=128, dtype=torch.float16)
+    config = AttentionConfig(causal=False, block_n=64, num_threads=128, cluster_size=cluster_size)
+    scores = torch.matmul(q.to(torch.float32), k.to(torch.float32).transpose(-2, -1))
+    probs = torch.softmax(scores * config.resolve_scale(q.shape[-1]), dim=-1)
+    ref = torch.matmul(probs, v.to(torch.float32)).to(dtype=q.dtype)
+    out = run_stage("cluster_decode_split", q, k, v, config)
+    torch.testing.assert_close(out, ref, rtol=2e-3, atol=2e-3)
+
+
+@pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
+@pytest.mark.parametrize("cluster_size", [2, 4])
+def test_cluster_decode_fine_grained_reduce_contract_matches_reference(cluster_size):
+    batch_heads, seq_len, head_dim = 3, 129, 128
+    q = torch.randn(batch_heads, 1, head_dim, dtype=torch.float32)
+    k = torch.randn(batch_heads, seq_len, head_dim, dtype=torch.float32)
+    v = torch.randn(batch_heads, seq_len, head_dim, dtype=torch.float32)
+    config = AttentionConfig(cluster_size=cluster_size)
+
+    scores = torch.matmul(q, k.transpose(-2, -1)) * config.resolve_scale(head_dim)
+    ref = torch.matmul(torch.softmax(scores, dim=-1), v)
+    out = split_kv_decode_reference(q, k, v, cluster_size, config.resolve_scale(head_dim))
+
+    assert leader_reduce_payload_floats(head_dim) == 130
+    torch.testing.assert_close(out, ref, rtol=1e-5, atol=1e-5)
 
 
 @pytest.mark.skipif(not backends["torch"], reason="PyTorch is not installed")
