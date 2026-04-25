@@ -16,3 +16,6 @@
 [submodule "TensorRT-LLM"]
 	path = 3rd/trtllm
 	url = https://github.com/NVIDIA/TensorRT-LLM.git
+[submodule "FlashInfer"]
+	path = 3rd/flashinfer
+	url = https://github.com/flashinfer-ai/flashinfer.git
