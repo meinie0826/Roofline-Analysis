@@ -69,6 +69,7 @@ def main() -> int:
         args.warmup = 1
         args.latency_iters = 10_000
         args.bandwidth_iters = 128
+        args.cluster_sizes = "1,2,4"
         args.global_latency_elems = 4 * 1024 * 1024
         args.global_bandwidth_bytes = 64 * 1024 * 1024
 

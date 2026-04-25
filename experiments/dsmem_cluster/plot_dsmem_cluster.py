@@ -43,6 +43,7 @@ def plot_one(axs, label: str, rows: list[dict[str, Any]]) -> None:
     active = by_metric(rows, "active_sm")
     global_latency = metric_scalar(rows, "global_latency", "cycles_per_load_median")
     global_bandwidth = metric_scalar(rows, "global_bandwidth", "bandwidth_tb_s_median")
+    local_smem_bandwidth = metric_scalar(rows, "local_smem_bandwidth", "bandwidth_tb_s_median")
 
     x_lat = [row["cluster_size"] for row in latency]
     y_lat = [row["cycles_per_load_median"] for row in latency]
@@ -59,6 +60,9 @@ def plot_one(axs, label: str, rows: list[dict[str, Any]]) -> None:
     axs[1].bar([str(x) for x in x_bw], y_bw, color="#9ecae1", edgecolor="#4d4d4d")
     if global_bandwidth is not None:
         axs[1].axhline(global_bandwidth, linestyle="--", color="black", linewidth=1.2, label="Global Memory")
+    if local_smem_bandwidth is not None:
+        axs[1].axhline(local_smem_bandwidth, linestyle=":", color="#555555", linewidth=1.2, label="Local SMEM")
+    if global_bandwidth is not None or local_smem_bandwidth is not None:
         axs[1].legend(frameon=False, fontsize=9)
     axs[1].set_title(f"{label}: Bandwidth")
     axs[1].set_xlabel("Cluster Size")

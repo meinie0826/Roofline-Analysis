@@ -212,6 +212,47 @@ __global__ void dsmem_bandwidth_kernel(unsigned long long* sinks, int iters, int
   if (threadIdx.x == 0) sinks[global_block] = checksum;
 }
 
+__global__ void local_smem_bandwidth_kernel(unsigned long long* sinks, int iters, int buffer_bytes) {
+  extern __shared__ __align__(16) unsigned char local_bandwidth_smem[];
+
+  for (int i = threadIdx.x * 16; i < buffer_bytes; i += blockDim.x * 16) {
+    uint4 value{static_cast<unsigned int>(blockIdx.x + i), static_cast<unsigned int>(blockIdx.x + i + 1),
+                static_cast<unsigned int>(blockIdx.x + i + 2), static_cast<unsigned int>(blockIdx.x + i + 3)};
+    *reinterpret_cast<uint4*>(local_bandwidth_smem + i) = value;
+  }
+  __syncthreads();
+
+  const int vec_count = buffer_bytes / 16;
+  const uint4* vec = reinterpret_cast<const uint4*>(local_bandwidth_smem);
+  unsigned long long checksum = 0;
+
+  for (int iter = 0; iter < iters; ++iter) {
+    unsigned long long local = 0;
+    for (int idx = threadIdx.x; idx < vec_count; idx += blockDim.x) {
+      uint4 v = vec[idx];
+      local += static_cast<unsigned long long>(v.x) + v.y + v.z + v.w + static_cast<unsigned int>(iter);
+    }
+    checksum ^= local;
+  }
+
+  __syncthreads();
+  if (threadIdx.x == 0) sinks[blockIdx.x] = checksum;
+}
+
+__device__ __forceinline__ unsigned int read_smid() {
+  unsigned int smid = 0;
+  asm volatile("mov.u32 %0, %%smid;" : "=r"(smid));
+  return smid;
+}
+
+__global__ void smid_residency_kernel(unsigned int* smids) {
+  cg::cluster_group cluster = cg::this_cluster();
+  if (threadIdx.x == 0) {
+    smids[blockIdx.x] = read_smid();
+  }
+  cluster.sync();
+}
+
 __global__ void global_bandwidth_kernel(unsigned long long* sinks, const uint4* data, size_t vec_count, int iters) {
   unsigned long long checksum = 0;
   const size_t start = (static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x);
@@ -286,7 +327,7 @@ int estimate_active_clusters(int cluster_size, int block_threads, int dynamic_sm
 #endif
 }
 
-bool launch_dsmem_latency(int cluster_size, const Options& options, LatencyResult* d_result) {
+bool launch_dsmem_latency(int cluster_size, int peer_delta, const Options& options, LatencyResult* d_result) {
   if (!prepare_cluster_kernel(dsmem_latency_kernel, options.latency_elems * static_cast<int>(sizeof(unsigned int)))) {
     return false;
   }
@@ -301,7 +342,7 @@ bool launch_dsmem_latency(int cluster_size, const Options& options, LatencyResul
   attr.val.clusterDim.z = 1;
   config.attrs = &attr;
   config.numAttrs = 1;
-  cudaError_t err = cudaLaunchKernelEx(&config, dsmem_latency_kernel, d_result, options.latency_iters, options.latency_elems, 1);
+  cudaError_t err = cudaLaunchKernelEx(&config, dsmem_latency_kernel, d_result, options.latency_iters, options.latency_elems, peer_delta);
   if (err != cudaSuccess) {
     cudaGetLastError();
     return false;
@@ -312,29 +353,41 @@ bool launch_dsmem_latency(int cluster_size, const Options& options, LatencyResul
 bool run_dsmem_latency(int cluster_size, const Options& options) {
   LatencyResult* d_result = nullptr;
   check_cuda(cudaMalloc(&d_result, sizeof(LatencyResult)), "cudaMalloc latency result");
-  std::vector<double> cycles;
-  cycles.reserve(options.repeats);
+  const int first_delta = cluster_size == 1 ? 0 : 1;
+  const int last_delta = cluster_size == 1 ? 0 : cluster_size - 1;
+  std::vector<double> peer_medians;
+  std::vector<double> all_cycles;
 
-  for (int i = 0; i < options.warmup; ++i) {
-    if (!launch_dsmem_latency(cluster_size, options, d_result)) {
-      cudaFree(d_result);
-      print_unsupported("dsmem_latency", cluster_size, "launch_failed");
-      return false;
+  for (int peer_delta = first_delta; peer_delta <= last_delta; ++peer_delta) {
+    std::vector<double> cycles;
+    cycles.reserve(options.repeats);
+
+    for (int i = 0; i < options.warmup; ++i) {
+      if (!launch_dsmem_latency(cluster_size, peer_delta, options, d_result)) {
+        cudaFree(d_result);
+        print_unsupported("dsmem_latency", cluster_size, "launch_failed");
+        return false;
+      }
     }
-  }
-  for (int repeat = 0; repeat < options.repeats; ++repeat) {
-    if (!launch_dsmem_latency(cluster_size, options, d_result)) {
-      cudaFree(d_result);
-      print_unsupported("dsmem_latency", cluster_size, "launch_failed");
-      return false;
+    for (int repeat = 0; repeat < options.repeats; ++repeat) {
+      if (!launch_dsmem_latency(cluster_size, peer_delta, options, d_result)) {
+        cudaFree(d_result);
+        print_unsupported("dsmem_latency", cluster_size, "launch_failed");
+        return false;
+      }
+      LatencyResult h{};
+      check_cuda(cudaMemcpy(&h, d_result, sizeof(h), cudaMemcpyDeviceToHost), "cudaMemcpy latency result");
+      cycles.push_back(static_cast<double>(h.cycles) / static_cast<double>(options.latency_iters));
     }
-    LatencyResult h{};
-    check_cuda(cudaMemcpy(&h, d_result, sizeof(h), cudaMemcpyDeviceToHost), "cudaMemcpy latency result");
-    cycles.push_back(static_cast<double>(h.cycles) / static_cast<double>(options.latency_iters));
+    const double peer_median = median(cycles);
+    peer_medians.push_back(peer_median);
+    all_cycles.insert(all_cycles.end(), cycles.begin(), cycles.end());
+    std::printf("{\"metric\":\"dsmem_latency_peer\",\"cluster_size\":%d,\"peer_delta\":%d,\"supported\":true,\"cycles_per_load_median\":%.6f,\"cycles_per_load_mean\":%.6f,\"iters\":%d,\"repeats\":%d}\n",
+                cluster_size, peer_delta, peer_median, mean(cycles), options.latency_iters, options.repeats);
   }
 
-  std::printf("{\"metric\":\"dsmem_latency\",\"cluster_size\":%d,\"supported\":true,\"cycles_per_load_median\":%.6f,\"cycles_per_load_mean\":%.6f,\"iters\":%d,\"repeats\":%d}\n",
-              cluster_size, median(cycles), mean(cycles), options.latency_iters, options.repeats);
+  std::printf("{\"metric\":\"dsmem_latency\",\"cluster_size\":%d,\"supported\":true,\"cycles_per_load_median\":%.6f,\"cycles_per_load_mean\":%.6f,\"peer_delta_count\":%zu,\"iters\":%d,\"repeats\":%d}\n",
+              cluster_size, mean(peer_medians), mean(all_cycles), peer_medians.size(), options.latency_iters, options.repeats);
   cudaFree(d_result);
   return true;
 }
@@ -445,6 +498,45 @@ bool run_dsmem_bandwidth(int cluster_size, const Options& options) {
   return true;
 }
 
+void run_local_smem_bandwidth(const Options& options) {
+  const int blocks = options.max_grid_blocks > 0 ? options.max_grid_blocks : sm_count();
+  unsigned long long* d_sinks = nullptr;
+  check_cuda(cudaMalloc(&d_sinks, sizeof(unsigned long long) * blocks), "cudaMalloc local smem sinks");
+
+  cudaEvent_t start{}, stop{};
+  check_cuda(cudaEventCreate(&start), "cudaEventCreate local smem start");
+  check_cuda(cudaEventCreate(&stop), "cudaEventCreate local smem stop");
+
+  if (options.bandwidth_bytes > 48 * 1024) {
+    check_cuda(cudaFuncSetAttribute(local_smem_bandwidth_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, options.bandwidth_bytes),
+               "cudaFuncSetAttribute local smem MaxDynamicSharedMemorySize");
+  }
+
+  for (int i = 0; i < options.warmup; ++i) {
+    local_smem_bandwidth_kernel<<<blocks, options.block_threads, options.bandwidth_bytes>>>(d_sinks, options.bandwidth_iters, options.bandwidth_bytes);
+    check_cuda(cudaDeviceSynchronize(), "local smem bandwidth warmup");
+  }
+
+  std::vector<double> tbps;
+  tbps.reserve(options.repeats);
+  const double bytes = static_cast<double>(blocks) * static_cast<double>(options.bandwidth_iters) * static_cast<double>(options.bandwidth_bytes);
+  for (int repeat = 0; repeat < options.repeats; ++repeat) {
+    check_cuda(cudaEventRecord(start), "local smem bandwidth event start");
+    local_smem_bandwidth_kernel<<<blocks, options.block_threads, options.bandwidth_bytes>>>(d_sinks, options.bandwidth_iters, options.bandwidth_bytes);
+    check_cuda(cudaEventRecord(stop), "local smem bandwidth event stop");
+    check_cuda(cudaEventSynchronize(stop), "local smem bandwidth event sync");
+    float ms = elapsed_ms(start, stop);
+    tbps.push_back(bytes / (static_cast<double>(ms) * 1.0e-3) / 1.0e12);
+  }
+
+  std::printf("{\"metric\":\"local_smem_bandwidth\",\"cluster_size\":0,\"supported\":true,\"bandwidth_tb_s_median\":%.6f,\"bandwidth_tb_s_mean\":%.6f,\"grid_blocks\":%d,\"iters\":%d,\"buffer_bytes\":%d,\"repeats\":%d}\n",
+              median(tbps), mean(tbps), blocks, options.bandwidth_iters, options.bandwidth_bytes, options.repeats);
+
+  cudaEventDestroy(start);
+  cudaEventDestroy(stop);
+  cudaFree(d_sinks);
+}
+
 void run_global_bandwidth(const Options& options) {
   const size_t vec_count = options.global_bandwidth_bytes / sizeof(uint4);
   uint4* d_data = nullptr;
@@ -490,6 +582,58 @@ void print_active_sm(int cluster_size, const Options& options) {
   }
   std::printf("{\"metric\":\"active_sm\",\"cluster_size\":%d,\"supported\":true,\"active_clusters_estimate\":%d,\"active_sms_estimate\":%d}\n",
               cluster_size, active_clusters, active_clusters * cluster_size);
+}
+
+bool print_smid_residency(int cluster_size, const Options& options) {
+  if (!prepare_cluster_kernel(smid_residency_kernel, 0)) {
+    print_unsupported("smid_residency", cluster_size, "prepare_failed");
+    return false;
+  }
+
+  const int active_clusters = estimate_active_clusters(cluster_size, options.block_threads, options.bandwidth_bytes);
+  int grid_blocks = (active_clusters > 0 ? active_clusters : std::max(1, sm_count() / std::max(1, cluster_size))) * cluster_size;
+  if (options.max_grid_blocks > 0) grid_blocks = std::min(grid_blocks, options.max_grid_blocks);
+  grid_blocks = std::max(cluster_size, (grid_blocks / cluster_size) * cluster_size);
+
+  unsigned int* d_smids = nullptr;
+  std::vector<unsigned int> h_smids(static_cast<size_t>(grid_blocks));
+  check_cuda(cudaMalloc(&d_smids, sizeof(unsigned int) * grid_blocks), "cudaMalloc smid residency");
+
+  cudaLaunchConfig_t config{};
+  config.gridDim = dim3(grid_blocks, 1, 1);
+  config.blockDim = dim3(options.block_threads, 1, 1);
+  config.dynamicSmemBytes = 0;
+  cudaLaunchAttribute attr{};
+  attr.id = cudaLaunchAttributeClusterDimension;
+  attr.val.clusterDim.x = cluster_size;
+  attr.val.clusterDim.y = 1;
+  attr.val.clusterDim.z = 1;
+  config.attrs = &attr;
+  config.numAttrs = 1;
+
+  cudaError_t err = cudaLaunchKernelEx(&config, smid_residency_kernel, d_smids);
+  if (err != cudaSuccess) {
+    cudaGetLastError();
+    cudaFree(d_smids);
+    print_unsupported("smid_residency", cluster_size, "launch_failed");
+    return false;
+  }
+  check_cuda(cudaDeviceSynchronize(), "smid residency sync");
+  check_cuda(cudaMemcpy(h_smids.data(), d_smids, sizeof(unsigned int) * grid_blocks, cudaMemcpyDeviceToHost), "cudaMemcpy smid residency");
+
+  std::vector<unsigned int> unique_smids = h_smids;
+  std::sort(unique_smids.begin(), unique_smids.end());
+  unique_smids.erase(std::unique(unique_smids.begin(), unique_smids.end()), unique_smids.end());
+
+  std::printf("{\"metric\":\"smid_residency\",\"cluster_size\":%d,\"supported\":true,\"grid_blocks\":%d,\"active_clusters_estimate\":%d,\"unique_smid_count\":%zu,\"smids\":[",
+              cluster_size, grid_blocks, active_clusters, unique_smids.size());
+  for (size_t i = 0; i < unique_smids.size(); ++i) {
+    std::printf("%s%u", i == 0 ? "" : ",", unique_smids[i]);
+  }
+  std::printf("]}\n");
+
+  cudaFree(d_smids);
+  return true;
 }
 
 void print_usage(const char* prog) {
@@ -547,9 +691,11 @@ int main(int argc, char** argv) {
 
   run_global_latency(options);
   run_global_bandwidth(options);
+  run_local_smem_bandwidth(options);
 
   for (int cluster_size : cluster_sizes) {
     print_active_sm(cluster_size, options);
+    print_smid_residency(cluster_size, options);
     run_dsmem_latency(cluster_size, options);
     run_dsmem_bandwidth(cluster_size, options);
   }
