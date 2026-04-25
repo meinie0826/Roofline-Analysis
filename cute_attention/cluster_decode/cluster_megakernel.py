@@ -30,8 +30,6 @@ _MEGAKERNEL_COMPILED_CACHE: dict = {}
 
 
 if HAS_CUTE:
-    from .cluster_primitives import cluster_reduce_scalar_sum_inplace
-
     def _make_cluster_megakernel_host(
         seq_len: int,
         config: MegakernelConfig,
@@ -40,7 +38,6 @@ if HAS_CUTE:
         num_heads    = config.num_heads
         head_dim     = config.head_dim
         num_threads  = config.num_threads
-        dim_per_block = config.dim_per_block
         cluster_size = config.cluster_size
         cluster_shape = (cluster_size, 1, 1)
 
@@ -79,19 +76,18 @@ if HAS_CUTE:
 
             # ============================================================ #
             # Stage 0 – RMSNorm                                            #
-            # Each CTA owns one DIM_PER_BLOCK hidden slice, then DSM-reduces
-            # the per-CTA partial L2 sum across the cluster.
+            # Correctness baseline: each CTA computes the full L2. The DSM
+            # scalar-reduce path is kept isolated in cluster_primitives.py
+            # because mapa + cluster atomic currently ICEs in NVVM here.
             # ============================================================ #
             local_l2 = cutlass.Float32(0.0)
-            slice_start = cta_rank * dim_per_block
-            slice_stop = slice_start + dim_per_block
-            col = slice_start + tidx
-            while col < slice_stop:
+            col = tidx
+            while col < hidden_dim:
                 val = hidden[0, col].to(cutlass.Float32)
                 local_l2 = local_l2 + val * val
                 col = col + num_threads
 
-            # Intra-CTA tree reduce to one partial L2 per CTA.
+            # Intra-CTA tree reduce
             reduce[tidx] = local_l2
             cute.arch.barrier()
             stride = num_threads // 2
@@ -100,14 +96,7 @@ if HAS_CUTE:
                     reduce[tidx] = reduce[tidx] + reduce[tidx + stride]
                 cute.arch.barrier()
                 stride = stride // 2
-
-            cluster_reduce_scalar_sum_inplace(
-                reduce_ptr,
-                reduce[0],
-                tidx,
-                cluster_size,
-            )
-            total_l2 = reduce_ptr[0]
+            total_l2 = reduce[0]
 
             # RMSNorm: rms_rcp = rsqrt(mean(x^2) + eps)
             mean_l2 = total_l2 / cutlass.Float32(hidden_dim)
