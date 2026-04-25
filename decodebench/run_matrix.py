@@ -437,6 +437,20 @@ def short_failure_reason(output: str) -> str:
     return lines[-1] if lines else "unknown error"
 
 
+def ncu_profiled_setup_kernel(row: dict) -> bool:
+    kernels = row.get("ncu_kernels")
+    if not isinstance(kernels, list) or not kernels:
+        return False
+    names = [str(item.get("kernel_name", "")).lower() for item in kernels if isinstance(item, dict)]
+    if not names:
+        return False
+    setup_tokens = ("normal_kernel", "distribution_", "vectorized_elementwise_kernel", "fill_kernel", "random")
+    attention_tokens = ("attention", "fmha", "flash", "paged", "sdpa", "xqa", "trtllm")
+    return all(any(token in name for token in setup_tokens) for name in names) and not any(
+        any(token in name for token in attention_tokens) for name in names
+    )
+
+
 def result_has_ncu_profile(path: Path) -> bool:
     if not path.exists():
         return False
@@ -444,7 +458,36 @@ def result_has_ncu_profile(path: Path) -> bool:
         row = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
-    return row.get("ncu_profiled") is True and isinstance(row.get("ncu_tensor_core_summary"), dict)
+    tc_util = row.get("ncu_tensor_core_util_pct")
+    return (
+        row.get("ncu_profiled") is True
+        and isinstance(tc_util, (int, float))
+        and tc_util >= 0
+        and not ncu_profiled_setup_kernel(row)
+    )
+
+
+def refresh_ncu_result_if_possible(result_path: Path, metrics: list[str], warnings: list[str]) -> bool:
+    if not result_path.exists():
+        return False
+    try:
+        row = json.loads(result_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    csv_value = row.get("ncu_csv")
+    if not csv_value:
+        return False
+    csv_path = Path(csv_value)
+    if not csv_path.exists():
+        return False
+    command = shlex.split(row.get("ncu_command") or "")
+    merge_ncu_result(result_path, csv_path, command, metrics, warnings)
+    try:
+        refreshed = json.loads(result_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    tc_util = refreshed.get("ncu_tensor_core_util_pct")
+    return isinstance(tc_util, (int, float)) and tc_util >= 0 and not ncu_profiled_setup_kernel(refreshed)
 
 
 def result_is_success(path: Path) -> bool:
@@ -476,7 +519,7 @@ def main() -> int:
     parser.add_argument("--ncu-metric", action="append", dest="ncu_metrics", help="NCU metric to collect. May be repeated. Defaults include TC/SM/DRAM/time metrics.")
     parser.add_argument("--ncu-section", action="append", dest="ncu_sections", default=[], help="Optional NCU section. May be repeated.")
     parser.add_argument("--ncu-kernel-name", default=None, help="Optional NCU --kernel-name regex filter.")
-    parser.add_argument("--ncu-launch-skip", type=int, default=0)
+    parser.add_argument("--ncu-launch-skip", type=int, default=None, help="NCU launches to skip. Defaults to benchmark warmup_steps when --profile-ncu is enabled.")
     parser.add_argument("--ncu-launch-count", type=int, default=1)
     parser.add_argument("--ncu-query-metrics", action=argparse.BooleanOptionalAction, default=True, help="Query NCU and keep only available default metrics before profiling.")
     args = parser.parse_args()
@@ -515,23 +558,33 @@ def main() -> int:
             run_argv = argv
             csv_path = ncu_csv_path(ncu_profile_dir, backend, workload)
             if args.profile_ncu:
+                ncu_launch_skip = args.ncu_launch_skip
+                if ncu_launch_skip is None:
+                    # The wrapped benchmark initializes tensors and runs warmups before timing.
+                    # Skip at least the warmup launches so NCU does not profile setup RNG/fill kernels.
+                    ncu_launch_skip = int(config.get("defaults", {}).get("warmup_steps", 0))
                 run_argv = wrap_ncu_cmd(
                     argv,
                     csv_path,
                     args.ncu,
                     ncu_metrics,
                     args.ncu_sections,
-                    args.ncu_launch_skip,
+                    ncu_launch_skip,
                     args.ncu_launch_count,
                     args.ncu_kernel_name,
                 )
-            if args.resume and result_is_success(path) and (not args.profile_ncu or result_has_ncu_profile(path)):
-                skipped += 1
-                if args.dry_run:
-                    print(f"# skip existing success: {short_backend(backend['name'])} {workload['id']}")
-                else:
-                    print(f"↷ {workload['id']:<28} {short_backend(backend['name'])}  | existing result")
-                continue
+            if args.resume and result_is_success(path):
+                has_profile = result_has_ncu_profile(path)
+                if args.profile_ncu and not has_profile:
+                    has_profile = refresh_ncu_result_if_possible(path, ncu_metrics, ncu_metric_warnings)
+                if not args.profile_ncu or has_profile:
+                    skipped += 1
+                    if args.dry_run:
+                        print(f"# skip existing success: {short_backend(backend['name'])} {workload['id']}")
+                    else:
+                        suffix = "existing profiled result" if args.profile_ncu else "existing result"
+                        print(f"↷ {workload['id']:<28} {short_backend(backend['name'])}  | {suffix}")
+                    continue
             if args.dry_run:
                 print(shell(run_argv))
             else:
