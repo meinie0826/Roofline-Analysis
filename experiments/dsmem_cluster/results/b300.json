@@ -1,0 +1,190 @@
+{
+  "created_at": "2026-04-25T07:36:28",
+  "host": "klingai-wlf2-ge121-node130.idchb2az2.hb2.kwaidc.com",
+  "command": [
+    "/workspace/Roofline-Analysis/experiments/dsmem_cluster/dsmem_cluster_bench",
+    "--gpu-label=B300",
+    "--cluster-sizes=1,2,4,8,16",
+    "--repeats=30",
+    "--warmup=5",
+    "--latency-iters=200000",
+    "--bandwidth-iters=4096",
+    "--latency-elems=4096",
+    "--bandwidth-bytes=32768",
+    "--global-latency-elems=67108864",
+    "--global-bandwidth-bytes=536870912",
+    "--block-threads=128",
+    "--max-grid-blocks=0"
+  ],
+  "rows": [
+    {
+      "metric": "metadata",
+      "gpu_label": "B300",
+      "gpu_name": "NVIDIA B200",
+      "sm_count": 148,
+      "max_blocks_per_cluster_attr": 0,
+      "sm_clock_ghz_attr": 1.965
+    },
+    {
+      "metric": "global_latency",
+      "cluster_size": 0,
+      "supported": true,
+      "cycles_per_load_median": 297.75602,
+      "cycles_per_load_mean": 297.763051,
+      "iters": 200000,
+      "repeats": 30,
+      "elems": 67108864
+    },
+    {
+      "metric": "global_bandwidth",
+      "cluster_size": 0,
+      "supported": true,
+      "bandwidth_tb_s_median": 2.600933,
+      "bandwidth_tb_s_mean": 2.600942,
+      "grid_blocks": 592,
+      "iters": 4096,
+      "bytes_per_iter": 536870912,
+      "repeats": 30
+    },
+    {
+      "metric": "active_sm",
+      "cluster_size": 1,
+      "supported": true,
+      "active_clusters_estimate": 888,
+      "active_sms_estimate": 888
+    },
+    {
+      "metric": "dsmem_latency",
+      "cluster_size": 1,
+      "supported": true,
+      "cycles_per_load_median": 36.937785,
+      "cycles_per_load_mean": 36.937785,
+      "iters": 200000,
+      "repeats": 30
+    },
+    {
+      "metric": "dsmem_bandwidth",
+      "cluster_size": 1,
+      "supported": true,
+      "bandwidth_tb_s_median": 29.465264,
+      "bandwidth_tb_s_mean": 29.461138,
+      "grid_blocks": 888,
+      "active_clusters_estimate": 888,
+      "iters": 4096,
+      "buffer_bytes": 32768,
+      "repeats": 30
+    },
+    {
+      "metric": "active_sm",
+      "cluster_size": 2,
+      "supported": true,
+      "active_clusters_estimate": 444,
+      "active_sms_estimate": 888
+    },
+    {
+      "metric": "dsmem_latency",
+      "cluster_size": 2,
+      "supported": true,
+      "cycles_per_load_median": 199.43749,
+      "cycles_per_load_mean": 199.43749,
+      "iters": 200000,
+      "repeats": 30
+    },
+    {
+      "metric": "dsmem_bandwidth",
+      "cluster_size": 2,
+      "supported": true,
+      "bandwidth_tb_s_median": 4.756515,
+      "bandwidth_tb_s_mean": 4.756388,
+      "grid_blocks": 888,
+      "active_clusters_estimate": 444,
+      "iters": 4096,
+      "buffer_bytes": 32768,
+      "repeats": 30
+    },
+    {
+      "metric": "active_sm",
+      "cluster_size": 4,
+      "supported": true,
+      "active_clusters_estimate": 213,
+      "active_sms_estimate": 852
+    },
+    {
+      "metric": "dsmem_latency",
+      "cluster_size": 4,
+      "supported": true,
+      "cycles_per_load_median": 205.375065,
+      "cycles_per_load_mean": 205.375065,
+      "iters": 200000,
+      "repeats": 30
+    },
+    {
+      "metric": "dsmem_bandwidth",
+      "cluster_size": 4,
+      "supported": true,
+      "bandwidth_tb_s_median": 3.982014,
+      "bandwidth_tb_s_mean": 3.982036,
+      "grid_blocks": 852,
+      "active_clusters_estimate": 213,
+      "iters": 4096,
+      "buffer_bytes": 32768,
+      "repeats": 30
+    },
+    {
+      "metric": "active_sm",
+      "cluster_size": 8,
+      "supported": true,
+      "active_clusters_estimate": 104,
+      "active_sms_estimate": 832
+    },
+    {
+      "metric": "dsmem_latency",
+      "cluster_size": 8,
+      "supported": true,
+      "cycles_per_load_median": 205.375065,
+      "cycles_per_load_mean": 205.375065,
+      "iters": 200000,
+      "repeats": 30
+    },
+    {
+      "metric": "dsmem_bandwidth",
+      "cluster_size": 8,
+      "supported": true,
+      "bandwidth_tb_s_median": 3.910775,
+      "bandwidth_tb_s_mean": 3.910801,
+      "grid_blocks": 832,
+      "active_clusters_estimate": 104,
+      "iters": 4096,
+      "buffer_bytes": 32768,
+      "repeats": 30
+    },
+    {
+      "metric": "active_sm",
+      "cluster_size": 16,
+      "supported": true,
+      "active_clusters_estimate": 45,
+      "active_sms_estimate": 720
+    },
+    {
+      "metric": "dsmem_latency",
+      "cluster_size": 16,
+      "supported": true,
+      "cycles_per_load_median": 228.93757,
+      "cycles_per_load_mean": 228.93757,
+      "iters": 200000,
+      "repeats": 30
+    },
+    {
+      "metric": "dsmem_bandwidth",
+      "cluster_size": 16,
+      "supported": true,
+      "bandwidth_tb_s_median": 3.410015,
+      "bandwidth_tb_s_mean": 3.409951,
+      "grid_blocks": 720,
+      "active_clusters_estimate": 45,
+      "iters": 4096,
+      "buffer_bytes": 32768,
+      "repeats": 30
+    }
+  ]
+}

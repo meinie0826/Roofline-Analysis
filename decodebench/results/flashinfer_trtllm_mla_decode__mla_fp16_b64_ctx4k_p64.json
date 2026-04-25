@@ -1,0 +1,19 @@
+{
+  "run_id": null,
+  "status": "failed",
+  "timestamp": "2026-04-24T16:43:59.198002+00:00",
+  "python_executable": "/workspace/Roofline-Analysis/.venv/bin/python",
+  "backend": "flashinfer_trtllm_mla_decode",
+  "kernel_path": "flashinfer.mla.trtllm_batch_decode_with_kv_cache_mla",
+  "layer": "kernel",
+  "workload_id": "mla_fp16_b64_ctx4k_p64",
+  "attention": "MLA",
+  "kv_dtype": "fp16",
+  "page_size": 64,
+  "batch_size": 64,
+  "context_len": 4096,
+  "returncode": 1,
+  "command": "/workspace/Roofline-Analysis/.venv/bin/python decodebench/trtllm_mla_benchmark.py --batch-size 64 --context-len 4096 --num-q-heads 128 --num-kv-heads 1 --qk-nope-head-dim 128 --kv-lora-rank 512 --qk-rope-head-dim 64 --kv-dtype fp16 --page-size 64 --warmup-steps 20 --repeat 100 --output /workspace/Roofline-Analysis/decodebench/results/flashinfer_trtllm_mla_decode__mla_fp16_b64_ctx4k_p64.json",
+  "output": "Traceback (most recent call last):\n  File \"/workspace/Roofline-Analysis/decodebench/trtllm_mla_benchmark.py\", line 101, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/trtllm_mla_benchmark.py\", line 65, in main\n    avg_us, p50_us, p95_us = time_kernel(kernel.torch, kernel.run, args.warmup_steps, args.repeat)\n                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/trtllm_mla_benchmark.py\", line 32, in time_kernel\n    fn()\n  File \"/workspace/Roofline-Analysis/decodebench/trtllm_mla_kernel.py\", line 116, in run\n    return self.run_mla(\n           ^^^^^^^^^^^^^\n  File \"/workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/flashinfer/mla/_core.py\", line 770, in trtllm_batch_decode_with_kv_cache_mla\n    run_func(\n  File \"python/tvm_ffi/cython/function.pxi\", line 929, in tvm_ffi.core.Function.__call__\nRuntimeError: Error in function 'trtllm_paged_attention_launcher' at /workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/flashinfer/data/csrc/trtllm_fmha_kernel_launcher.cu:211: Missing TRTLLM-GEN kernel (decode): qkvLayout=2, maskType=1, kernelType=3, tileScheduler=0, multiCtasKvMode=2, headDimPerCtaV=256, headDimQk=576, headDimV=512, tileSizeQ=64, tileSizeKv=128, numTokensPerPage=64, reuseSmemKForV=0, uses2CtaMma=1, sparseMla=0, skipsSoftmax=0\n",
+  "short_reason": "RuntimeError: Error in function 'trtllm_paged_attention_launcher' at /workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/flashinfer/data/csrc/trtllm_fmha_kernel_launcher.cu:211: Missing TRTLLM-GEN kernel (decode): qkvLayout=2, maskType=1, kernelType=3, tileScheduler=0, multiCtasKvMode=2, headDimPerCtaV=256, headDimQk=576, headDimV=512, tileSizeQ=64, tileSizeKv=128, numTokensPerPage=64, reuseSmemKForV=0, uses2CtaMma=1, sparseMla=0, skipsSoftmax=0"
+}

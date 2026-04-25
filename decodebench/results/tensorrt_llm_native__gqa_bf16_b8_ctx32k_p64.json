@@ -1,0 +1,19 @@
+{
+  "run_id": null,
+  "status": "failed",
+  "timestamp": "2026-04-24T17:59:26.528426+00:00",
+  "python_executable": "/workspace/Roofline-Analysis/.venv/bin/python",
+  "backend": "tensorrt_llm_native",
+  "kernel_path": "tensorrt_llm._torch.attention_backend.trtllm.TrtllmAttentionWrapper native thop.attention",
+  "layer": "kernel",
+  "workload_id": "gqa_bf16_b8_ctx32k_p64",
+  "attention": "GQA",
+  "kv_dtype": "bf16",
+  "page_size": 64,
+  "batch_size": 8,
+  "context_len": 32768,
+  "returncode": 1,
+  "command": "/workspace/Roofline-Analysis/.venv/bin/python decodebench/trtllm_native_benchmark.py --batch-size 8 --context-len 32768 --num-q-heads 32 --num-kv-heads 8 --head-dim 128 --kv-dtype bf16 --page-size 64 --warmup-steps 20 --repeat 100 --output /workspace/Roofline-Analysis/decodebench/results/tensorrt_llm_native__gqa_bf16_b8_ctx32k_p64.json",
+  "output": "Traceback (most recent call last):\n  File \"/workspace/Roofline-Analysis/decodebench/trtllm_native_benchmark.py\", line 71, in __init__\n    import tensorrt_llm  # noqa: F401\n    ^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/tensorrt_llm/__init__.py\", line 107, in <module>\n    import tensorrt_llm._torch.models as torch_models\n  File \"/workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/tensorrt_llm/_torch/__init__.py\", line 1, in <module>\n    from .llm import LLM\n  File \"/workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/tensorrt_llm/_torch/llm.py\", line 1, in <module>\n    from tensorrt_llm.llmapi.llm import _TorchLLM\n  File \"/workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/tensorrt_llm/llmapi/__init__.py\", line 1, in <module>\n    from .._torch.async_llm import AsyncLLM\n  File \"/workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/tensorrt_llm/_torch/async_llm.py\", line 3, in <module>\n    from ..llmapi.llm import LLM\n  File \"/workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/tensorrt_llm/llmapi/llm.py\", line 16, in <module>\n    from transformers import PreTrainedTokenizerBase\nImportError: cannot import name 'PreTrainedTokenizerBase' from 'transformers' (unknown location)\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/workspace/Roofline-Analysis/decodebench/trtllm_native_benchmark.py\", line 223, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/trtllm_native_benchmark.py\", line 186, in main\n    kernel = TRTLLMNativeDecodeKernel(args)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/trtllm_native_benchmark.py\", line 78, in __init__\n    raise ImportError(\"TensorRT-LLM is not installed or its PyTorch attention backend is unavailable\") from error\nImportError: TensorRT-LLM is not installed or its PyTorch attention backend is unavailable\n",
+  "short_reason": "ImportError: TensorRT-LLM is not installed or its PyTorch attention backend is unavailable"
+}
