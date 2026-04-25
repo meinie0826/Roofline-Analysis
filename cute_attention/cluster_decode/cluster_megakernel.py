@@ -65,8 +65,9 @@ if HAS_CUTE:
             reduce_ptr = smem.allocate_array(cutlass.Float32, num_elems=num_threads)
             reduce     = cute.make_tensor(reduce_ptr, cute.make_layout((num_threads,)))
 
-            # local_qkv: [Q | K | V] in fp16
-            local_qkv_ptr = smem.allocate_array(cutlass.Float16, num_elems=3 * head_dim)
+            # local_qkv: [Q | K | V] in fp32 to match the PyTorch reference's
+            # internal precision. Public K/V outputs are cast to fp16 below.
+            local_qkv_ptr = smem.allocate_array(cutlass.Float32, num_elems=3 * head_dim)
             local_qkv     = cute.make_tensor(local_qkv_ptr, cute.make_layout((3 * head_dim,)))
 
             # ============================================================ #
@@ -112,34 +113,32 @@ if HAS_CUTE:
                         x_norm = x_val * rms_rcp * rms_weight[i].to(cutlass.Float32)
                         w_val  = w_qkv[global_row, i].to(cutlass.Float32)
                         acc    = acc + x_norm * w_val
-                    local_qkv[proj * head_dim + out_d] = acc.to(cutlass.Float16)
+                    local_qkv[proj * head_dim + out_d] = acc
 
             cute.arch.barrier()
 
             # ============================================================ #
             # Stage 2 – RoPE (GPT-J style, interleaved pairs)             #
             # ============================================================ #
-            if tidx < head_dim:
-                q_val = local_qkv[tidx].to(cutlass.Float32)
-                k_val = local_qkv[head_dim + tidx].to(cutlass.Float32)
-                c     = cos_rope[tidx]
-                s     = sin_rope[tidx]
-                if tidx % 2 == 0:
-                    q1 = local_qkv[tidx + 1].to(cutlass.Float32)
-                    k1 = local_qkv[head_dim + tidx + 1].to(cutlass.Float32)
-                    local_qkv[tidx]            = (q_val * c - q1 * s).to(cutlass.Float16)
-                    local_qkv[head_dim + tidx] = (k_val * c - k1 * s).to(cutlass.Float16)
-                else:
-                    q1 = local_qkv[tidx - 1].to(cutlass.Float32)
-                    k1 = local_qkv[head_dim + tidx - 1].to(cutlass.Float32)
-                    local_qkv[tidx]            = (q_val * c + q1 * s).to(cutlass.Float16)
-                    local_qkv[head_dim + tidx] = (k_val * c + k1 * s).to(cutlass.Float16)
+            if tidx < head_dim and tidx % 2 == 0:
+                q0 = local_qkv[tidx].to(cutlass.Float32)
+                q1 = local_qkv[tidx + 1].to(cutlass.Float32)
+                k0 = local_qkv[head_dim + tidx].to(cutlass.Float32)
+                k1 = local_qkv[head_dim + tidx + 1].to(cutlass.Float32)
+                c0 = cos_rope[tidx]
+                s0 = sin_rope[tidx]
+                c1 = cos_rope[tidx + 1]
+                s1 = sin_rope[tidx + 1]
+                local_qkv[tidx]                = q0 * c0 - q1 * s0
+                local_qkv[tidx + 1]            = q1 * c1 + q0 * s1
+                local_qkv[head_dim + tidx]     = k0 * c0 - k1 * s0
+                local_qkv[head_dim + tidx + 1] = k1 * c1 + k0 * s1
 
             # Write K/V outputs
             cute.arch.barrier()
             if tidx < head_dim:
-                k_out[0, head_id, tidx] = local_qkv[head_dim + tidx]
-                v_out[0, head_id, tidx] = local_qkv[2 * head_dim + tidx]
+                k_out[0, head_id, tidx] = local_qkv[head_dim + tidx].to(cutlass.Float16)
+                v_out[0, head_id, tidx] = local_qkv[2 * head_dim + tidx].to(cutlass.Float16)
 
             # ============================================================ #
             # Stage 3 – Flash-decoding attention (full KV cache)          #
@@ -177,7 +176,7 @@ if HAS_CUTE:
             if tidx < head_dim:
                 acc_o[tidx] = acc_o[tidx] * inv_sum
                 # Store attn output to V slot of local_qkv (reuse)
-                local_qkv[2 * head_dim + tidx] = acc_o[tidx].to(cutlass.Float16)
+                local_qkv[2 * head_dim + tidx] = acc_o[tidx]
 
             cute.arch.barrier()
 
@@ -194,7 +193,7 @@ if HAS_CUTE:
                         a_val = local_qkv[2 * head_dim + d].to(cutlass.Float32)
                         w_val = w_o[out_col, head_id * head_dim + d].to(cutlass.Float32)
                         partial = partial + a_val * w_val
-                    scratch_wo[head_id, out_col] = partial.to(cutlass.Float16)
+                    scratch_wo[head_id, out_col] = partial
 
         @cute.jit
         def _megakernel_host(
@@ -239,7 +238,7 @@ def cluster_megakernel_forward(
 
     k_new  = torch.zeros((1, num_heads, head_dim), device=hidden_states.device, dtype=hidden_states.dtype)
     v_new  = torch.zeros((1, num_heads, head_dim), device=hidden_states.device, dtype=hidden_states.dtype)
-    scratch_wo = torch.zeros((num_heads, hidden_dim), device=hidden_states.device, dtype=hidden_states.dtype)
+    scratch_wo = torch.zeros((num_heads, hidden_dim), device=hidden_states.device, dtype=torch.float32)
 
     def _wrap(t):
         return from_dlpack(t, assumed_align=16).mark_layout_dynamic()
