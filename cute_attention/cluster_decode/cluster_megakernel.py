@@ -1,13 +1,10 @@
-"""ClusterFusion-style decode megakernel – baseline (no DSMEM ptr arithmetic).
+"""ClusterFusion-style decode megakernel – v2 (no DSMEM primitives).
 
-This baseline avoids all SMEM pointer arithmetic issues by:
-  - Each CTA independently computes full Q/K/V (reads all hidden_dim columns)
-  - Cross-CTA softmax reduce via global memory scratch (not DSMEM mapa)
-  - Scalar cluster reduce (max/sum) kept via mapa on single-element pointers
+Avoids ALL cute.arch.mapa() and cluster-scope atomic operations which trigger
+MLIR/PTX ICE errors. Uses global scratch buffers for all cross-CTA communication
+with cute.arch.cluster_arrive/cluster_wait as the only cluster primitive.
 
-Once this baseline passes correctness, DSMEM vector communication will be
-added incrementally using the official st.async.shared::cluster pattern from
-  cutlass/examples/python/CuTeDSL/blackwell/reduce.py
+This baseline must pass correctness first; DSMEM st.async will be added later.
 """
 
 from __future__ import annotations
@@ -55,10 +52,11 @@ if HAS_CUTE:
             output:      cute.Tensor,
             k_out:       cute.Tensor,
             v_out:       cute.Tensor,
-            # Global scratch for cross-CTA softmax reduce
-            scratch_max: cute.Tensor,   # (num_heads, cluster_size)   f32
-            scratch_sum: cute.Tensor,   # (num_heads, cluster_size)   f32
-            scratch_out: cute.Tensor,   # (num_heads, cluster_size, head_dim) f16
+            # Global scratch buffers for cross-CTA communication
+            scratch_l2:  cute.Tensor,   # (num_heads, cluster_size)     f32 – RMSNorm partial l2
+            scratch_max: cute.Tensor,   # (num_heads, cluster_size)     f32 – attn partial max
+            scratch_sum: cute.Tensor,   # (num_heads, cluster_size)     f32 – attn partial sum
+            scratch_out: cute.Tensor,   # (num_heads, cluster_size, head_dim) f16 – attn partial O
             softmax_scale: cutlass.Float32,
         ):
             tidx, _, _ = cute.arch.thread_idx()
@@ -79,10 +77,6 @@ if HAS_CUTE:
             local_qkv_ptr = smem.allocate_array(cutlass.Float16, num_elems=3 * head_dim)
             local_qkv     = cute.make_tensor(local_qkv_ptr, cute.make_layout((3 * head_dim,)))
 
-            # Scalar cluster-shared scalars
-            cls_sum_ptr = smem.allocate_array(cutlass.Float32, num_elems=1)
-            cls_max_ptr = smem.allocate_array(cutlass.Float32, num_elems=1)
-
             # ============================================================ #
             # Stage 0 – RMSNorm                                            #
             # ============================================================ #
@@ -93,6 +87,7 @@ if HAS_CUTE:
                 local_l2 = local_l2 + val * val
                 d = d + num_threads
 
+            # Intra-CTA tree reduce
             reduce[tidx] = local_l2
             cute.arch.barrier()
             stride = num_threads // 2
@@ -103,34 +98,47 @@ if HAS_CUTE:
                 stride = stride // 2
             local_l2 = reduce[0]
 
-            # Cross-CTA scalar sum (single-element pointer – safe for mapa)
-            cls_sum_ptr[0] = local_l2
+            # Write partial l2 to global scratch, then cluster sync
+            if tidx == 0:
+                scratch_l2[head_id, cta_rank] = local_l2
+
             cute.arch.cluster_arrive()
             cute.arch.cluster_wait()
-            for i in range(1, cluster_size):
-                peer = (cta_rank + i) % cluster_size
-                remote = cute.arch.mapa(cls_sum_ptr, peer)
-                if tidx == 0:
-                    cute.arch.atomic_add(remote, local_l2, scope="cluster")
-                cute.arch.cluster_arrive()
-                cute.arch.cluster_wait()
 
-            cluster_l2 = cls_sum_ptr[0]
+            # Leader CTA reads all partials and computes RMSNorm
+            if cta_rank == 0:
+                cluster_l2 = cutlass.Float32(0.0)
+                for c in range(cluster_size):
+                    cluster_l2 = cluster_l2 + scratch_l2[head_id, c].to(cutlass.Float32)
+                rms_rcp = cute.math.rsqrt(cluster_l2 / cutlass.Float32(hidden_dim) + eps)
+
+                # Broadcast rms_rcp to all CTAs via global scratch
+                # (reuse scratch_l2[head_id, 0] as rms_rcp storage since we already read it)
+                # Actually, simpler: write rms_rcp to a dedicated position
+                # We'll just have every CTA compute it independently – they all have
+                # the same partial_l2 values after cluster_wait, so they can independently
+                # sum. But that requires each CTA to read all scratch_l2 values.
+                # For now: every CTA independently sums scratch_l2 after cluster_wait.
+                # This works because cluster_arrive/cluster_wait ensures all writes are visible.
+                if tidx == 0:
+                    scratch_l2[head_id, 0] = cluster_l2  # reuse slot 0 for total
+
+            # All CTAs read the total l2
+            cute.arch.cluster_arrive()
+            cute.arch.cluster_wait()
+
+            cluster_l2 = scratch_l2[head_id, 0].to(cutlass.Float32)
             rms_rcp    = cute.math.rsqrt(cluster_l2 / cutlass.Float32(hidden_dim) + eps)
 
             # ============================================================ #
-            # Stage 1 – W_qkv GEMM                                         #
-            #                                                               #
-            # Baseline: each CTA independently reads the full hidden_dim    #
-            # input row and computes all head_dim output elements.          #
-            # No cluster reduce needed – every CTA gets the same result.   #
+            # Stage 1 – W_qkv GEMM (independent, no cluster reduce)       #
+            # Each CTA reads full hidden_dim input and computes Q/K/V.     #
             # ============================================================ #
             for proj in range(3):
                 if tidx < head_dim:
                     out_d      = tidx
                     global_row = head_id * head_dim + out_d + proj * hidden_dim
                     acc        = cutlass.Float32(0.0)
-                    # Read full hidden_dim (not just our slice)
                     for col in range(hidden_dim):
                         x_val  = hidden[0, col].to(cutlass.Float32)
                         x_norm = x_val * rms_rcp * rms_weight[col].to(cutlass.Float32)
@@ -141,7 +149,7 @@ if HAS_CUTE:
             cute.arch.barrier()
 
             # ============================================================ #
-            # Stage 2 – RoPE (GPT-J style)                                 #
+            # Stage 2 – RoPE                                               #
             # ============================================================ #
             if tidx < head_dim:
                 q_val = local_qkv[tidx].to(cutlass.Float32)
@@ -159,7 +167,7 @@ if HAS_CUTE:
                     local_qkv[tidx]            = (q_val * c + q1 * s).to(cutlass.Float16)
                     local_qkv[head_dim + tidx] = (k_val * c + k1 * s).to(cutlass.Float16)
 
-            # Write current-token K/V (leader CTA only)
+            # Write K/V outputs (leader only)
             cute.arch.cluster_arrive()
             cute.arch.cluster_wait()
             if cta_rank == 0:
@@ -178,7 +186,6 @@ if HAS_CUTE:
             local_max = -cutlass.Float32.inf
             local_sum =  cutlass.Float32(0.0)
 
-            # acc_o in SMEM
             acc_ptr = smem.allocate_array(cutlass.Float32, num_elems=head_dim)
             acc_o   = cute.make_tensor(acc_ptr, cute.make_layout((head_dim,)))
             if tidx < head_dim:
@@ -204,10 +211,6 @@ if HAS_CUTE:
 
             # ============================================================ #
             # Stage 4 – Cross-CTA softmax reduce via global scratch        #
-            #                                                               #
-            # Each CTA writes its partial (max, sum, out) to global memory #
-            # indexed by (head_id, cta_rank).  After cluster sync, the     #
-            # leader CTA reads all partials and reduces.                   #
             # ============================================================ #
             # Write partials to global scratch
             if tidx < head_dim:
@@ -216,19 +219,19 @@ if HAS_CUTE:
                 scratch_max[head_id, cta_rank] = local_max
                 scratch_sum[head_id, cta_rank] = local_sum
 
-            # Synchronise across cluster so all writes are visible
+            # Ensure all writes visible across cluster
             cute.arch.cluster_arrive()
             cute.arch.cluster_wait()
 
-            # Leader CTA (rank 0) does the full reduce
+            # Leader CTA reads all partials and reduces
             if cta_rank == 0:
-                # 4a: find global max across all CTAs
+                # Global max
                 global_max = -cutlass.Float32.inf
                 for c in range(cluster_size):
                     c_max = scratch_max[head_id, c].to(cutlass.Float32)
                     global_max = global_max if global_max > c_max else c_max
 
-                # 4b: compute global sum with rescaling
+                # Global sum with rescaling
                 global_sum = cutlass.Float32(0.0)
                 for c in range(cluster_size):
                     c_max = scratch_max[head_id, c].to(cutlass.Float32)
@@ -236,7 +239,7 @@ if HAS_CUTE:
                     rescale = cute.math.exp(c_max - global_max)
                     global_sum = global_sum + c_sum * rescale
 
-                # 4c: accumulate partial output vectors with rescaling
+                # Accumulate partial output vectors
                 if tidx < head_dim:
                     final_o = cutlass.Float32(0.0)
                     for c in range(cluster_size):
@@ -245,19 +248,14 @@ if HAS_CUTE:
                         c_out_val = scratch_out[head_id, c, tidx].to(cutlass.Float32)
                         final_o = final_o + c_out_val * rescale
 
-                    # Normalise
                     inv_sum = cutlass.Float32(1.0) / global_sum
                     final_o = final_o * inv_sum
-
-                    # Store to local_qkv V slot for W_o stage
                     local_qkv[2 * head_dim + tidx] = final_o.to(cutlass.Float16)
 
             cute.arch.barrier()
 
             # ============================================================ #
-            # Stage 5 – W_o GEMM                                           #
-            # Only leader CTA computes the output projection since only    #
-            # it has the final attention output.                           #
+            # Stage 5 – W_o GEMM (leader CTA only)                        #
             # ============================================================ #
             if cta_rank == 0:
                 if tidx < head_dim:
@@ -275,14 +273,14 @@ if HAS_CUTE:
             hidden, w_qkv, w_o, k_cache, v_cache,
             rms_weight, cos_rope, sin_rope,
             output, k_out, v_out,
-            scratch_max, scratch_sum, scratch_out,
+            scratch_l2, scratch_max, scratch_sum, scratch_out,
             softmax_scale,
         ):
             _megakernel(
                 hidden, w_qkv, w_o, k_cache, v_cache,
                 rms_weight, cos_rope, sin_rope,
                 output, k_out, v_out,
-                scratch_max, scratch_sum, scratch_out,
+                scratch_l2, scratch_max, scratch_sum, scratch_out,
                 softmax_scale,
             ).launch(
                 grid=(num_heads * cluster_size, 1, 1),
@@ -298,7 +296,7 @@ def cluster_megakernel_forward(
     rms_weight, cos_rope, sin_rope,
     config: MegakernelConfig | None = None,
 ):
-    """Run the ClusterFusion-style decode megakernel (baseline)."""
+    """Run the ClusterFusion-style decode megakernel (v2 baseline)."""
     require_torch()
     if not HAS_CUTE:
         raise RuntimeError("cluster_megakernel requires cutlass.cute.")
@@ -308,18 +306,19 @@ def cluster_megakernel_forward(
 
     import torch
 
-    seq_len     = k_cache.shape[0]
-    hidden_dim  = config.hidden_dim
-    num_heads   = config.num_heads
-    head_dim    = config.head_dim
+    seq_len      = k_cache.shape[0]
+    hidden_dim   = config.hidden_dim
+    num_heads    = config.num_heads
+    head_dim     = config.head_dim
     cluster_size = config.cluster_size
-    scale       = config.resolve_scale()
+    scale        = config.resolve_scale()
 
     output = torch.zeros((1, hidden_dim), device=hidden_states.device, dtype=hidden_states.dtype)
     k_new  = torch.zeros((1, num_heads, head_dim), device=hidden_states.device, dtype=hidden_states.dtype)
     v_new  = torch.zeros((1, num_heads, head_dim), device=hidden_states.device, dtype=hidden_states.dtype)
 
-    # Global scratch for cross-CTA softmax reduce
+    # Global scratch buffers
+    scratch_l2  = torch.zeros((num_heads, cluster_size), device=hidden_states.device, dtype=torch.float32)
     scratch_max = torch.zeros((num_heads, cluster_size), device=hidden_states.device, dtype=torch.float32)
     scratch_sum = torch.zeros((num_heads, cluster_size), device=hidden_states.device, dtype=torch.float32)
     scratch_out = torch.zeros((num_heads, cluster_size, head_dim), device=hidden_states.device, dtype=hidden_states.dtype)
@@ -338,6 +337,7 @@ def cluster_megakernel_forward(
     out_c    = _wrap(output)
     knew_c   = _wrap(k_new)
     vnew_c   = _wrap(v_new)
+    sl2_c    = _wrap(scratch_l2)
     smax_c   = _wrap(scratch_max)
     ssum_c   = _wrap(scratch_sum)
     sout_c   = _wrap(scratch_out)
@@ -351,7 +351,7 @@ def cluster_megakernel_forward(
             h_cute, wqkv_c, wo_c, kc_c, vc_c,
             rms_c, cos_c, sin_c,
             out_c, knew_c, vnew_c,
-            smax_c, ssum_c, sout_c,
+            sl2_c, smax_c, ssum_c, sout_c,
             scale,
         )
         _MEGAKERNEL_COMPILED_CACHE[cache_key] = compiled
@@ -360,7 +360,7 @@ def cluster_megakernel_forward(
         h_cute, wqkv_c, wo_c, kc_c, vc_c,
         rms_c, cos_c, sin_c,
         out_c, knew_c, vnew_c,
-        smax_c, ssum_c, sout_c,
+        sl2_c, smax_c, ssum_c, sout_c,
         scale,
     )
     return output, k_new, v_new
