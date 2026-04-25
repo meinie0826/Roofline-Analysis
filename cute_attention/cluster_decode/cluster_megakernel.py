@@ -6,8 +6,8 @@ CTA rank 0 writes results. This keeps correctness stable while preparing the
 kernel for hidden/KV splitting plus DSM reductions.
 
 Pipeline per cluster (= per attention head):
-  Stage 0 – RMSNorm (full hidden_dim, intra-CTA reduce)
-  Stage 1 – W_qkv GEMM (input @ W_qkv^T, full hidden_dim)
+  Stage 0 – RMSNorm (hidden slice per CTA + DSM scalar reduce)
+  Stage 1 – W_qkv GEMM (hidden slice per CTA + DSM vector reduce)
   Stage 2 – RoPE (GPT-J style)
   Stage 3 – Flash-decode attention (full KV cache)
   Stage 4 – W_o GEMM (attn_out @ W_o partial, per head)
@@ -30,7 +30,10 @@ _MEGAKERNEL_COMPILED_CACHE: dict = {}
 
 
 if HAS_CUTE:
-    from .cluster_primitives import cluster_reduce_scalar_sum_mbarrier
+    from .cluster_primitives import (
+        cluster_reduce_scalar_sum_mbarrier,
+        cluster_reduce_vector_sum_mbarrier,
+    )
 
     def _make_cluster_megakernel_host(
         seq_len: int,
@@ -43,6 +46,7 @@ if HAS_CUTE:
         dim_per_block = config.dim_per_block
         cluster_size = config.cluster_size
         cluster_shape = (cluster_size, 1, 1)
+        qkv_elems = 3 * head_dim
 
         @cute.kernel
         def _megakernel(
@@ -78,6 +82,8 @@ if HAS_CUTE:
             # internal precision. Public K/V outputs are cast to fp16 below.
             local_qkv_ptr = smem.allocate_array(cutlass.Float32, num_elems=3 * head_dim)
             local_qkv     = cute.make_tensor(local_qkv_ptr, cute.make_layout((3 * head_dim,)))
+            qkv_recv_ptr = smem.allocate_array(cutlass.Float32, num_elems=cluster_size * qkv_elems)
+            qkv_mbar_ptr = smem.allocate_array(cutlass.Int64, num_elems=1)
 
             # ============================================================ #
             # Stage 0 – RMSNorm                                            #
@@ -118,7 +124,8 @@ if HAS_CUTE:
             # ============================================================ #
             # Stage 1 – W_qkv GEMM                                        #
             # h_norm @ W_qkv^T                                             #
-            # Each thread computes one output element of Q/K/V.            #
+            # Each CTA accumulates its DIM_PER_BLOCK hidden slice, then DSM #
+            # reduces the 3*head_dim partial vector across the cluster.     #
             # w_qkv layout: (3*hidden_dim, hidden_dim) row-major           #
             # output element j = sum_i (h_norm[i] * w_qkv[j, i])          #
             # ============================================================ #
@@ -127,7 +134,7 @@ if HAS_CUTE:
                     out_d      = tidx
                     global_row = head_id * head_dim + out_d + proj * hidden_dim
                     acc        = cutlass.Float32(0.0)
-                    for i in range(hidden_dim):
+                    for i in range(slice_start, slice_stop):
                         x_val  = hidden[0, i].to(cutlass.Float32)
                         x_norm = x_val * rms_rcp * rms_weight[i].to(cutlass.Float32)
                         w_val  = w_qkv[global_row, i].to(cutlass.Float32)
@@ -135,6 +142,16 @@ if HAS_CUTE:
                     local_qkv[proj * head_dim + out_d] = acc
 
             cute.arch.barrier()
+
+            cluster_reduce_vector_sum_mbarrier(
+                local_qkv_ptr,
+                qkv_recv_ptr,
+                qkv_mbar_ptr,
+                qkv_elems,
+                tidx,
+                cluster_size,
+                num_threads,
+            )
 
             # ============================================================ #
             # Stage 2 – RoPE (GPT-J style, interleaved pairs)             #

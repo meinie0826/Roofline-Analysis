@@ -9,14 +9,10 @@ Mirrors the role of dsm.cuh from ClusterFusion:
 The underlying mechanism is:
   1. Each CTA writes its partial result to its own SMEM buffer.
   2. All CTAs do cluster_arrive / cluster_wait to synchronise.
-  3. For each "peer" CTA rank i (i != self):
-       - tid==0 signals the peer's mbarrier (arrive_and_expect_tx)
-       - tid==0 maps the destination address into the peer's SMEM (mapa)
-       - tid==0 issues cp.async.bulk SMEM→DSMEM transfer
-       - All threads spin-wait on the local mbarrier
-       - All threads do the element-wise accumulation from the received buffer
-       - cluster.sync() to serialise iterations
-  4. After the loop, SMEM[cta==0] contains the fully reduced result.
+  3. Each CTA uses inline PTX mapa + st.async.shared::cluster to send its
+     local value/vector slots to every peer CTA's SMEM.
+  4. Each CTA waits on a local mbarrier, then locally accumulates the received
+     slots from all peers.
 
 Note: the high-level `cute.arch.mapa() + cute.arch.atomic_add()` path currently
 ICEs in NVVM on sm_100a.  Scalar reductions therefore use the same lower-level
@@ -27,12 +23,13 @@ the values received from peer CTAs.
 For the ATTN and LINEAR stages the ClusterFusion CUDA code uses
   cp.async.bulk.shared::cluster + mbarrier
 to move a tile of halfs, then does a half2 add-reduction.  The equivalent in
-CuTeDSL uses:
-  - mapa() to translate a local SMEM pointer to a peer's address space
-  - A simple element loop with atomic_add on the remote pointer
+CuTeDSL correctness path uses:
+  - inline PTX mapa to translate a local SMEM pointer to a peer CTA
+  - st.async.shared::cluster to send float32 partials to every peer
+  - a local element-wise sum over the received peer slots
 
-This is not as efficient as a bulk copy but is correct and avoids inline PTX.
-A future revision can switch to inline PTX for the async bulk path.
+This is not as efficient as a bulk copy, but it is a validated correctness path.
+A future revision can switch to a true bulk-copy path for vector reductions.
 """
 
 from __future__ import annotations
@@ -188,6 +185,62 @@ if HAS_CUTE:
     # ------------------------------------------------------------------ #
     # Vector cluster reductions (LINEAR / ATTN stages)                    #
     # ------------------------------------------------------------------ #
+
+    @cute.jit
+    def cluster_reduce_vector_sum_mbarrier(
+        src_ptr,        # shared float32 array with num_floats elements
+        recv_ptr,       # shared float32 array with cluster_size*num_floats elements
+        mbar_ptr,       # shared int64 mbarrier storage with 1 element
+        num_floats: int,
+        tidx,
+        cluster_size: int,
+        num_threads: int,
+    ):
+        """Element-wise float32 sum across CTAs in a cluster.
+
+        The reduced vector is written back into `src_ptr` on every CTA.
+        This is a correctness-first LINEAR/ATTN reduction path.  It sends each
+        CTA's local vector to every peer CTA using inline-PTX DSM stores and
+        then sums the `cluster_size` received slots locally.
+        """
+        cta_rank = cute.arch.make_warp_uniform(cute.arch.block_idx_in_cluster())
+
+        if tidx == 0:
+            cute.arch.mbarrier_init(mbar_ptr, 1)
+        cute.arch.mbarrier_init_fence()
+        cute.arch.cluster_arrive_relaxed()
+        cute.arch.cluster_wait()
+
+        if tidx == 0:
+            cute.arch.mbarrier_arrive_and_expect_tx(
+                mbar_ptr,
+                cluster_size * num_floats * 4,
+            )
+
+        j = tidx
+        while j < num_floats:
+            local_val = src_ptr[j].to(cutlass.Float32)
+            for peer_cta in range(cluster_size):
+                dst_ptr = recv_ptr + cta_rank * num_floats + j
+                _store_shared_remote_f32(
+                    local_val,
+                    dst_ptr,
+                    mbar_ptr,
+                    cutlass.Int32(peer_cta),
+                )
+            j = j + num_threads
+
+        cute.arch.mbarrier_wait(mbar_ptr, phase=0)
+
+        j = tidx
+        while j < num_floats:
+            total = cutlass.Float32(0.0)
+            for peer_cta in range(cluster_size):
+                total = total + recv_ptr[peer_cta * num_floats + j]
+            src_ptr[j] = total
+            j = j + num_threads
+
+        cute.arch.barrier()
 
     @cute.jit
     def cluster_reduce_vector_add_inplace(
