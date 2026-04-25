@@ -19,3 +19,6 @@
 [submodule "FlashInfer"]
 	path = 3rd/flashinfer
 	url = https://github.com/flashinfer-ai/flashinfer.git
+[submodule "3rd/clusterfusion"]
+	path = 3rd/clusterfusion
+	url = https://github.com/xinhao-luo/ClusterFusion.git
