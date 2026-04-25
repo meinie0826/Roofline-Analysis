@@ -260,15 +260,15 @@ if HAS_CUTE:
             # it has the final attention output.                           #
             # ============================================================ #
             if cta_rank == 0:
-                for out_col in range(hidden_dim):
-                    if out_col % num_threads == tidx:
-                        partial = cutlass.Float32(0.0)
-                        for d in range(head_dim):
-                            a_val = local_qkv[2 * head_dim + d].to(cutlass.Float32)
-                            w_val = w_o[head_id * head_dim + d, out_col].to(cutlass.Float32)
-                            partial = partial + a_val * w_val
-                        # Tensor indexing – no pointer arithmetic
-                        cute.arch.atomic_add(output[0, out_col], partial.to(cutlass.Float16), scope="gpu")
+                if tidx < head_dim:
+                    for out_col in range(hidden_dim):
+                        if out_col % num_threads == tidx:
+                            partial = cutlass.Float32(0.0)
+                            for d in range(head_dim):
+                                a_val = local_qkv[2 * head_dim + d].to(cutlass.Float32)
+                                w_val = w_o[head_id * head_dim + d, out_col].to(cutlass.Float32)
+                                partial = partial + a_val * w_val
+                            output[0, out_col] = partial.to(cutlass.Float16)
 
         @cute.jit
         def _megakernel_host(
