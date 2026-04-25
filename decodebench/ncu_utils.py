@@ -21,6 +21,7 @@ DEFAULT_NCU_METRICS = [
 ]
 
 TENSOR_CORE_METRIC_PATTERNS = (
+    "tensor",
     "tensor_op",
     "pipe_tensor",
     "hmma",
@@ -76,7 +77,15 @@ def summarize_ncu(csv_path: Path) -> dict[str, Any]:
         for row in rows
         if any(token in row.get("Metric Name", "").lower() for token in TENSOR_CORE_METRIC_PATTERNS)
     })
-    pct_metric_names = [name for name in tc_metric_names if "pct_of_peak" in name]
+    pct_metric_names = []
+    for name in tc_metric_names:
+        if "pct_of_peak" in name:
+            pct_metric_names.append(name)
+            continue
+        for row in rows:
+            if row.get("Metric Name") == name and row.get("Metric Unit") == "%":
+                pct_metric_names.append(name)
+                break
 
     def values_for(metric_name: str) -> list[tuple[float, float | None]]:
         values: list[tuple[float, float | None]] = []
@@ -87,7 +96,7 @@ def summarize_ncu(csv_path: Path) -> dict[str, Any]:
             value = metric["value"]
             if not isinstance(value, float):
                 continue
-            time_metric = kernel["metrics"].get("gpu__time_duration.sum")
+            time_metric = kernel["metrics"].get("gpu__time_duration.sum") or kernel["metrics"].get("gpu__time_duration")
             time_value = time_metric["value"] if time_metric else None
             values.append((value, time_value if isinstance(time_value, float) else None))
         return values

@@ -491,7 +491,11 @@ def main() -> int:
     ncu_profile_dir = args.ncu_profile_dir or (args.results_dir / "ncu")
     if args.profile_ncu:
         ncu_profile_dir.mkdir(parents=True, exist_ok=True)
-        ncu_metrics, ncu_metric_warnings = resolve_metrics(args.ncu, args.ncu_metrics or DEFAULT_NCU_METRICS, args.ncu_query_metrics)
+        if args.ncu_metrics is None and args.ncu_sections:
+            ncu_metrics = []
+            ncu_metric_warnings = ["Using NCU sections without explicit metrics; Tensor Core fields will be inferred from section CSV rows."]
+        else:
+            ncu_metrics, ncu_metric_warnings = resolve_metrics(args.ncu, args.ncu_metrics or DEFAULT_NCU_METRICS, args.ncu_query_metrics)
         for warning in ncu_metric_warnings:
             print(f"# {warning}")
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

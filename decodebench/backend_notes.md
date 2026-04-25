@@ -67,10 +67,11 @@ python decodebench/run_matrix.py \
   --execute \
   --resume \
   --profile-ncu \
+  --ncu-section ComputeWorkloadAnalysis \
   --ncu-launch-count 1
 ```
 
-With `--profile-ncu`, each normal result JSON gets extra fields including `ncu_profiled`, `ncu_csv`, `ncu_tensor_core_util_pct`, and `ncu_tensor_core_summary`; the summary table also shows `latency/vs_best/tc%` when those fields are present. `--resume` skips only results that already have both a valid benchmark latency and NCU profile fields.
+With `--profile-ncu`, each normal result JSON gets extra fields including `ncu_profiled`, `ncu_csv`, `ncu_tensor_core_util_pct`, and `ncu_tensor_core_summary`; the summary table also shows `latency/vs_best/tc%` when those fields are present. When an NCU section is provided without explicit `--ncu-metric`, the runner lets the section choose metrics and infers Tensor Core utilization from percentage rows whose names contain tensor/MMA terms. `--resume` skips only results that already have both a valid benchmark latency and NCU profile fields.
 
 ## Per-backend Python selection
 
