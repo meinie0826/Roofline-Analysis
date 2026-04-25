@@ -56,9 +56,9 @@ BACKENDS = [
     {
         "name": "tensorrt_llm_native",
         "layer": "kernel",
-        "enabled": True,
+        "enabled": False,
         "kernel_path": "tensorrt_llm._torch.attention_backend.trtllm.TrtllmAttentionWrapper native thop.attention",
-        "status": "implemented_if_tensorrt_llm_is_installed",
+        "status": "disabled_until_dedicated_trtllm_venv_dependencies_are_ready",
         "supported_attention": {"MHA", "GQA", "MQA"},
         "supported_kv_dtypes": {"bf16", "fp16"},
         "supported_page_sizes": {16, 32, 64, 128},
