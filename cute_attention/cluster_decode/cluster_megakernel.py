@@ -1,16 +1,15 @@
-"""ClusterFusion-style decode megakernel – v4 (cluster-launch correctness baseline).
+"""ClusterFusion-style decode megakernel – v5 (CTA-cluster correctness path).
 
 One CTA cluster per attention head, matching ClusterFusion's launch topology.
-For now, each CTA still computes the full reference-style pipeline, but only
-CTA rank 0 writes results. This keeps correctness stable while preparing the
-kernel for hidden/KV splitting plus DSM reductions.
+Stages are split across CTA-owned hidden/KV/output slices and use DSM
+reductions where cross-CTA communication is required.
 
 Pipeline per cluster (= per attention head):
   Stage 0 – RMSNorm (hidden slice per CTA + DSM scalar reduce)
   Stage 1 – W_qkv GEMM (hidden slice per CTA + DSM vector reduce)
   Stage 2 – RoPE (GPT-J style)
   Stage 3 – Flash-decode attention (KV slice per CTA + DSM reductions)
-  Stage 4 – W_o GEMM (attn_out @ W_o partial, per head)
+  Stage 4 – W_o GEMM (output slice per CTA, per head)
   Output: sum across heads (done in Python)
 """
 
@@ -263,20 +262,19 @@ if HAS_CUTE:
             cute.arch.barrier()
 
             # ============================================================ #
-            # Stage 4 – W_o GEMM (per head)                                #
+            # Stage 4 – W_o GEMM (per head, output slice per CTA)           #
             # Reference computes output = attn_vec @ w_o.T, so each head
             # contributes sum_d attn_out[d] * w_o[col, head_id*head_dim+d].
             # Then Python sums across heads to get final output.           #
             # ============================================================ #
-            for out_col in range(hidden_dim):
-                if out_col % num_threads == tidx:
+            for out_col in range(slice_start, slice_stop):
+                if (out_col - slice_start) % num_threads == tidx:
                     partial = cutlass.Float32(0.0)
                     for d in range(head_dim):
                         a_val = local_qkv[2 * head_dim + d].to(cutlass.Float32)
                         w_val = w_o[out_col, head_id * head_dim + d].to(cutlass.Float32)
                         partial = partial + a_val * w_val
-                    if cta_rank == 0:
-                        scratch_wo[head_id, out_col] = partial
+                    scratch_wo[head_id, out_col] = partial
 
             cute.arch.cluster_arrive()
             cute.arch.cluster_wait()
@@ -307,7 +305,7 @@ def cluster_megakernel_forward(
     rms_weight, cos_rope, sin_rope,
     config: MegakernelConfig | None = None,
 ):
-    """Run the single-CTA-per-head decode megakernel."""
+    """Run the ClusterFusion-style CTA-cluster decode megakernel."""
     require_torch()
     if not HAS_CUTE:
         raise RuntimeError("cluster_megakernel requires cutlass.cute.")

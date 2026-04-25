@@ -16,8 +16,8 @@ in Python/CuTeDSL instead of raw CUDA C++.
 ownership model: each CTA scans its `DIM_PER_BLOCK` hidden slice for RMSNorm/QKV
 and its KV slice for attention, then DSM-reduces the L2 scalar, `3*head_dim` QKV
 vector, softmax max/sum scalars, and attention output vector via inline PTX
-`st.async.shared::cluster` plus mbarrier. W_o is still a correctness baseline:
-each CTA computes the full per-head W_o path and only CTA rank 0 writes partials.
+`st.async.shared::cluster` plus mbarrier. Stage 4 W_o is also split by
+`DIM_PER_BLOCK`: each CTA writes the output-column slice it owns for that head.
 
 `cluster_primitives.py` keeps the older high-level `mapa + cluster atomic_add`
 helper isolated as an experimental path because it currently hits an NVVM ICE
