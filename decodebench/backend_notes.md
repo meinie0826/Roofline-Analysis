@@ -74,14 +74,15 @@ With `--profile-ncu`, each normal result JSON gets extra fields including `ncu_p
 
 ## Per-backend Python selection
 
-`decodebench/run_matrix.py` can run different backends with different Python interpreters. By default, all backends use the Python that launches `run_matrix.py`, except `tensorrt_llm_native`, which auto-uses `.venv-trtllm/bin/python` when that file exists.
+`decodebench/run_matrix.py` chooses Python interpreters inside the runner; no shell exports are needed for the standard setup:
 
-Override any backend with `DECODEBENCH_PYTHON_<BACKEND_NAME_IN_UPPERCASE>` where non-alnum chars become `_`:
+- Most backends use `.venv/bin/python`.
+- `tensorrt_llm_native` uses `.venv-trtllm/bin/python` because the precompiled TensorRT-LLM extension is tied to a different PyTorch ABI.
+
+Check the resolved command with dry-run:
 
 ```bash
-export DECODEBENCH_PYTHON_TENSORRT_LLM_NATIVE=/workspace/Roofline-Analysis/.venv-trtllm/bin/python
-export DECODEBENCH_PYTHON_FLASHATTN_KVCACHE=/workspace/Roofline-Analysis/.venv/bin/python
-python decodebench/run_matrix.py --config decodebench/matrix_b200_framework.py --execute --resume
+python decodebench/run_matrix.py --config decodebench/matrix_b200_framework.py --dry-run
 ```
 
-For TensorRT-LLM native, the shorter aliases `TRTLLM_PYTHON` and `DECODEBENCH_PYTHON_TRTLLM_NATIVE` are also accepted.
+If a backend needs a one-off override, set a `python` field directly in that backend's matrix config entry.

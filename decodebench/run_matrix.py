@@ -24,35 +24,37 @@ def shell(argv: list[str]) -> str:
     return " ".join(shlex.quote(item) for item in argv)
 
 
-def env_key_for_backend(backend_name: str) -> str:
-    safe = "".join(ch if ch.isalnum() else "_" for ch in backend_name.upper())
-    return f"DECODEBENCH_PYTHON_{safe}"
+DEFAULT_BENCH_PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
+TRTLLM_BENCH_PYTHON = REPO_ROOT / ".venv-trtllm" / "bin" / "python"
 
-
-def default_python_for_backend(backend_name: str) -> str:
-    if backend_name == "tensorrt_llm_native":
-        trtllm_python = REPO_ROOT / ".venv-trtllm" / "bin" / "python"
-        if trtllm_python.exists():
-            return str(trtllm_python)
-    return PYTHON_BIN
-
-
-def python_env_keys_for_backend(backend: dict) -> list[str]:
-    backend_name = backend["name"]
-    keys = []
-    if backend.get("python_env"):
-        keys.append(backend["python_env"])
-    keys.append(env_key_for_backend(backend_name))
-    if backend_name == "tensorrt_llm_native":
-        keys += ["DECODEBENCH_PYTHON_TRTLLM_NATIVE", "TRTLLM_PYTHON"]
-    return list(dict.fromkeys(keys))
+# Keep interpreter selection inside the benchmark runner so mixed environments
+# are reproducible without shell exports. Most backends use the main bench venv;
+# TensorRT-LLM native uses its own venv because its precompiled extension is
+# tied to a different PyTorch ABI.
+BACKEND_PYTHON_PATHS = {
+    "flashinfer_paged_decode": DEFAULT_BENCH_PYTHON,
+    "flashinfer_trtllm_decode": DEFAULT_BENCH_PYTHON,
+    "flashattn_kvcache": DEFAULT_BENCH_PYTHON,
+    "flashmla_decode": DEFAULT_BENCH_PYTHON,
+    "flashattn_mla_decode": DEFAULT_BENCH_PYTHON,
+    "flashinfer_trtllm_mla_decode": DEFAULT_BENCH_PYTHON,
+    "vllm_paged_decode": DEFAULT_BENCH_PYTHON,
+    "vllm_flash": DEFAULT_BENCH_PYTHON,
+    "vllm_flashinfer": DEFAULT_BENCH_PYTHON,
+    "torch_sdpa_auto": DEFAULT_BENCH_PYTHON,
+    "torch_sdpa_cudnn": DEFAULT_BENCH_PYTHON,
+    "torch_sdpa_flash": DEFAULT_BENCH_PYTHON,
+    "sglang_serving": DEFAULT_BENCH_PYTHON,
+    "tensorrt_llm_native": TRTLLM_BENCH_PYTHON,
+}
 
 
 def python_for_backend(backend: dict) -> str:
-    for env_key in python_env_keys_for_backend(backend):
-        if os.environ.get(env_key):
-            return os.environ[env_key]
-    return backend.get("python") or default_python_for_backend(backend["name"])
+    configured = backend.get("python")
+    if configured:
+        return str(configured)
+    candidate = BACKEND_PYTHON_PATHS.get(backend["name"], DEFAULT_BENCH_PYTHON)
+    return str(candidate if candidate.exists() else PYTHON_BIN)
 
 
 def apply_backend_python(argv: list[str], backend: dict) -> list[str]:
