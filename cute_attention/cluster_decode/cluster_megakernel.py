@@ -34,8 +34,9 @@ if HAS_CUTE:
         cluster_size = config.cluster_size
         num_threads  = config.num_threads
         dim_per_block = config.dim_per_block
-        tile_attn    = config.tma_load_once // 2
-        kv_per_cta   = ((seq_len + cluster_size - 1) // cluster_size + tile_attn - 1) & ~(tile_attn - 1)
+        # Each CTA processes ceil(seq_len / cluster_size) KV rows
+        # No padding needed for correctness baseline
+        kv_per_cta_raw = (seq_len + cluster_size - 1) // cluster_size
 
         cluster_shape = (cluster_size, 1, 1)
 
@@ -179,8 +180,8 @@ if HAS_CUTE:
             # ============================================================ #
             # Stage 3 – Flash-decoding attention (per-CTA KV slice)       #
             # ============================================================ #
-            kv_start = cta_rank * kv_per_cta
-            kv_stop  = kv_start + kv_per_cta
+            kv_start = cta_rank * kv_per_cta_raw
+            kv_stop  = kv_start + kv_per_cta_raw
             if kv_stop > seq_len:
                 kv_stop = seq_len
 
