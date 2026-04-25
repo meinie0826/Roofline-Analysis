@@ -130,27 +130,6 @@ python benchmark.py \
   --warmup 5 --repeat 20
 ```
 
-## Cluster Decode Correctness
-
-ClusterFusion-style decode 实验线有一个专门的正确性入口：
-
-```bash
-PYTHONPATH=/Users/meiziyuan/Roofline-Analysis/cute_attention/python_dsl \
-python3 /Users/meiziyuan/Roofline-Analysis/cute_attention/python_dsl/verify_cluster_decode.py \
-  --stage all \
-  --batch 1 --heads 2 --seq-len 129 --head-dim 128 \
-  --cluster-size 2 --num-threads 128 --dtype float16
-```
-
-它分两层验证：
-
-- `reduce_contract_cpu`: 在 CPU 上验证 split-KV partial merge 数学，固定每 CTA payload 为 `head_dim + 2` 个 float，即 `m_i + l_i + O_i[head_dim]`。
-- `cluster_decode` / `cluster_decode_split`: 在 CUDA + CuTeDSL 环境上跑 kernel，并和 PyTorch decode attention reference 对齐。
-
-每次改 DSM / cluster reduce 后，先跑这个脚本，再跑 pytest 子集：
-
-```bash
-PYTHONPATH=/Users/meiziyuan/Roofline-Analysis/cute_attention/python_dsl \
-python3 -m pytest -q /Users/meiziyuan/Roofline-Analysis/cute_attention/python_dsl/tests/test_correctness.py \
-  -k cluster_decode
-```
+ClusterFusion-style decode 实验线已经独立到
+`/Users/meiziyuan/Roofline-Analysis/cute_attention/cluster_decode`，避免和这里的
+prefill / causal attention stages 混在一起。

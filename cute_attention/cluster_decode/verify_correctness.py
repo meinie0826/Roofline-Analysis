@@ -29,34 +29,6 @@ def _decode_reference(q, k, v, scale: float):
     return torch.matmul(probs, v.to(torch.float32)).to(dtype=q.dtype)
 
 
-def _split_kv_decode_reference(q, k, v, cluster_size: int, softmax_scale: float):
-    batch_heads, seq_len, head_dim = k.shape
-    partial_max = torch.full((batch_heads, cluster_size), -torch.inf, dtype=torch.float32)
-    partial_sum = torch.zeros((batch_heads, cluster_size), dtype=torch.float32)
-    partial_out = torch.zeros((batch_heads, cluster_size, head_dim), dtype=torch.float32)
-
-    q_f = q[:, 0, :].to(torch.float32)
-    k_f = k.to(torch.float32)
-    v_f = v.to(torch.float32)
-    kv_per_cta = (seq_len + cluster_size - 1) // cluster_size
-
-    for cta_rank in range(cluster_size):
-        kv_start = cta_rank * kv_per_cta
-        kv_stop = min(kv_start + kv_per_cta, seq_len)
-        scores = torch.sum(q_f[:, None, :] * k_f[:, kv_start:kv_stop, :], dim=-1) * softmax_scale
-        slice_max = torch.max(scores, dim=-1).values
-        exp_scores = torch.exp(scores - slice_max[:, None])
-        partial_max[:, cta_rank] = slice_max
-        partial_sum[:, cta_rank] = torch.sum(exp_scores, dim=-1)
-        partial_out[:, cta_rank, :] = torch.sum(exp_scores[:, :, None] * v_f[:, kv_start:kv_stop, :], dim=1)
-
-    global_max = torch.max(partial_max, dim=1).values
-    renorm = torch.exp(partial_max - global_max[:, None])
-    global_sum = torch.sum(partial_sum * renorm, dim=1)
-    numerator = torch.sum(partial_out * renorm[:, :, None], dim=1)
-    return (numerator / global_sum[:, None]).to(dtype=q.dtype).unsqueeze(1)
-
-
 def _error(out, ref) -> tuple[float, float]:
     diff = (out.to(torch.float32) - ref.to(torch.float32)).abs()
     denom = ref.to(torch.float32).abs().clamp_min(1e-6)
@@ -71,6 +43,11 @@ def _check_close(name: str, out, ref, rtol: float, atol: float) -> CheckResult:
 
 def verify_reduce_contract(args) -> CheckResult:
     _assert_torch()
+    try:
+        from .cluster_decode_reduce import leader_reduce_payload_floats, split_kv_decode_reference
+    except ImportError:
+        from cluster_decode_reduce import leader_reduce_payload_floats, split_kv_decode_reference
+
     torch.manual_seed(args.seed)
 
     q = torch.randn(args.batch_heads, 1, args.head_dim, dtype=torch.float32)
@@ -79,9 +56,9 @@ def verify_reduce_contract(args) -> CheckResult:
     scale = args.softmax_scale
 
     ref = _decode_reference(q, k, v, scale)
-    out = _split_kv_decode_reference(q, k, v, args.cluster_size, scale)
+    out = split_kv_decode_reference(q, k, v, args.cluster_size, scale)
     expected_payload = args.head_dim + 2
-    actual_payload = args.head_dim + 2
+    actual_payload = leader_reduce_payload_floats(args.head_dim)
     if actual_payload != expected_payload:
         raise AssertionError(f"Unexpected leader payload: {actual_payload} != {expected_payload}")
 
@@ -90,7 +67,14 @@ def verify_reduce_contract(args) -> CheckResult:
 
 def verify_kernel_stage(stage_name: str, args) -> CheckResult:
     _assert_torch()
-    from kernels import AttentionConfig, available_backends, run_stage
+    try:
+        from .cluster_decode import cluster_decode_forward
+        from .cluster_decode_split import cluster_decode_split_forward
+        from .common import ClusterDecodeConfig, available_backends
+    except ImportError:
+        from cluster_decode import cluster_decode_forward
+        from cluster_decode_split import cluster_decode_split_forward
+        from common import ClusterDecodeConfig, available_backends
 
     if not available_backends()["cute"]:
         raise RuntimeError("CuTe DSL is required for kernel correctness verification.")
@@ -102,9 +86,14 @@ def verify_kernel_stage(stage_name: str, args) -> CheckResult:
     k = torch.randn(args.batch, args.heads, args.seq_len, args.head_dim, device="cuda", dtype=args.dtype)
     v = torch.randn(args.batch, args.heads, args.seq_len, args.head_dim, device="cuda", dtype=args.dtype)
 
-    config = AttentionConfig(causal=False, num_threads=args.num_threads, cluster_size=args.cluster_size)
+    config = ClusterDecodeConfig(num_threads=args.num_threads, cluster_size=args.cluster_size)
     ref = _decode_reference(q, k, v, config.resolve_scale(args.head_dim))
-    out = run_stage(stage_name, q, k, v, config)
+    if stage_name == "cluster_decode":
+        out = cluster_decode_forward(q, k, v, config)
+    elif stage_name == "cluster_decode_split":
+        out = cluster_decode_split_forward(q, k, v, config)
+    else:
+        raise ValueError(f"Unknown cluster decode stage: {stage_name}")
     torch.cuda.synchronize()
     return _check_close(stage_name, out, ref, rtol=args.rtol, atol=args.atol)
 

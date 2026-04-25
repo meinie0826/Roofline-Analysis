@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .common import AttentionConfig, HAS_CUTE, cutlass, cute, from_dlpack, require_torch, torch
+from .common import ClusterDecodeConfig, HAS_CUTE, cutlass, cute, from_dlpack, require_torch, torch, validate_decode_qkv
 
 
 _CLUSTER_DECODE_COMPILED_CACHE = {}
@@ -100,29 +100,7 @@ if HAS_CUTE:
         return cluster_decode_forward_host
 
 
-def _validate_decode_qkv(q, k, v, config: AttentionConfig) -> None:
-    require_torch()
-    if q.ndim != 4 or k.ndim != 4 or v.ndim != 4:
-        raise ValueError("Expected q, k, v to have shape (batch, heads, seqlen, headdim).")
-    if q.shape[0] != k.shape[0] or q.shape[0] != v.shape[0]:
-        raise ValueError("q, k, v must have the same batch size.")
-    if q.shape[1] != k.shape[1] or q.shape[1] != v.shape[1]:
-        raise ValueError("cluster_decode v0 only supports MHA with matching q/k/v heads.")
-    if q.shape[2] != 1:
-        raise ValueError("cluster_decode v0 only supports decode q_len=1.")
-    if q.shape[-1] != k.shape[-1] or q.shape[-1] != v.shape[-1]:
-        raise ValueError("cluster_decode v0 requires q, k, v to have the same head_dim.")
-    if q.shape[-1] != 128:
-        raise ValueError("cluster_decode v0 is scoped to head_dim=128.")
-    if config.cluster_size not in (2, 4):
-        raise ValueError("cluster_decode v0 supports cluster_size 2 or 4.")
-    if not q.is_cuda or not k.is_cuda or not v.is_cuda:
-        raise ValueError("cluster_decode targets CUDA tensors only.")
-    if not q.is_contiguous() or not k.is_contiguous() or not v.is_contiguous():
-        raise ValueError("q, k, v must be contiguous.")
-
-
-def _decode_attention_reference(q, k, v, config: AttentionConfig):
+def _decode_attention_reference(q, k, v, config: ClusterDecodeConfig):
     """Decode attention semantics: the single query attends all provided KV tokens."""
     scale = config.resolve_scale(q.shape[-1])
     q_f = q.to(torch.float32)
@@ -133,7 +111,7 @@ def _decode_attention_reference(q, k, v, config: AttentionConfig):
     return torch.matmul(probs, v_f).to(dtype=q.dtype)
 
 
-def cluster_decode_forward(q, k, v, config: AttentionConfig | None = None):
+def cluster_decode_forward(q, k, v, config: ClusterDecodeConfig | None = None):
     """Experimental ClusterFusion-style decode attention entrypoint.
 
     v0 intentionally keeps the callable surface small: MHA, q_len=1,
@@ -142,8 +120,8 @@ def cluster_decode_forward(q, k, v, config: AttentionConfig | None = None):
     preserving this API and test coverage.
     """
     require_torch()
-    config = config or AttentionConfig()
-    _validate_decode_qkv(q, k, v, config)
+    config = config or ClusterDecodeConfig()
+    validate_decode_qkv(q, k, v, config)
 
     if not HAS_CUTE:
         raise RuntimeError("cluster_decode requires cutlass.cute for the planned kernel path.")

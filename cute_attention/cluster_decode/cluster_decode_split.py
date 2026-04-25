@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from .common import AttentionConfig, HAS_CUTE, cutlass, cute, from_dlpack, require_torch, torch
-from .cluster_decode import _validate_decode_qkv
+from .common import ClusterDecodeConfig, HAS_CUTE, cutlass, cute, from_dlpack, require_torch, validate_decode_qkv
 
 
 _CLUSTER_DECODE_SPLIT_COMPILED_CACHE = {}
@@ -158,10 +157,10 @@ if HAS_CUTE:
         return cluster_decode_split_forward_host
 
 
-def cluster_decode_split_forward(q, k, v, config: AttentionConfig | None = None):
+def cluster_decode_split_forward(q, k, v, config: ClusterDecodeConfig | None = None):
     require_torch()
-    config = config or AttentionConfig()
-    _validate_decode_qkv(q, k, v, config)
+    config = config or ClusterDecodeConfig()
+    validate_decode_qkv(q, k, v, config)
 
     if not HAS_CUTE:
         raise RuntimeError("cluster_decode_split requires cutlass.cute.")

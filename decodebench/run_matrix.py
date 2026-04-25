@@ -33,6 +33,7 @@ TRTLLM_BENCH_PYTHON = REPO_ROOT / ".venv-trtllm" / "bin" / "python"
 # tied to a different PyTorch ABI.
 BACKEND_PYTHON_PATHS = {
     "flashinfer_paged_decode": DEFAULT_BENCH_PYTHON,
+    "flashinfer_xqa_decode": DEFAULT_BENCH_PYTHON,
     "flashinfer_trtllm_decode": DEFAULT_BENCH_PYTHON,
     "flashattn_kvcache": DEFAULT_BENCH_PYTHON,
     "flashmla_decode": DEFAULT_BENCH_PYTHON,
@@ -84,6 +85,23 @@ def flashinfer_trtllm_cmd(workload: dict, defaults: dict, output: Path) -> list[
     return [
         PYTHON_BIN,
         "decodebench/trtllm_decode_benchmark.py",
+        "--batch-size", str(workload["batch_size"]),
+        "--context-len", str(workload["context_len"]),
+        "--num-q-heads", str(workload["num_q_heads"]),
+        "--num-kv-heads", str(workload["num_kv_heads"]),
+        "--head-dim", str(workload["head_dim"]),
+        "--kv-dtype", workload["kv_dtype"],
+        "--page-size", str(workload["page_size"]),
+        "--warmup-steps", str(defaults.get("warmup_steps", 10)),
+        "--repeat", str(defaults.get("repeat", 50)),
+        "--output", str(output),
+    ]
+
+
+def flashinfer_xqa_cmd(workload: dict, defaults: dict, output: Path) -> list[str]:
+    return [
+        PYTHON_BIN,
+        "decodebench/flashinfer_xqa_benchmark.py",
         "--batch-size", str(workload["batch_size"]),
         "--context-len", str(workload["context_len"]),
         "--num-q-heads", str(workload["num_q_heads"]),
@@ -272,6 +290,8 @@ def build_cmd(backend: dict, workload: dict, defaults: dict, results_dir: Path) 
     output = results_dir / f'{backend["name"]}__{workload["id"]}.json'
     if backend["name"] == "flashinfer_paged_decode":
         return apply_backend_python(flashinfer_cmd(workload, defaults, output), backend)
+    if backend["name"] == "flashinfer_xqa_decode":
+        return apply_backend_python(flashinfer_xqa_cmd(workload, defaults, output), backend)
     if backend["name"] == "flashinfer_trtllm_decode":
         return apply_backend_python(flashinfer_trtllm_cmd(workload, defaults, output), backend)
     if backend["name"] == "flashattn_kvcache":
@@ -324,6 +344,7 @@ def output_path(backend: dict, workload: dict, results_dir: Path) -> Path:
 def short_backend(name: str) -> str:
     return {
         "flashinfer_paged_decode": "flashinfer",
+        "flashinfer_xqa_decode": "xqa",
         "flashinfer_trtllm_decode": "trtllm",
         "flashattn_kvcache": "flash-attn",
         "flashmla_decode": "flashmla",

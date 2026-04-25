@@ -96,8 +96,6 @@ _STAGE_TUNING_AXES = {
     "stage22": "block_m,block_n,num_stages_kv",
     "baseline_fa4": "none",
     "baseline_sdpa": "none",
-    "cluster_decode": "cluster_size,block_n",
-    "cluster_decode_split": "cluster_size,block_n",
 }
 _STAGE_NOTES = {
     "stage12": "independent two-stage cp.async pipeline kernel; autotunes block sizes within its own stage-2 design",
@@ -112,8 +110,6 @@ _STAGE_NOTES = {
     "stage20": "aggressive warpspec experimental backend; circular-buffer steady-state mainloop with full-slot prefetch and dedicated multistage autotune",
     "stage21": "explicit producer/consumer state-machine backend; stage18-derived mainline with dedicated prefetch, advance, and wait helpers",
     "stage22": "ported wrapper around CUTLASS CuTeDSL Blackwell FMHA example; fixed Blackwell-friendly stage22 defaults",
-    "cluster_decode": "experimental q_len=1 MHA decode path; starts as single-CTA CuTeDSL before cluster split-KV reduce",
-    "cluster_decode_split": "cluster launch/split-KV skeleton; leader still computes full output until DSM reduce lands",
 }
 
 

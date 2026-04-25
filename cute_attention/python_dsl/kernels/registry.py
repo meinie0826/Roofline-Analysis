@@ -5,8 +5,6 @@ from typing import Callable
 
 from .baseline_fa4 import baseline_fa4_forward
 from .baseline_sdpa import baseline_sdpa_forward
-from .cluster_decode import cluster_decode_forward
-from .cluster_decode_split import cluster_decode_split_forward
 from .common import AttentionConfig, available_backends
 from .stage1_fa2 import stage1_forward
 from .stage4_mma import stage4_forward
@@ -194,18 +192,6 @@ STAGES: dict[str, StageDefinition] = {
         description="Stage ported from CUTLASS CuTeDSL Blackwell FMHA example, wrapped behind the local stage22 interface.",
         implementation=stage22_forward,
         backend="own-cute-dsl",
-    ),
-    "cluster_decode": StageDefinition(
-        name="cluster_decode",
-        description="Experimental ClusterFusion-style decode attention surface for CuTeDSL cluster split-KV work.",
-        implementation=cluster_decode_forward,
-        backend="own-cute-dsl-experimental",
-    ),
-    "cluster_decode_split": StageDefinition(
-        name="cluster_decode_split",
-        description="Cluster decode split-KV skeleton: cluster launch and per-CTA KV ownership, before DSM reduce.",
-        implementation=cluster_decode_split_forward,
-        backend="own-cute-dsl-experimental",
     ),
 }
 
