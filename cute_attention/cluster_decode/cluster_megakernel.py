@@ -57,6 +57,7 @@ if HAS_CUTE:
             scratch_max: cute.Tensor,   # (num_heads, cluster_size)     f32 – attn partial max
             scratch_sum: cute.Tensor,   # (num_heads, cluster_size)     f32 – attn partial sum
             scratch_out: cute.Tensor,   # (num_heads, cluster_size, head_dim) f16 – attn partial O
+            scratch_wo:  cute.Tensor,   # (num_heads, hidden_dim)        f16 – W_o per-head output
             softmax_scale: cutlass.Float32,
         ):
             tidx, _, _ = cute.arch.thread_idx()
@@ -266,21 +267,21 @@ if HAS_CUTE:
                                 a_val = local_qkv[2 * head_dim + d].to(cutlass.Float32)
                                 w_val = w_o[head_id * head_dim + d, out_col].to(cutlass.Float32)
                                 partial = partial + a_val * w_val
-                            output[0, out_col] = partial.to(cutlass.Float16)
+                            scratch_wo[head_id, out_col] = partial.to(cutlass.Float16)
 
         @cute.jit
         def _megakernel_host(
             hidden, w_qkv, w_o, k_cache, v_cache,
             rms_weight, cos_rope, sin_rope,
             output, k_out, v_out,
-            scratch_l2, scratch_max, scratch_sum, scratch_out,
+            scratch_l2, scratch_max, scratch_sum, scratch_out, scratch_wo,
             softmax_scale,
         ):
             _megakernel(
                 hidden, w_qkv, w_o, k_cache, v_cache,
                 rms_weight, cos_rope, sin_rope,
                 output, k_out, v_out,
-                scratch_l2, scratch_max, scratch_sum, scratch_out,
+                scratch_l2, scratch_max, scratch_sum, scratch_out, scratch_wo,
                 softmax_scale,
             ).launch(
                 grid=(num_heads * cluster_size, 1, 1),
@@ -322,6 +323,7 @@ def cluster_megakernel_forward(
     scratch_max = torch.zeros((num_heads, cluster_size), device=hidden_states.device, dtype=torch.float32)
     scratch_sum = torch.zeros((num_heads, cluster_size), device=hidden_states.device, dtype=torch.float32)
     scratch_out = torch.zeros((num_heads, cluster_size, head_dim), device=hidden_states.device, dtype=hidden_states.dtype)
+    scratch_wo  = torch.zeros((num_heads, hidden_dim), device=hidden_states.device, dtype=hidden_states.dtype)
 
     def _wrap(t):
         return from_dlpack(t, assumed_align=16).mark_layout_dynamic()
@@ -341,6 +343,7 @@ def cluster_megakernel_forward(
     smax_c   = _wrap(scratch_max)
     ssum_c   = _wrap(scratch_sum)
     sout_c   = _wrap(scratch_out)
+    swo_c    = _wrap(scratch_wo)
 
     cache_key = (seq_len, config)
     compiled  = _MEGAKERNEL_COMPILED_CACHE.get(cache_key)
@@ -351,7 +354,7 @@ def cluster_megakernel_forward(
             h_cute, wqkv_c, wo_c, kc_c, vc_c,
             rms_c, cos_c, sin_c,
             out_c, knew_c, vnew_c,
-            sl2_c, smax_c, ssum_c, sout_c,
+            sl2_c, smax_c, ssum_c, sout_c, swo_c,
             scale,
         )
         _MEGAKERNEL_COMPILED_CACHE[cache_key] = compiled
@@ -360,7 +363,10 @@ def cluster_megakernel_forward(
         h_cute, wqkv_c, wo_c, kc_c, vc_c,
         rms_c, cos_c, sin_c,
         out_c, knew_c, vnew_c,
-        sl2_c, smax_c, ssum_c, sout_c,
+        sl2_c, smax_c, ssum_c, sout_c, swo_c,
         scale,
     )
+    # Reduce W_o across heads: output = sum of all heads' partial projections
+    output = scratch_wo.sum(dim=0).unsqueeze(0).to(hidden_states.dtype)
+
     return output, k_new, v_new
