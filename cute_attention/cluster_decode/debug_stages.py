@@ -69,7 +69,7 @@ def debug_stages():
     print(f"  attn_out[0] (head 0) [0:4] = {attn0[0:4]}")
 
     # All heads
-    attn_all = torch.zeros(1, D)
+    attn_all = torch.zeros(1, D, device="cuda")
     for h_idx in range(NH):
         q_h = Q_rot[0, h_idx]
         scores_h = (q_h.unsqueeze(0) @ k_cache[:, h_idx, :].T).squeeze(0) * scale
