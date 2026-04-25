@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Correctness tests for the ClusterFusion-style decode megakernel.
 
-Tests are structured in three layers:
-
-  1. test_reference_*  – pure-PyTorch reference sanity checks (CPU/CUDA, no CuTeDSL).
-  2. test_megakernel_* – CuTeDSL kernel vs reference (requires B200/Blackwell + CuTe DSL).
+  1. test_reference_*  – PyTorch reference sanity checks (CUDA, no CuTeDSL).
+  2. test_megakernel_* – CuTeDSL kernel vs reference (requires Blackwell + CuTeDSL).
   3. test_attn_compat  – ensure existing cluster_decode attention tests still pass.
 """
 from __future__ import annotations
@@ -44,8 +42,12 @@ def decode_attn_ref(q, k, v, scale):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.skipif(not backends["torch"], reason="PyTorch not installed")
+@pytest.mark.skipif(
+    not (backends["torch"] and hasattr(torch, "cuda") and torch.cuda.is_available()),
+    reason="CUDA GPU required",
+)
 class TestReferenceForward:
-    """Validate megakernel_reference_forward against manual computation."""
+    """Validate megakernel_reference_forward against manual computation (CUDA tensors)."""
 
     def _small_config(self):
         return MegakernelConfig(
@@ -66,7 +68,7 @@ class TestReferenceForward:
     def test_output_dtype_preserved(self):
         config = self._small_config()
         for dtype in [torch.float16, torch.bfloat16]:
-            inputs = make_random_megakernel_inputs(config, seq_len=32, device="cpu", dtype=dtype)
+            inputs = make_random_megakernel_inputs(config, seq_len=32, device="cuda", dtype=dtype)
             out, k_new, v_new = megakernel_reference_forward(**inputs, config=config)
             assert out.dtype   == dtype
             assert k_new.dtype == dtype
@@ -75,7 +77,7 @@ class TestReferenceForward:
     def test_deterministic(self):
         """Same inputs → same outputs (no randomness in forward pass)."""
         config = self._small_config()
-        inputs = make_random_megakernel_inputs(config, seq_len=32, device="cpu")
+        inputs = make_random_megakernel_inputs(config, seq_len=32, device="cuda")
         out1, _, _ = megakernel_reference_forward(**inputs, config=config)
         out2, _, _ = megakernel_reference_forward(**inputs, config=config)
         torch.testing.assert_close(out1, out2, rtol=0, atol=0)
@@ -100,15 +102,15 @@ class TestReferenceForward:
     def test_cluster_size_invariant(self, cluster_size):
         """Result should not depend on cluster_size (it's a launch parameter)."""
         config2 = MegakernelConfig(hidden_dim=256, num_heads=4, head_dim=64, cluster_size=cluster_size)
-        inputs  = make_random_megakernel_inputs(config2, seq_len=32, device="cpu")
+        inputs  = make_random_megakernel_inputs(config2, seq_len=32, device="cuda")
         out, _, _ = megakernel_reference_forward(**inputs, config=config2)
         assert torch.isfinite(out).all()
 
     def test_rmsnorm_correctness(self):
         """Verify RMSNorm stage against torch.nn.functional.rms_norm."""
         from cluster_decode.megakernel_reference import rms_norm
-        x = torch.randn(1, 64, dtype=torch.float32)
-        w = torch.ones(64, dtype=torch.float32)
+        x = torch.randn(1, 64, dtype=torch.float32, device="cuda")
+        w = torch.ones(64, dtype=torch.float32, device="cuda")
         out_ref = torch.nn.functional.rms_norm(x, (64,), weight=w, eps=1e-6)
         out_ours = rms_norm(x, w, eps=1e-6).to(torch.float32)
         torch.testing.assert_close(out_ours, out_ref, rtol=1e-5, atol=1e-5)
@@ -117,10 +119,10 @@ class TestReferenceForward:
         """RoPE with cos=1, sin=0 should be identity."""
         from cluster_decode.megakernel_reference import apply_rope_gptj
         HD = 32
-        q = torch.randn(HD, dtype=torch.float32)
-        k = torch.randn(HD, dtype=torch.float32)
-        cos = torch.ones(HD, dtype=torch.float32)
-        sin = torch.zeros(HD, dtype=torch.float32)
+        q = torch.randn(HD, dtype=torch.float32, device="cuda")
+        k = torch.randn(HD, dtype=torch.float32, device="cuda")
+        cos = torch.ones(HD, dtype=torch.float32, device="cuda")
+        sin = torch.zeros(HD, dtype=torch.float32, device="cuda")
         q_rot, k_rot = apply_rope_gptj(q, k, cos, sin)
         torch.testing.assert_close(q_rot, q, rtol=1e-6, atol=1e-6)
         torch.testing.assert_close(k_rot, k, rtol=1e-6, atol=1e-6)
