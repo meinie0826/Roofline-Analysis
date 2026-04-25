@@ -86,7 +86,7 @@ def debug_stages():
     # Per-head W_o contributions
     for h_idx in range(NH):
         attn_h = attn_all[0, h_idx*HD:(h_idx+1)*HD]
-        wo_h = attn_h @ w_o[h_idx*HD:(h_idx+1)*HD, :].T
+        wo_h = attn_h @ w_o[:, h_idx*HD:(h_idx+1)*HD].T
         print(f"  W_o head {h_idx} [0:4] = {wo_h[0:4]}")
 
     # Now run the kernel

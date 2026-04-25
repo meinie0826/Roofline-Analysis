@@ -183,18 +183,18 @@ if HAS_CUTE:
 
             # ============================================================ #
             # Stage 4 – W_o GEMM (per head)                                #
-            # scratch_wo[head_id, col] = attn_out[d] * w_o[head_id*head_dim+d, col]
+            # Reference computes output = attn_vec @ w_o.T, so each head
+            # contributes sum_d attn_out[d] * w_o[col, head_id*head_dim+d].
             # Then Python sums across heads to get final output.           #
             # ============================================================ #
-            if tidx < head_dim:
-                for out_col in range(hidden_dim):
-                    if out_col % num_threads == tidx:
-                        partial = cutlass.Float32(0.0)
-                        for d in range(head_dim):
-                            a_val = local_qkv[2 * head_dim + d].to(cutlass.Float32)
-                            w_val = w_o[head_id * head_dim + d, out_col].to(cutlass.Float32)
-                            partial = partial + a_val * w_val
-                        scratch_wo[head_id, out_col] = partial.to(cutlass.Float16)
+            for out_col in range(hidden_dim):
+                if out_col % num_threads == tidx:
+                    partial = cutlass.Float32(0.0)
+                    for d in range(head_dim):
+                        a_val = local_qkv[2 * head_dim + d].to(cutlass.Float32)
+                        w_val = w_o[out_col, head_id * head_dim + d].to(cutlass.Float32)
+                        partial = partial + a_val * w_val
+                    scratch_wo[head_id, out_col] = partial.to(cutlass.Float16)
 
         @cute.jit
         def _megakernel_host(
