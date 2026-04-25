@@ -9,6 +9,19 @@ in Python/CuTeDSL instead of raw CUDA C++.
 
 ## Architecture
 
+### Current implementation status
+
+`cluster_megakernel.py` currently matches ClusterFusion's launch topology
+(`cluster_size` CTAs per attention head), but it is still a correctness
+baseline: each CTA computes the full per-head pipeline and only CTA rank 0
+writes K/V and W_o partials. The next alignment steps are to replace that
+duplicate work with the ownership model below, then wire in DSM reductions.
+
+`cluster_primitives.py` contains the CuTeDSL DSM helper sketches, but the
+megakernel does not call them yet.
+
+### Target ClusterFusion ownership model
+
 One **cluster** = one attention head.  Each cluster has `cluster_size` CTAs (2 or 4).
 
 ```

@@ -1,9 +1,11 @@
-"""ClusterFusion-style decode megakernel – v3 (single-CTA per head baseline).
+"""ClusterFusion-style decode megakernel – v4 (cluster-launch correctness baseline).
 
-One CTA per attention head, no cluster at all. This is the simplest possible
-implementation to verify correctness before adding multi-CTA optimization.
+One CTA cluster per attention head, matching ClusterFusion's launch topology.
+For now, each CTA still computes the full reference-style pipeline, but only
+CTA rank 0 writes results. This keeps correctness stable while preparing the
+kernel for hidden/KV splitting plus DSM reductions.
 
-Pipeline per CTA (= per attention head):
+Pipeline per cluster (= per attention head):
   Stage 0 – RMSNorm (full hidden_dim, intra-CTA reduce)
   Stage 1 – W_qkv GEMM (input @ W_qkv^T, full hidden_dim)
   Stage 2 – RoPE (GPT-J style)
@@ -37,6 +39,8 @@ if HAS_CUTE:
         num_heads    = config.num_heads
         head_dim     = config.head_dim
         num_threads  = config.num_threads
+        cluster_size = config.cluster_size
+        cluster_shape = (cluster_size, 1, 1)
 
         @cute.kernel
         def _megakernel(
@@ -50,12 +54,13 @@ if HAS_CUTE:
             sin_rope:    cute.Tensor,   # (head_dim,)              fp32
             k_out:       cute.Tensor,   # (1, num_heads, head_dim) fp16
             v_out:       cute.Tensor,   # (1, num_heads, head_dim) fp16
-            scratch_wo:  cute.Tensor,   # (num_heads, hidden_dim)  fp16
+            scratch_wo:  cute.Tensor,   # (num_heads, hidden_dim)  fp32
             softmax_scale: cutlass.Float32,
         ):
             tidx, _, _ = cute.arch.thread_idx()
             bidx, _, _ = cute.arch.block_idx()
-            head_id = bidx  # 1 CTA per head
+            cta_rank = cute.arch.make_warp_uniform(cute.arch.block_idx_in_cluster())
+            head_id = bidx // cluster_size  # 1 CTA cluster per head
 
             eps = cutlass.Float32(1e-6)
 
@@ -136,7 +141,7 @@ if HAS_CUTE:
 
             # Write K/V outputs
             cute.arch.barrier()
-            if tidx < head_dim:
+            if cta_rank == 0 and tidx < head_dim:
                 k_out[0, head_id, tidx] = local_qkv[head_dim + tidx].to(cutlass.Float16)
                 v_out[0, head_id, tidx] = local_qkv[2 * head_dim + tidx].to(cutlass.Float16)
 
@@ -193,7 +198,11 @@ if HAS_CUTE:
                         a_val = local_qkv[2 * head_dim + d].to(cutlass.Float32)
                         w_val = w_o[out_col, head_id * head_dim + d].to(cutlass.Float32)
                         partial = partial + a_val * w_val
-                    scratch_wo[head_id, out_col] = partial
+                    if cta_rank == 0:
+                        scratch_wo[head_id, out_col] = partial
+
+            cute.arch.cluster_arrive()
+            cute.arch.cluster_wait()
 
         @cute.jit
         def _megakernel_host(
@@ -208,8 +217,9 @@ if HAS_CUTE:
                 k_out, v_out, scratch_wo,
                 softmax_scale,
             ).launch(
-                grid=(num_heads, 1, 1),
+                grid=(num_heads * cluster_size, 1, 1),
                 block=(num_threads, 1, 1),
+                cluster=cluster_shape,
             )
 
         return _megakernel_host
