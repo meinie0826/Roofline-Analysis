@@ -56,6 +56,7 @@ cluster_decode/
 ├── verify_correctness.py   CLI correctness runner
 ├── cluster_decode.py       Standalone attn baseline (v0, single CTA)
 ├── cluster_decode_split.py Standalone attn skeleton (cluster launch, leader fallback)
+├── debug_dsm_scalar.py     Minimal DSM scalar communication probes
 ├── cluster_decode_reduce.py CPU-only split-KV reduce contract check
 └── tests/
     ├── test_correctness.py  Original attention-only tests
@@ -97,6 +98,22 @@ python3 -m cluster_decode.verify_correctness \
 ```bash
 PYTHONPATH=/Users/meiziyuan/Roofline-Analysis/cute_attention \
 python3 -m pytest -q cute_attention/cluster_decode/tests/ -v
+```
+
+### 5. DSM scalar probes
+
+Use these before wiring DSM helpers into the megakernel:
+
+```bash
+PYTHONPATH=/Users/meiziyuan/Roofline-Analysis/cute_attention \
+python3 -m cluster_decode.debug_dsm_scalar --variant sync --cluster-size 2
+
+PYTHONPATH=/Users/meiziyuan/Roofline-Analysis/cute_attention \
+python3 -m cluster_decode.debug_dsm_scalar --variant ptx-store --cluster-size 2
+
+# Expected to reproduce the current NVVM ICE on sm_100a until fixed:
+PYTHONPATH=/Users/meiziyuan/Roofline-Analysis/cute_attention \
+python3 -m cluster_decode.debug_dsm_scalar --variant cute-atomic --cluster-size 2
 ```
 
 ---
