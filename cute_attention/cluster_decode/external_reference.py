@@ -12,7 +12,8 @@ from dataclasses import dataclass
 import importlib
 from typing import Iterable
 
-from .common import MegakernelConfig
+from .common import MegakernelConfig, require_torch
+from .megakernel_reference import rms_norm
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,119 @@ def validate_supported_external_config(
     if unsupported:
         joined = ", ".join(unsupported)
         raise ValueError(f"Unsupported external-reference config: {joined}.")
+
+
+def _rope_half_tables(cos_rope, sin_rope):
+    """Convert full interleaved GPT-J cos/sin tables to framework shape."""
+    return cos_rope.to(cos_rope.device, dtype=cos_rope.dtype)[0::2].unsqueeze(0), sin_rope.to(
+        sin_rope.device, dtype=sin_rope.dtype
+    )[0::2].unsqueeze(0)
+
+
+def _apply_external_gptj_rope(framework: str, q, k, cos_rope, sin_rope):
+    """Apply GPT-J/interleaved RoPE using SGLang or vLLM's implementation."""
+    cos_half, sin_half = _rope_half_tables(cos_rope, sin_rope)
+    framework = framework.lower()
+
+    if framework == "sglang":
+        rotary = importlib.import_module("sglang.srt.layers.rotary_embedding.utils")
+        apply_rotary_emb = rotary.apply_rotary_emb
+        return (
+            apply_rotary_emb(q, cos_half, sin_half, is_neox_style=False),
+            apply_rotary_emb(k, cos_half, sin_half, is_neox_style=False),
+        )
+
+    if framework == "vllm":
+        rotary = importlib.import_module(
+            "vllm.model_executor.layers.rotary_embedding.common"
+        )
+        apply_rotary = rotary.ApplyRotaryEmb.forward_static
+        return (
+            apply_rotary(
+                q,
+                cos_half,
+                sin_half,
+                is_neox_style=False,
+                enable_fp32_compute=True,
+            ),
+            apply_rotary(
+                k,
+                cos_half,
+                sin_half,
+                is_neox_style=False,
+                enable_fp32_compute=True,
+            ),
+        )
+
+    raise ValueError(f"Unknown external reference framework: {framework}.")
+
+
+def external_megakernel_reference_forward(
+    framework: str,
+    hidden_states,
+    w_qkv,
+    w_o,
+    k_cache,
+    v_cache,
+    rms_weight,
+    cos_rope,
+    sin_rope,
+    config: MegakernelConfig | None = None,
+    eps: float = 1e-6,
+):
+    """Reference forward using SGLang/vLLM RoPE for the supported dense path.
+
+    This intentionally does not instantiate the full framework attention layer:
+    those paths require paged-cache/runtime metadata. Instead, the external
+    framework owns the RoPE semantics, while the dense single-token MHA decode
+    math mirrors `megakernel_reference_forward`.
+    """
+    require_torch()
+    config = config or MegakernelConfig()
+    validate_supported_external_config(config, rope_style="gptj")
+
+    import torch
+
+    hidden_dim = config.hidden_dim
+    num_heads = config.num_heads
+    head_dim = config.head_dim
+    scale = config.resolve_scale()
+
+    h = hidden_states.to(torch.float32)
+    w_qkv_f = w_qkv.to(torch.float32)
+    w_o_f = w_o.to(torch.float32)
+
+    h_norm = rms_norm(h, rms_weight, eps=eps)
+    qkv = h_norm @ w_qkv_f.T
+    q = qkv[:, :hidden_dim].reshape(1, num_heads, head_dim)
+    k = qkv[:, hidden_dim : 2 * hidden_dim].reshape(1, num_heads, head_dim)
+    v = qkv[:, 2 * hidden_dim :].reshape(1, num_heads, head_dim)
+
+    q_rot, k_rot = _apply_external_gptj_rope(framework, q, k, cos_rope, sin_rope)
+
+    k_new = k_rot.to(hidden_states.dtype)
+    v_new = v.to(hidden_states.dtype)
+
+    k_f = torch.cat([k_cache.to(torch.float32), k_new.to(torch.float32)], dim=0)
+    v_f = torch.cat([v_cache.to(torch.float32), v_new.to(torch.float32)], dim=0)
+    scores = torch.bmm(q_rot[0].unsqueeze(1), k_f.permute(1, 2, 0)) * scale
+    probs = torch.softmax(scores, dim=-1)
+    attn_out = torch.bmm(probs, v_f.permute(1, 0, 2)).squeeze(1)
+
+    scratch_wo = torch.empty(
+        (num_heads, hidden_dim),
+        device=hidden_states.device,
+        dtype=torch.float32,
+    )
+    for h_idx in range(num_heads):
+        cols = slice(h_idx * head_dim, (h_idx + 1) * head_dim)
+        scratch_wo[h_idx] = torch.sum(
+            attn_out[h_idx].unsqueeze(0) * w_o_f[:, cols],
+            dim=1,
+        )
+    output = scratch_wo.sum(dim=0).unsqueeze(0).to(hidden_states.dtype)
+
+    return output, k_new, v_new
 
 
 def external_reference_status(config: MegakernelConfig | None = None) -> str:

@@ -74,18 +74,25 @@ An external correctness/benchmark harness should refuse or skip:
 
 ## Recommended harness shape
 
-The repository now has a lightweight optional probe module instead of importing
-frameworks in normal tests:
+The repository now has an optional reference module. Normal tests can import it
+without requiring either framework; framework-specific tests skip when imports
+are unavailable:
 
 ```text
 cluster_decode/external_reference.py
   probe_framework_imports()
   validate_supported_external_config(...)
+  external_megakernel_reference_forward(...)
   external_reference_status(...)
 ```
 
-This is intentionally a gate, not yet a full framework runner. The next step is
-to add framework-specific runners behind this gate:
+`external_megakernel_reference_forward(framework, ...)` uses SGLang or vLLM's
+GPT-J/interleaved RoPE implementation, then runs the same dense single-token
+MHA decode math as `megakernel_reference_forward`. It intentionally does not
+instantiate the full framework attention layer yet because those paths require
+paged-cache/runtime metadata.
+
+The next step is to add full framework runners behind this gate:
 
 ```text
   run_vllm_llama_attention_reference(...)   # skipped if unavailable/unsupported
@@ -94,10 +101,10 @@ to add framework-specific runners behind this gate:
 ```
 
 Core `pytest cluster_decode/tests/` should stay independent of SGLang/vLLM.
-External reference tests can live under a marker such as:
+The optional reference checks live in:
 
 ```bash
-python3 -m pytest cluster_decode/tests/test_external_refs.py -m external
+python3 -m pytest cluster_decode/tests/test_external_reference.py -v
 ```
 
 That keeps the fast correctness suite stable while still allowing a stronger
