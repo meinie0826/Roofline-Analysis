@@ -357,9 +357,30 @@ def cluster_megakernel_forward(
     hidden_states, w_qkv, w_o, k_cache, v_cache,
     rms_weight, cos_rope, sin_rope,
     config: MegakernelConfig | None = None,
+    use_tensor_core: bool = False,
 ):
-    """Run the ClusterFusion-style CTA-cluster decode megakernel."""
+    """Run the ClusterFusion-style decode megakernel.
+
+    Set ``use_tensor_core=True`` to run the tensor-core implementation path for
+    QKV/WO.  The default remains the original CuTeDSL CTA-cluster correctness
+    kernel so existing tests and benchmarks keep their historical behavior.
+    """
     require_torch()
+    if use_tensor_core:
+        from .cluster_megakernel_tc import cluster_megakernel_tc_forward
+
+        return cluster_megakernel_tc_forward(
+            hidden_states,
+            w_qkv,
+            w_o,
+            k_cache,
+            v_cache,
+            rms_weight,
+            cos_rope,
+            sin_rope,
+            config=config,
+        )
+
     if not HAS_CUTE:
         raise RuntimeError("cluster_megakernel requires cutlass.cute.")
 

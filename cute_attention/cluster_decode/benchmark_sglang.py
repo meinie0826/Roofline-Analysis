@@ -97,7 +97,11 @@ def run_benchmark(args) -> int:
         return sglang_layer_reference_forward(**inputs, config=config)
 
     def cute_kernel():
-        return cluster_megakernel_forward(**inputs, config=config)
+        return cluster_megakernel_forward(
+            **inputs,
+            config=config,
+            use_tensor_core=args.use_tensor_core,
+        )
 
     # Compile/warm any lazy paths before correctness/benchmark reporting.
     local_out = local_ref()
@@ -155,6 +159,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--iters", type=int, default=20)
+    parser.add_argument("--use-tensor-core", action="store_true", help="Run the tensor-core megakernel path.")
     return parser.parse_args(argv)
 
 

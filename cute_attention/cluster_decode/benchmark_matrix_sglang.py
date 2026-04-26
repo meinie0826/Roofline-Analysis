@@ -16,7 +16,6 @@ except ImportError:  # pragma: no cover - depends on local env
     torch = None  # type: ignore[assignment]
 
 from .cluster_megakernel import cluster_megakernel_forward
-from .cluster_megakernel_tc import cluster_megakernel_tc_forward
 from .common import MegakernelConfig, available_backends
 from .external_reference import (
     SGLangLayerRunner,
@@ -194,7 +193,7 @@ def _run_case(hidden_dim: int, num_heads: int, seq_len: int, cluster_size: int, 
         return cluster_megakernel_forward(**inputs, config=config)
 
     def tc_kernel():
-        return cluster_megakernel_tc_forward(**inputs, config=config)
+        return cluster_megakernel_forward(**inputs, config=config, use_tensor_core=True)
 
     local_out = None if args.skip_local_ref else local_ref()
     subgraph_out = None if args.skip_subgraph_ref else sglang_subgraph_ref()

@@ -17,7 +17,6 @@ from cluster_decode import (
     cluster_decode_forward,
     cluster_decode_split_forward,
     cluster_megakernel_forward,
-    cluster_megakernel_tc_forward,
     leader_reduce_payload_floats,
     make_random_megakernel_inputs,
     megakernel_reference_forward,
@@ -241,7 +240,11 @@ class TestTensorCoreMegakernel:
         inputs = make_random_megakernel_inputs(config, seq_len=seq_len, device="cuda")
 
         ref_out, ref_k, ref_v = megakernel_reference_forward(**inputs, config=config)
-        tc_out, tc_k, tc_v = cluster_megakernel_tc_forward(**inputs, config=config)
+        tc_out, tc_k, tc_v = cluster_megakernel_forward(
+            **inputs,
+            config=config,
+            use_tensor_core=True,
+        )
         torch.cuda.synchronize()
 
         torch.testing.assert_close(tc_k, ref_k, rtol=2e-2, atol=2e-2)
