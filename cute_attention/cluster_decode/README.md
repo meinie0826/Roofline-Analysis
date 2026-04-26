@@ -18,6 +18,9 @@ and its KV slice for attention, then DSM-reduces the L2 scalar, `3*head_dim` QKV
 vector, softmax max/sum scalars, and attention output vector via inline PTX
 `st.async.shared::cluster` plus mbarrier. Stage 4 W_o is also split by
 `DIM_PER_BLOCK`: each CTA writes the output-column slice it owns for that head.
+The current attention domain is the provided dense KV cache only; current-token
+K/V are returned separately and are not yet folded into the online softmax.
+See `SEMANTIC_ALIGNMENT.md` for the remaining upstream-equivalence gaps.
 
 `cluster_primitives.py` keeps the older high-level `mapa + cluster atomic_add`
 helper isolated as an experimental path because it currently hits an NVVM ICE

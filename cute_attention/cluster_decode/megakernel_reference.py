@@ -3,10 +3,11 @@
 Implements the same pipeline as cluster_megakernel.py but in eager PyTorch so
 that correctness of the CuTeDSL kernel can be verified:
 
-  RMSNorm → W_qkv projection → RoPE → KV-cache append
-  → Flash-decode attention → W_o projection
+  RMSNorm → W_qkv projection → RoPE → current-token K/V output
+  → Flash-decode attention over the provided KV cache → W_o projection
 
-This is a single-token (q_len=1) decode step.
+This is a single-token (q_len=1) decode step. The current implementation returns
+the current-token K/V but does not append them to the attention domain.
 
 Usage::
 
