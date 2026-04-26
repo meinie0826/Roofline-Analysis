@@ -137,8 +137,8 @@ def _ensure_sglang_global_server_args(device) -> None:
     except ValueError:
         pass
 
-    args = server_args.ServerArgs(
-        model_path="cluster_decode_external_reference",
+    args = SimpleNamespace(
+        rl_on_policy_target=None,
         device=str(device),
     )
     server_args.set_global_server_args_for_scheduler(args)
