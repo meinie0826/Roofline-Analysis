@@ -257,6 +257,8 @@ def run_matrix(args) -> int:
                         row = _run_case(hidden_dim, num_heads, seq_len, cluster_size, args)
                         tc_ms = row["tc_megakernel_ms"]
                         tc_text = "tc=skipped" if tc_ms == "" else f"tc={tc_ms:.4f}ms"
+                        tc_rel_l2 = row.get("tc_output_rel_l2_vs_sglang_layer", "")
+                        tc_rel_l2_text = "tc_rel_l2=skipped" if tc_rel_l2 == "" else f"tc_rel_l2={tc_rel_l2:.6g}"
                         subgraph_ms = row["sglang_subgraph_ref_ms"]
                         subgraph_text = (
                             "subgraph=skipped speedup=skipped"
@@ -273,7 +275,8 @@ def run_matrix(args) -> int:
                             f"{subgraph_text} "
                             f"sglang_layer={row['sglang_layer_ref_ms']:.4f}ms "
                             f"out_max_abs={row['output_max_abs_vs_sglang_layer']:.6g} "
-                            f"out_rel_l2={row['output_rel_l2_vs_sglang_layer']:.6g}",
+                            f"out_rel_l2={row['output_rel_l2_vs_sglang_layer']:.6g} "
+                            f"{tc_rel_l2_text}",
                             flush=True,
                         )
                     except Exception as exc:
