@@ -609,7 +609,6 @@ def cluster_megakernel_tc_forward(
         knew_c, vnew_c, out_c,
         scale,
     )
-    torch.cuda.synchronize()
 
     output = output_acc.to(hidden_states.dtype)
     return output, k_new, v_new
