@@ -10,6 +10,8 @@ from .cluster_megakernel import cluster_megakernel_forward
 from .cluster_megakernel_tc import cluster_megakernel_tc_forward
 from .common import ClusterDecodeConfig, MegakernelConfig, available_backends
 from .external_reference import (
+    SGLangLayerRunner,
+    SGLangSubgraphRunner,
     external_reference_status,
     probe_framework_import,
     probe_sglang_import,
@@ -25,6 +27,8 @@ __all__ = [
     "ClusterDecodeConfig",
     "MegakernelConfig",
     "available_backends",
+    "SGLangLayerRunner",
+    "SGLangSubgraphRunner",
     "external_reference_status",
     "probe_framework_import",
     "probe_sglang_import",

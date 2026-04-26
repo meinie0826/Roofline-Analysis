@@ -122,6 +122,18 @@ def _sglang_rms_norm(hidden_states, rms_weight, eps):
     return norm(hidden_states)
 
 
+def _make_sglang_rms_norm(hidden_dim, rms_weight, device, eps):
+    layernorm = importlib.import_module("sglang.srt.layers.layernorm")
+    RMSNorm = layernorm.RMSNorm
+    norm = RMSNorm(
+        hidden_dim,
+        eps=eps,
+        weight_dtype=rms_weight.dtype,
+    ).to(device=device)
+    norm.weight.data.copy_(rms_weight)
+    return norm
+
+
 def _ensure_sglang_global_server_args(device) -> None:
     """Initialize SGLang's global ServerArgs when using layers standalone.
 
@@ -169,6 +181,111 @@ class _DenseTokenToKVPool:
 
     def get_value_buffer(self, layer_id: int):
         return self.v_buffer
+
+
+class SGLangSubgraphRunner:
+    """Persistent dense SGLang primitive runner for fairer timing.
+
+    Reuses SGLang RMSNorm, RadixAttention, ForwardBatch metadata, and the dense
+    KV pool.  This removes the per-iteration Python object construction that the
+    stateless reference functions intentionally keep for simplicity.
+    """
+
+    def __init__(
+        self,
+        hidden_states,
+        w_qkv,
+        w_o,
+        k_cache,
+        v_cache,
+        rms_weight,
+        cos_rope,
+        sin_rope,
+        config: MegakernelConfig | None = None,
+        eps: float = 1e-6,
+    ):
+        require_torch()
+        self.config = config or MegakernelConfig()
+        validate_supported_external_config(self.config, rope_style="gptj")
+        if not hidden_states.is_cuda:
+            raise RuntimeError("SGLang persistent runner requires CUDA tensors.")
+
+        import torch
+
+        radix_attention = importlib.import_module("sglang.srt.layers.radix_attention")
+        torch_native_backend = importlib.import_module(
+            "sglang.srt.layers.attention.torch_native_backend"
+        )
+
+        RadixAttention = radix_attention.RadixAttention
+        TorchNativeAttnBackend = torch_native_backend.TorchNativeAttnBackend
+
+        self.hidden_states = hidden_states
+        self.w_qkv = w_qkv
+        self.w_o = w_o
+        self.cos_rope = cos_rope
+        self.sin_rope = sin_rope
+        self.hidden_dim = self.config.hidden_dim
+        self.num_heads = self.config.num_heads
+        self.head_dim = self.config.head_dim
+        self.norm = _make_sglang_rms_norm(
+            self.hidden_dim,
+            rms_weight,
+            hidden_states.device,
+            eps,
+        )
+        self.attn_layer = RadixAttention(
+            num_heads=self.num_heads,
+            head_dim=self.head_dim,
+            scaling=self.config.resolve_scale(),
+            num_kv_heads=self.num_heads,
+            layer_id=0,
+        )
+
+        seq_len = k_cache.shape[0]
+        total_len = seq_len + 1
+        device = hidden_states.device
+        k_new_placeholder = torch.zeros(
+            (1, self.num_heads, self.head_dim),
+            device=device,
+            dtype=k_cache.dtype,
+        )
+        v_new_placeholder = torch.zeros_like(k_new_placeholder)
+        self.token_pool = _DenseTokenToKVPool(
+            k_cache,
+            v_cache,
+            k_new_placeholder,
+            v_new_placeholder,
+        )
+        self.forward_batch = _make_dense_forward_batch_with_pool(
+            q_device=device,
+            seq_len=seq_len,
+            total_len=total_len,
+            token_pool=self.token_pool,
+            attn_backend=TorchNativeAttnBackend(SimpleNamespace(device=device)),
+        )
+
+    def __call__(self):
+        import torch.nn.functional as F
+
+        h_norm = self.norm(self.hidden_states)
+        qkv = F.linear(h_norm, self.w_qkv)
+        q = qkv[:, : self.hidden_dim].reshape(1, self.num_heads, self.head_dim)
+        k = qkv[:, self.hidden_dim : 2 * self.hidden_dim].reshape(1, self.num_heads, self.head_dim)
+        v = qkv[:, 2 * self.hidden_dim :].reshape(1, self.num_heads, self.head_dim)
+
+        q_rot, k_rot = _apply_sglang_gptj_rope(q, k, self.cos_rope, self.sin_rope)
+        k_new = k_rot.to(self.hidden_states.dtype)
+        v_new = v.to(self.hidden_states.dtype)
+        attn_out = self.attn_layer.forward(
+            q_rot.reshape(1, self.hidden_dim),
+            k_new.reshape(1, self.hidden_dim),
+            v_new.reshape(1, self.hidden_dim),
+            self.forward_batch,
+            save_kv_cache=True,
+        ).reshape(self.num_heads, self.head_dim)
+        output = F.linear(attn_out.reshape(1, self.hidden_dim), self.w_o).to(self.hidden_states.dtype)
+        return output, k_new, v_new
 
 
 def _sglang_radix_decode_forward(q, k_new, v_new, k_cache, v_cache, config):
@@ -301,6 +418,43 @@ def _make_sglang_dense_forward_batch(q, k_cache, v_cache, config):
         num_token_non_padded_cpu=1,
     )
     return forward_batch, token_pool
+
+
+def _make_dense_forward_batch_with_pool(
+    *,
+    q_device,
+    seq_len: int,
+    total_len: int,
+    token_pool,
+    attn_backend,
+):
+    """Create reusable dense decode ForwardBatch metadata around a KV pool."""
+    import torch
+
+    forward_batch_info = importlib.import_module(
+        "sglang.srt.model_executor.forward_batch_info"
+    )
+    ForwardBatch = forward_batch_info.ForwardBatch
+    ForwardMode = forward_batch_info.ForwardMode
+
+    req_to_token = torch.arange(total_len, device=q_device, dtype=torch.int64).unsqueeze(0)
+    out_cache_loc = torch.tensor([seq_len], device=q_device, dtype=torch.int64)
+    seq_lens = torch.tensor([total_len], device=q_device, dtype=torch.int64)
+    return ForwardBatch(
+        forward_mode=ForwardMode.DECODE,
+        batch_size=1,
+        input_ids=torch.zeros(1, device=q_device, dtype=torch.int64),
+        req_pool_indices=torch.zeros(1, device=q_device, dtype=torch.int64),
+        seq_lens=seq_lens,
+        out_cache_loc=out_cache_loc,
+        seq_lens_sum=total_len,
+        seq_lens_cpu=seq_lens.cpu(),
+        req_to_token_pool=_DenseReqToTokenPool(req_to_token),
+        token_to_kv_pool=token_pool,
+        attn_backend=attn_backend,
+        positions=torch.tensor([seq_len], device=q_device, dtype=torch.int64),
+        num_token_non_padded_cpu=1,
+    )
 
 
 def sglang_subgraph_reference_forward(
@@ -442,6 +596,114 @@ def sglang_layer_reference_forward(
     k_new = token_pool.k_buffer[k_cache.shape[0] : k_cache.shape[0] + 1].to(hidden_states.dtype)
     v_new = token_pool.v_buffer[v_cache.shape[0] : v_cache.shape[0] + 1].to(hidden_states.dtype)
     return output, k_new, v_new
+
+
+class SGLangLayerRunner:
+    """Persistent SGLang LlamaAttention runner.
+
+    This is the fairer integration-level baseline: it keeps the SGLang attention
+    module, weights, RMSNorm module, ForwardBatch metadata, backend, and dense KV
+    pool alive across benchmark iterations.
+    """
+
+    def __init__(
+        self,
+        hidden_states,
+        w_qkv,
+        w_o,
+        k_cache,
+        v_cache,
+        rms_weight,
+        cos_rope,
+        sin_rope,
+        config: MegakernelConfig | None = None,
+        eps: float = 1e-6,
+    ):
+        require_torch()
+        self.config = config or MegakernelConfig()
+        validate_supported_external_config(self.config, rope_style="gptj")
+        if not hidden_states.is_cuda:
+            raise RuntimeError("SGLang persistent layer runner requires CUDA tensors.")
+
+        import torch
+
+        _ensure_sglang_global_server_args(hidden_states.device)
+
+        torch_native_llama = importlib.import_module("sglang.srt.models.torch_native_llama")
+        torch_native_backend = importlib.import_module(
+            "sglang.srt.layers.attention.torch_native_backend"
+        )
+        torch_native_llama.tp_size = 1
+        torch_native_llama.tp_rank = 0
+        TorchNativeAttnBackend = torch_native_backend.TorchNativeAttnBackend
+
+        self.hidden_states = hidden_states
+        self.norm = _make_sglang_rms_norm(
+            self.config.hidden_dim,
+            rms_weight,
+            hidden_states.device,
+            eps,
+        )
+
+        llama_config = SimpleNamespace(
+            hidden_size=self.config.hidden_dim,
+            num_attention_heads=self.config.num_heads,
+            num_key_value_heads=self.config.num_heads,
+            head_dim=self.config.head_dim,
+            rope_parameters={"rope_theta": 10000},
+            rope_is_neox_style=False,
+            max_position_embeddings=max(k_cache.shape[0] + 1, 8192),
+        )
+        self.attention = torch_native_llama.LlamaAttention(
+            config=llama_config,
+            hidden_size=self.config.hidden_dim,
+            num_heads=self.config.num_heads,
+            num_kv_heads=self.config.num_heads,
+            layer_id=0,
+            rope_theta=10000,
+            rope_scaling=None,
+            rope_is_neox_style=False,
+            max_position_embeddings=max(k_cache.shape[0] + 1, 8192),
+        ).to(device=hidden_states.device, dtype=hidden_states.dtype)
+        self.attention.qkv_proj.weight.data.copy_(w_qkv)
+        self.attention.o_proj.weight.data.copy_(w_o)
+        self.attention._modules.pop("rotary_emb", None)
+        self.attention.rotary_emb = _ProvidedGPTJRotary(cos_rope, sin_rope, self.config)
+
+        seq_len = k_cache.shape[0]
+        total_len = seq_len + 1
+        device = hidden_states.device
+        k_new_placeholder = torch.zeros(
+            (1, self.config.num_heads, self.config.head_dim),
+            device=device,
+            dtype=k_cache.dtype,
+        )
+        v_new_placeholder = torch.zeros_like(k_new_placeholder)
+        self.token_pool = _DenseTokenToKVPool(
+            k_cache,
+            v_cache,
+            k_new_placeholder,
+            v_new_placeholder,
+        )
+        self.forward_batch = _make_dense_forward_batch_with_pool(
+            q_device=device,
+            seq_len=seq_len,
+            total_len=total_len,
+            token_pool=self.token_pool,
+            attn_backend=TorchNativeAttnBackend(SimpleNamespace(device=device)),
+        )
+        self.seq_len = seq_len
+
+    def __call__(self):
+        h_norm = self.norm(self.hidden_states)
+        output = self.attention(
+            positions=self.forward_batch.positions,
+            hidden_states=h_norm,
+            forward_batch=self.forward_batch,
+        ).to(self.hidden_states.dtype)
+        k_new = self.token_pool.k_buffer[self.seq_len : self.seq_len + 1].to(self.hidden_states.dtype)
+        v_new = self.token_pool.v_buffer[self.seq_len : self.seq_len + 1].to(self.hidden_states.dtype)
+        return output, k_new, v_new
 
 
 def sglang_megakernel_reference_forward(*args, **kwargs):
