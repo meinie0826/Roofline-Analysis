@@ -8,7 +8,7 @@ Pipeline per cluster (= per attention head):
   Stage 0 – RMSNorm (hidden slice per CTA + DSM scalar reduce)
   Stage 1 – W_qkv GEMM (hidden slice per CTA + DSM vector reduce)
   Stage 2 – RoPE (GPT-J style)
-  Stage 3 – Flash-decode attention (KV slice per CTA + DSM reductions)
+  Stage 3 – Flash-decode attention (previous KV slice per CTA + current KV)
   Stage 4 – W_o GEMM (output slice per CTA, per head)
   Output: sum across heads (done in Python)
 """
@@ -185,8 +185,8 @@ if HAS_CUTE:
 
             # ============================================================ #
             # Stage 3 – Flash-decoding attention                           #
-            # Each CTA owns a KV slice, then cluster-reduces online-softmax #
-            # max/sum and the scaled output vector.                        #
+            # Each CTA owns a previous-KV slice. CTA rank 0 additionally    #
+            # folds in the current token K/V before the cluster reductions. #
             # ============================================================ #
             local_max = -cutlass.Float32.inf
             local_sum =  cutlass.Float32(0.0)
@@ -219,6 +219,20 @@ if HAS_CUTE:
 
                     prob = cute.math.exp(qk - local_max)
                     acc_o[tidx] = acc_o[tidx] * scale_old + prob * v_cache[kv_idx, head_id, tidx].to(cutlass.Float32)
+
+            if cta_rank == 0 and tidx < head_dim:
+                qk_new = cutlass.Float32(0.0)
+                for d in range(head_dim):
+                    qk_new = qk_new + local_qkv[d].to(cutlass.Float32) * local_qkv[head_dim + d].to(cutlass.Float32)
+                qk_new = qk_new * softmax_scale
+
+                prev_max_new = local_max
+                local_max = qk_new if qk_new > local_max else local_max
+                scale_old_new = cute.math.exp(prev_max_new - local_max)
+                local_sum = local_sum * scale_old_new + cute.math.exp(qk_new - local_max)
+
+                prob_new = cute.math.exp(qk_new - local_max)
+                acc_o[tidx] = acc_o[tidx] * scale_old_new + prob_new * local_qkv[2 * head_dim + tidx].to(cutlass.Float32)
 
             global_max = cluster_reduce_scalar_max_mbarrier(
                 attn_max_ptr,

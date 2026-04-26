@@ -4,10 +4,11 @@ Implements the same pipeline as cluster_megakernel.py but in eager PyTorch so
 that correctness of the CuTeDSL kernel can be verified:
 
   RMSNorm → W_qkv projection → RoPE → current-token K/V output
-  → Flash-decode attention over the provided KV cache → W_o projection
+  → Flash-decode attention over provided KV cache plus current token
+  → W_o projection
 
-This is a single-token (q_len=1) decode step. The current implementation returns
-the current-token K/V but does not append them to the attention domain.
+This is a single-token (q_len=1) decode step. The caller provides the previous
+KV cache; the current-token K/V are produced here and included in attention.
 
 Usage::
 
@@ -146,13 +147,10 @@ def megakernel_reference_forward(
     v_new = V.to(hidden_states.dtype)                   # (1, num_heads, head_dim)
 
     # ------------------------------------------------------------------ #
-    # Stage 3 – Flash-decode attention over the full KV cache             #
-    # (seq_len already contains the cached tokens; we do NOT append here) #
+    # Stage 3 – Flash-decode attention over previous cache + current KV   #
     # ------------------------------------------------------------------ #
-    seq_len = k_cache.shape[0]
-
-    k_f = k_cache.to(torch.float32)                    # (seq_len, num_heads, head_dim)
-    v_f = v_cache.to(torch.float32)                    # (seq_len, num_heads, head_dim)
+    k_f = torch.cat([k_cache.to(torch.float32), K_rot.to(torch.float32)], dim=0)
+    v_f = torch.cat([v_cache.to(torch.float32), V.to(torch.float32)], dim=0)
 
     # scores: (1, num_heads, seq_len)
     # Q_rot: (1, num_heads, head_dim) → (num_heads, 1, head_dim)

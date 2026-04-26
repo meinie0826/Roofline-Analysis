@@ -98,6 +98,27 @@ class TestReferenceForward:
         assert torch.isfinite(out).all()
         assert out.abs().sum() > 0
 
+    def test_current_token_participates_in_attention(self):
+        """With empty previous cache and W_o = I, decode output is current V."""
+        config = self._small_config()
+        D = config.hidden_dim
+
+        inputs = make_random_megakernel_inputs(
+            config,
+            seq_len=0,
+            device="cpu",
+            dtype=torch.float32,
+        )
+        inputs["w_o"] = torch.eye(D, dtype=inputs["w_o"].dtype)
+
+        out, _, v_new = megakernel_reference_forward(**inputs, config=config)
+        torch.testing.assert_close(
+            out,
+            v_new.reshape(1, D),
+            rtol=1e-5,
+            atol=1e-5,
+        )
+
     @pytest.mark.parametrize("cluster_size", [2, 4])
     def test_cluster_size_invariant(self, cluster_size):
         """Result should not depend on cluster_size (it's a launch parameter)."""

@@ -22,3 +22,6 @@
 [submodule "3rd/clusterfusion"]
 	path = 3rd/clusterfusion
 	url = https://github.com/xinhao-luo/ClusterFusion.git
+[submodule "3rd/sglang"]
+	path = 3rd/sglang
+	url = https://github.com/sgl-project/sglang.git

@@ -18,8 +18,9 @@ and its KV slice for attention, then DSM-reduces the L2 scalar, `3*head_dim` QKV
 vector, softmax max/sum scalars, and attention output vector via inline PTX
 `st.async.shared::cluster` plus mbarrier. Stage 4 W_o is also split by
 `DIM_PER_BLOCK`: each CTA writes the output-column slice it owns for that head.
-The current attention domain is the provided dense KV cache only; current-token
-K/V are returned separately and are not yet folded into the online softmax.
+The current caller contract matches decode-style ClusterFusion/SGLang/vLLM:
+the provided dense KV cache contains previous tokens only, and the kernel folds
+the current-token K/V into the online softmax before returning `k_new/v_new`.
 See `SEMANTIC_ALIGNMENT.md` for the remaining upstream-equivalence gaps.
 
 `cluster_primitives.py` keeps the older high-level `mapa + cluster atomic_add`
@@ -58,6 +59,8 @@ cluster_decode/
 ├── cluster_primitives.py   cluster_reduce_* helpers (mapa + atomic_add)
 ├── cluster_megakernel.py   Full CuTeDSL megakernel
 ├── megakernel_reference.py Pure-PyTorch reference for correctness verification
+├── SEMANTIC_ALIGNMENT.md   Upstream/SGLang/vLLM semantic comparison
+├── EXTERNAL_REFERENCES.md  Optional framework reference/benchmark notes
 ├── verify_correctness.py   CLI correctness runner
 ├── cluster_decode.py       Standalone attn baseline (v0, single CTA)
 ├── cluster_decode_split.py Standalone attn skeleton (cluster launch, leader fallback)
