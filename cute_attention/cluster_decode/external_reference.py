@@ -122,6 +122,28 @@ def _sglang_rms_norm(hidden_states, rms_weight, eps):
     return norm(hidden_states)
 
 
+def _ensure_sglang_global_server_args(device) -> None:
+    """Initialize SGLang's global ServerArgs when using layers standalone.
+
+    In normal serving, SGLang sets this during ModelRunner/server startup.
+    The standalone reference instantiates selected SGLang layers directly, and
+    recent SGLang rotary modules read `get_global_server_args()` in `__init__`.
+    Keep an existing runtime object if one is already present.
+    """
+    server_args = importlib.import_module("sglang.srt.server_args")
+    try:
+        server_args.get_global_server_args()
+        return
+    except ValueError:
+        pass
+
+    args = server_args.ServerArgs(
+        model_path="cluster_decode_external_reference",
+        device=str(device),
+    )
+    server_args.set_global_server_args_for_scheduler(args)
+
+
 class _DenseReqToTokenPool:
     """Minimal request-to-token map needed by SGLang's torch-native backend."""
 
@@ -370,6 +392,8 @@ def sglang_layer_reference_forward(
         raise RuntimeError("SGLang layer reference requires CUDA tensors.")
 
     import torch
+
+    _ensure_sglang_global_server_args(hidden_states.device)
 
     torch_native_llama = importlib.import_module("sglang.srt.models.torch_native_llama")
     torch_native_llama.tp_size = 1
