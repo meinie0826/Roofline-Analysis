@@ -354,48 +354,36 @@ def kernel(
         # Wait for the accumulator buffer to be full
         acc_consumer.wait_and_advance()
 
-        copy_atom_t2r = cute.make_copy_atom(
-            tcgen05.Ld16x256bOp(tcgen05.Repetition.x8)
-            if mma_tiler_mnk[0] == 64
-            else tcgen05.Ld32x32bOp(tcgen05.Repetition.x32),
+        subtile_cnt = 4
+        epi_tiler = (
+            (
+                cute.size(tCtAcc, mode=[0, 0]),
+                cute.size(tCtAcc, mode=[0, 1]) // subtile_cnt,
+            ),
+        )
+        tCtAcc_epi_regular = cute.zipped_divide(tCtAcc, epi_tiler)
+        gC_epi_regular = cute.zipped_divide(tCgC, epi_tiler)
+
+        tmem_atom = cute.make_copy_atom(
+            tcgen05.Ld32x32bOp(tcgen05.Repetition.x64),
             cutlass.Float32,
         )
-
-        # (EPI_TILE_M, EPI_TILE_N, EPI_M, EPI_N)
-        tCtAcc_epi = cute.flat_divide(
-            tCtAcc[((None, None), 0, 0)],
-            epi_tile,
+        tmem_tiled_copy = tcgen05.make_tmem_copy(
+            tmem_atom, tCtAcc_epi_regular[None, 0]
         )
+        tmem_thr_copy = tmem_tiled_copy.get_slice(tidx)
 
-        # Tiled copy for TMEM -> RMEM load
-        tiled_copy_t2r = tcgen05.make_tmem_copy(
-            copy_atom_t2r, tCtAcc_epi[(None, None, 0, 0)]
-        )
-        thr_copy_t2r = tiled_copy_t2r.get_slice(tidx)
-        # (T2R, T2R_M, T2R_N, EPI_M, EPI_N)
-        tTR_tAcc = thr_copy_t2r.partition_S(tCtAcc_epi)
-        # (T2R, T2R_M, T2R_N, EPI_M, EPI_N)
-        tTR_gC = thr_copy_t2r.partition_D(tCgC_epi)
-        # (T2R, T2R_M, T2R_N)
-        tTR_rAcc = cute.make_rmem_tensor(
-            tTR_gC[(None, None, None, 0, 0)].shape, cutlass.Float32
-        )
-        tTR_tAcc = cute.group_modes(tTR_tAcc, 3, cute.rank(tTR_tAcc))
+        tDtC = tmem_thr_copy.partition_S(tCtAcc_epi_regular)
+        tDgC = tmem_thr_copy.partition_D(gC_epi_regular)
 
-        tTR_gC = cute.group_modes(tTR_gC, 3, cute.rank(tTR_gC))
-        tTR_rC = cute.make_rmem_tensor(tTR_rAcc.shape, io_dtype)
-
-        subtile_cnt = cute.size(tTR_tAcc.shape, mode=[3])
+        tCrAcc = cute.make_rmem_tensor(tDgC[None, None, 0].shape, acc_dtype)
+        tCrC = cute.make_rmem_tensor(tDgC[None, None, 0].shape, io_dtype)
 
         # Epilogue tiling loop
-        for subtile_idx in cutlass.range(subtile_cnt):
-            # TMEM -> RMEM
-            tTR_tAcc_slice = tTR_tAcc[(None, None, None, subtile_idx)]
-            cute.copy(tiled_copy_t2r, tTR_tAcc_slice, tTR_rAcc)
-
-            # type conversion
-            tTR_rC.store(tTR_rAcc.load().to(io_dtype))
-            cute.autovec_copy(tTR_rC, tTR_gC[(None, None, None, subtile_idx)])
+        for subtile_idx in cutlass.range(cute.size(tDtC, mode=[2])):
+            cute.copy(tmem_tiled_copy, tDtC[None, None, subtile_idx], tCrAcc)
+            tCrC.store(tCrAcc.load().to(io_dtype))
+            cute.autovec_copy(tCrC, tDgC[None, None, subtile_idx])
 
         # Dealloc the tensor memory buffer
         tmem.relinquish_alloc_permit()
