@@ -16,7 +16,7 @@ except ImportError:  # pragma: no cover - depends on local env
     torch = None  # type: ignore[assignment]
 
 from .cluster_megakernel import cluster_megakernel_forward
-from .cluster_megakernel_tc import resolve_tc_cluster_size
+from .cluster_megakernel_tc import ClusterMegakernelTCRunner, resolve_tc_cluster_size
 from .common import MegakernelConfig, available_backends
 from .external_reference import (
     SGLangLayerRunner,
@@ -191,18 +191,19 @@ def _run_case(hidden_dim: int, num_heads: int, seq_len: int, cluster_size: int, 
 
     subgraph_runner = None if args.skip_persistent_sglang else SGLangSubgraphRunner(**inputs, config=config)
     layer_runner = None if args.skip_persistent_sglang else SGLangLayerRunner(**inputs, config=config)
+    tc_runner = None if args.skip_tc else ClusterMegakernelTCRunner(**inputs, config=config)
 
     def cute_kernel():
         return cluster_megakernel_forward(**inputs, config=config)
 
     def tc_kernel():
-        return cluster_megakernel_forward(**inputs, config=config, use_tensor_core=True)
+        return tc_runner()
 
     local_out = None if args.skip_local_ref else local_ref()
     subgraph_out = None if args.skip_subgraph_ref else sglang_subgraph_ref()
     layer_out = sglang_layer_ref()
     cute_out = cute_kernel()
-    tc_out = None if args.skip_tc else tc_kernel()
+    tc_out = None if tc_runner is None else tc_kernel()
     persistent_subgraph_out = None if subgraph_runner is None else subgraph_runner()
     persistent_layer_out = None if layer_runner is None else layer_runner()
     _sync()

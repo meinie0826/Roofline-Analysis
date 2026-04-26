@@ -46,6 +46,14 @@ def resolve_tc_cluster_size(hidden_dim: int, requested_cluster_size: int) -> int
     return requested_cluster_size
 
 
+def _validate_tc_config(config: MegakernelConfig) -> None:
+    if config.head_dim % 16 != 0:
+        raise ValueError("tensor-core QKV path requires head_dim to be divisible by 16.")
+    tc_cluster_size = resolve_tc_cluster_size(config.hidden_dim, config.cluster_size)
+    if (config.hidden_dim // tc_cluster_size) % 16 != 0:
+        raise ValueError("tensor-core QKV path requires dim_per_block to be divisible by 16.")
+
+
 if HAS_CUTE:
     from .cluster_primitives import (
         cluster_reduce_scalar_max_mbarrier,
@@ -541,6 +549,133 @@ if HAS_CUTE:
         return _megakernel_host
 
 
+def _wrap_cute_tensor(t):
+    return from_dlpack(t, assumed_align=16).mark_layout_dynamic()
+
+
+def _compile_tc_host(
+    seq_len: int,
+    config: MegakernelConfig,
+    h_cute,
+    wqkv_c,
+    wo_c,
+    kc_c,
+    vc_c,
+    rms_c,
+    cos_c,
+    sin_c,
+    knew_c,
+    vnew_c,
+    out_c,
+    scale,
+):
+    cache_key = (seq_len, config)
+    compiled = _MEGAKERNEL_TC_COMPILED_CACHE.get(cache_key)
+    if compiled is None:
+        host = _make_cluster_megakernel_tc_host(seq_len=seq_len, config=config)
+        compiled = cute.compile(
+            host,
+            h_cute, wqkv_c, wo_c, kc_c, vc_c,
+            rms_c, cos_c, sin_c,
+            knew_c, vnew_c, out_c,
+            scale,
+        )
+        _MEGAKERNEL_TC_COMPILED_CACHE[cache_key] = compiled
+    return compiled
+
+
+class ClusterMegakernelTCRunner:
+    """Persistent runner for timing the fused TC megakernel without wrapper churn."""
+
+    def __init__(
+        self,
+        hidden_states,
+        w_qkv,
+        w_o,
+        k_cache,
+        v_cache,
+        rms_weight,
+        cos_rope,
+        sin_rope,
+        config: MegakernelConfig | None = None,
+    ):
+        require_torch()
+        if not HAS_CUTE:
+            raise RuntimeError("cluster_megakernel_tc requires cutlass.cute.")
+
+        config = config or MegakernelConfig()
+        validate_megakernel_inputs(hidden_states, w_qkv, w_o, k_cache, v_cache, rms_weight, config)
+        _validate_tc_config(config)
+
+        import torch
+
+        self.config = config
+        self.scale = config.resolve_scale()
+        self.k_new = torch.empty(
+            (1, config.num_heads, config.head_dim),
+            device=hidden_states.device,
+            dtype=hidden_states.dtype,
+        )
+        self.v_new = torch.empty_like(self.k_new)
+        self.output_acc = torch.empty(
+            (1, config.hidden_dim),
+            device=hidden_states.device,
+            dtype=torch.float32,
+        )
+        self.output = torch.empty(
+            (1, config.hidden_dim),
+            device=hidden_states.device,
+            dtype=hidden_states.dtype,
+        )
+
+        self.h_cute = _wrap_cute_tensor(hidden_states)
+        self.wqkv_c = _wrap_cute_tensor(w_qkv)
+        self.wo_c = _wrap_cute_tensor(w_o)
+        self.kc_c = _wrap_cute_tensor(k_cache)
+        self.vc_c = _wrap_cute_tensor(v_cache)
+        self.rms_c = _wrap_cute_tensor(rms_weight)
+        self.cos_c = _wrap_cute_tensor(cos_rope)
+        self.sin_c = _wrap_cute_tensor(sin_rope)
+        self.knew_c = _wrap_cute_tensor(self.k_new)
+        self.vnew_c = _wrap_cute_tensor(self.v_new)
+        self.out_c = _wrap_cute_tensor(self.output_acc)
+        self.compiled = _compile_tc_host(
+            k_cache.shape[0],
+            config,
+            self.h_cute,
+            self.wqkv_c,
+            self.wo_c,
+            self.kc_c,
+            self.vc_c,
+            self.rms_c,
+            self.cos_c,
+            self.sin_c,
+            self.knew_c,
+            self.vnew_c,
+            self.out_c,
+            self.scale,
+        )
+
+    def __call__(self):
+        self.output_acc.zero_()
+        self.compiled(
+            self.h_cute,
+            self.wqkv_c,
+            self.wo_c,
+            self.kc_c,
+            self.vc_c,
+            self.rms_c,
+            self.cos_c,
+            self.sin_c,
+            self.knew_c,
+            self.vnew_c,
+            self.out_c,
+            self.scale,
+        )
+        self.output.copy_(self.output_acc)
+        return self.output, self.k_new, self.v_new
+
+
 def cluster_megakernel_tc_forward(
     hidden_states, w_qkv, w_o, k_cache, v_cache,
     rms_weight, cos_rope, sin_rope,
@@ -557,11 +692,7 @@ def cluster_megakernel_tc_forward(
 
     config = config or MegakernelConfig()
     validate_megakernel_inputs(hidden_states, w_qkv, w_o, k_cache, v_cache, rms_weight, config)
-    if config.head_dim % 16 != 0:
-        raise ValueError("tensor-core QKV path requires head_dim to be divisible by 16.")
-    tc_cluster_size = resolve_tc_cluster_size(config.hidden_dim, config.cluster_size)
-    if (config.hidden_dim // tc_cluster_size) % 16 != 0:
-        raise ValueError("tensor-core QKV path requires dim_per_block to be divisible by 16.")
+    _validate_tc_config(config)
 
     import torch
 
@@ -571,37 +702,37 @@ def cluster_megakernel_tc_forward(
     head_dim    = config.head_dim
     scale       = config.resolve_scale()
 
-    k_new  = torch.zeros((1, num_heads, head_dim), device=hidden_states.device, dtype=hidden_states.dtype)
-    v_new  = torch.zeros((1, num_heads, head_dim), device=hidden_states.device, dtype=hidden_states.dtype)
+    k_new  = torch.empty((1, num_heads, head_dim), device=hidden_states.device, dtype=hidden_states.dtype)
+    v_new  = torch.empty((1, num_heads, head_dim), device=hidden_states.device, dtype=hidden_states.dtype)
     output_acc = torch.zeros((1, hidden_dim), device=hidden_states.device, dtype=torch.float32)
+    h_cute   = _wrap_cute_tensor(hidden_states)
+    wqkv_c   = _wrap_cute_tensor(w_qkv)
+    wo_c     = _wrap_cute_tensor(w_o)
+    kc_c     = _wrap_cute_tensor(k_cache)
+    vc_c     = _wrap_cute_tensor(v_cache)
+    rms_c    = _wrap_cute_tensor(rms_weight)
+    cos_c    = _wrap_cute_tensor(cos_rope)
+    sin_c    = _wrap_cute_tensor(sin_rope)
+    knew_c   = _wrap_cute_tensor(k_new)
+    vnew_c   = _wrap_cute_tensor(v_new)
+    out_c    = _wrap_cute_tensor(output_acc)
 
-    def _wrap(t):
-        return from_dlpack(t, assumed_align=16).mark_layout_dynamic()
-
-    h_cute   = _wrap(hidden_states)
-    wqkv_c   = _wrap(w_qkv)
-    wo_c     = _wrap(w_o)
-    kc_c     = _wrap(k_cache)
-    vc_c     = _wrap(v_cache)
-    rms_c    = _wrap(rms_weight)
-    cos_c    = _wrap(cos_rope)
-    sin_c    = _wrap(sin_rope)
-    knew_c   = _wrap(k_new)
-    vnew_c   = _wrap(v_new)
-    out_c    = _wrap(output_acc)
-
-    cache_key = (seq_len, config)
-    compiled  = _MEGAKERNEL_TC_COMPILED_CACHE.get(cache_key)
-    if compiled is None:
-        host     = _make_cluster_megakernel_tc_host(seq_len=seq_len, config=config)
-        compiled = cute.compile(
-            host,
-            h_cute, wqkv_c, wo_c, kc_c, vc_c,
-            rms_c, cos_c, sin_c,
-            knew_c, vnew_c, out_c,
-            scale,
-        )
-        _MEGAKERNEL_TC_COMPILED_CACHE[cache_key] = compiled
+    compiled = _compile_tc_host(
+        seq_len,
+        config,
+        h_cute,
+        wqkv_c,
+        wo_c,
+        kc_c,
+        vc_c,
+        rms_c,
+        cos_c,
+        sin_c,
+        knew_c,
+        vnew_c,
+        out_c,
+        scale,
+    )
 
     compiled(
         h_cute, wqkv_c, wo_c, kc_c, vc_c,
