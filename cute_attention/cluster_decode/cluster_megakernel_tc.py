@@ -287,11 +287,23 @@ if HAS_CUTE:
             local_max = -cutlass.Float32.inf
             local_sum =  cutlass.Float32(0.0)
 
-            # acc_o: head_dim float32 accumulator in SMEM
-            acc_ptr = smem.allocate_array(cutlass.Float32, num_elems=head_dim)
-            acc_o   = cute.make_tensor(acc_ptr, cute.make_layout((head_dim,)))
-            if tidx < head_dim:
-                acc_o[tidx] = cutlass.Float32(0.0)
+            # One warp owns one interleaved KV subsequence.  We combine the
+            # four online-softmax states inside the CTA before DSM reduction.
+            acc_ptr = smem.allocate_array(cutlass.Float32, num_elems=num_mma_warps * head_dim)
+            acc_o = cute.make_tensor(acc_ptr, cute.make_layout((num_mma_warps, head_dim)))
+            warp_max_ptr = smem.allocate_array(cutlass.Float32, num_elems=num_mma_warps)
+            warp_max = cute.make_tensor(warp_max_ptr, cute.make_layout((num_mma_warps,)))
+            warp_sum_ptr = smem.allocate_array(cutlass.Float32, num_elems=num_mma_warps)
+            warp_sum = cute.make_tensor(warp_sum_ptr, cute.make_layout((num_mma_warps,)))
+            cta_acc_ptr = smem.allocate_array(cutlass.Float32, num_elems=head_dim)
+            cta_acc = cute.make_tensor(cta_acc_ptr, cute.make_layout((head_dim,)))
+
+            acc_init = tidx
+            while acc_init < num_mma_warps * head_dim:
+                acc_w = acc_init // head_dim
+                acc_d = acc_init - acc_w * head_dim
+                acc_o[acc_w, acc_d] = cutlass.Float32(0.0)
+                acc_init = acc_init + num_threads
             cute.arch.barrier()
 
             kv_start = cta_rank * kv_per_cta
@@ -299,62 +311,103 @@ if HAS_CUTE:
             if kv_stop > seq_len:
                 kv_stop = seq_len
 
-            for kv_idx in range(kv_start, kv_stop):
+            kv_idx = kv_start + warp_idx
+            while kv_idx < kv_stop:
                 qk_part = cutlass.Float32(0.0)
-                if tidx < head_dim:
-                    qk_part = local_qkv[tidx].to(cutlass.Float32) * k_cache[kv_idx, head_id, tidx].to(cutlass.Float32)
+                for d_iter in range(head_dim // 32):
+                    d = lane_idx + d_iter * 32
+                    qk_part = qk_part + local_qkv[d].to(cutlass.Float32) * k_cache[kv_idx, head_id, d].to(cutlass.Float32)
 
-                qk = _block_sum_f32(qk_part, reduce, tidx, num_threads) * softmax_scale
-                if tidx < head_dim:
-                    # Online softmax update
-                    prev_max = local_max
-                    local_max = qk if qk > local_max else local_max
-                    scale_old = cute.math.exp(prev_max - local_max)
-                    local_sum = local_sum * scale_old + cute.math.exp(qk - local_max)
+                qk = cute.arch.warp_reduction(qk_part, operator.add) * softmax_scale
+                prev_max = local_max
+                local_max = qk if qk > local_max else local_max
+                scale_old = cute.math.exp(prev_max - local_max)
+                local_sum = local_sum * scale_old + cute.math.exp(qk - local_max)
 
-                    prob = cute.math.exp(qk - local_max)
-                    acc_o[tidx] = acc_o[tidx] * scale_old + prob * v_cache[kv_idx, head_id, tidx].to(cutlass.Float32)
+                prob = cute.math.exp(qk - local_max)
+                for d_iter in range(head_dim // 32):
+                    d = lane_idx + d_iter * 32
+                    acc_o[warp_idx, d] = acc_o[warp_idx, d] * scale_old + prob * v_cache[kv_idx, head_id, d].to(cutlass.Float32)
+                kv_idx = kv_idx + num_mma_warps
 
-            if cta_rank == 0:
+            if cta_rank == 0 and warp_idx == 0:
                 qk_new_part = cutlass.Float32(0.0)
-                if tidx < head_dim:
-                    k_new_val = local_qkv[head_dim + tidx].to(cutlass.Float16).to(cutlass.Float32)
-                    qk_new_part = local_qkv[tidx].to(cutlass.Float32) * k_new_val
+                for d_iter in range(head_dim // 32):
+                    d = lane_idx + d_iter * 32
+                    k_new_val = local_qkv[head_dim + d].to(cutlass.Float16).to(cutlass.Float32)
+                    qk_new_part = qk_new_part + local_qkv[d].to(cutlass.Float32) * k_new_val
 
-                qk_new = _block_sum_f32(qk_new_part, reduce, tidx, num_threads) * softmax_scale
-                if tidx < head_dim:
-                    prev_max_new = local_max
-                    local_max = qk_new if qk_new > local_max else local_max
-                    scale_old_new = cute.math.exp(prev_max_new - local_max)
-                    local_sum = local_sum * scale_old_new + cute.math.exp(qk_new - local_max)
+                qk_new = cute.arch.warp_reduction(qk_new_part, operator.add) * softmax_scale
+                prev_max_new = local_max
+                local_max = qk_new if qk_new > local_max else local_max
+                scale_old_new = cute.math.exp(prev_max_new - local_max)
+                local_sum = local_sum * scale_old_new + cute.math.exp(qk_new - local_max)
 
-                    prob_new = cute.math.exp(qk_new - local_max)
-                    v_new_val = local_qkv[2 * head_dim + tidx].to(cutlass.Float16).to(cutlass.Float32)
-                    acc_o[tidx] = acc_o[tidx] * scale_old_new + prob_new * v_new_val
+                prob_new = cute.math.exp(qk_new - local_max)
+                for d_iter in range(head_dim // 32):
+                    d = lane_idx + d_iter * 32
+                    v_new_val = local_qkv[2 * head_dim + d].to(cutlass.Float16).to(cutlass.Float32)
+                    acc_o[warp_idx, d] = acc_o[warp_idx, d] * scale_old_new + prob_new * v_new_val
+
+            if lane_idx == 0:
+                warp_max[warp_idx] = local_max
+                warp_sum[warp_idx] = local_sum
+            cute.arch.barrier()
+
+            if tidx == 0:
+                cta_max = -cutlass.Float32.inf
+                for w in range(num_mma_warps):
+                    cta_max = warp_max[w] if warp_max[w] > cta_max else cta_max
+                reduce[0] = cta_max
+            cute.arch.barrier()
+
+            cta_max = reduce[0]
+            local_scale = cute.math.exp(local_max - cta_max)
+            local_sum = local_sum * local_scale
+            for d_iter in range(head_dim // 32):
+                d = lane_idx + d_iter * 32
+                acc_o[warp_idx, d] = acc_o[warp_idx, d] * local_scale
+            if lane_idx == 0:
+                warp_sum[warp_idx] = local_sum
+            cute.arch.barrier()
+
+            if tidx == 0:
+                cta_sum = cutlass.Float32(0.0)
+                for w in range(num_mma_warps):
+                    cta_sum = cta_sum + warp_sum[w]
+                reduce[0] = cta_sum
+            if tidx < head_dim:
+                acc_sum = cutlass.Float32(0.0)
+                for w in range(num_mma_warps):
+                    acc_sum = acc_sum + acc_o[w, tidx]
+                cta_acc[tidx] = acc_sum
+            cute.arch.barrier()
+
+            cta_sum = reduce[0]
 
             global_max = cluster_reduce_scalar_max_mbarrier(
                 attn_max_ptr,
                 attn_max_mbar_ptr,
-                local_max,
+                cta_max,
                 tidx,
                 cluster_size,
             )
 
             if tidx < head_dim:
-                local_scale = cute.math.exp(local_max - global_max)
-                local_sum = local_sum * local_scale
-                acc_o[tidx] = acc_o[tidx] * local_scale
+                cluster_scale = cute.math.exp(cta_max - global_max)
+                cta_acc[tidx] = cta_acc[tidx] * cluster_scale
+            cta_sum = cta_sum * cute.math.exp(cta_max - global_max)
 
             global_sum = cluster_reduce_scalar_sum_mbarrier(
                 attn_sum_ptr,
                 attn_sum_mbar_ptr,
-                local_sum,
+                cta_sum,
                 tidx,
                 cluster_size,
             )
 
             cluster_reduce_vector_sum_mbarrier(
-                acc_ptr,
+                cta_acc_ptr,
                 attn_recv_ptr,
                 attn_mbar_ptr,
                 head_dim,
@@ -367,9 +420,9 @@ if HAS_CUTE:
             cute.arch.barrier()
             inv_sum = cutlass.Float32(1.0) / global_sum
             if tidx < head_dim:
-                acc_o[tidx] = acc_o[tidx] * inv_sum
+                cta_acc[tidx] = cta_acc[tidx] * inv_sum
                 # Store attn output to V slot of local_qkv (reuse)
-                local_qkv[2 * head_dim + tidx] = acc_o[tidx].to(cutlass.Float16).to(cutlass.Float32)
+                local_qkv[2 * head_dim + tidx] = cta_acc[tidx].to(cutlass.Float16).to(cutlass.Float32)
 
             cute.arch.barrier()
 
