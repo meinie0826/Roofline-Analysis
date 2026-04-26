@@ -515,7 +515,7 @@ def host_function(
         b_tma_atom,
         b_tma_tensor,
         c_tma_atom,
-        c_tma_tensor,
+        c,
         a_smem_layout,
         b_smem_layout,
         c_smem_layout_kind,
