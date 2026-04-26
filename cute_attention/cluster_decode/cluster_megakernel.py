@@ -215,12 +215,20 @@ if HAS_CUTE:
 
             for kv_idx in range(kv_start, kv_stop):
                 if tidx < head_dim:
-                    # Q·K for this KV row
-                    qk = cutlass.Float32(0.0)
-                    for d in range(head_dim):
-                        qk = qk + local_qkv[d].to(cutlass.Float32) * k_cache[kv_idx, head_id, d].to(cutlass.Float32)
-                    qk = qk * softmax_scale
+                    reduce[tidx] = local_qkv[tidx].to(cutlass.Float32) * k_cache[kv_idx, head_id, tidx].to(cutlass.Float32)
+                else:
+                    reduce[tidx] = cutlass.Float32(0.0)
+                cute.arch.barrier()
 
+                stride = num_threads // 2
+                while stride > 0:
+                    if tidx < stride:
+                        reduce[tidx] = reduce[tidx] + reduce[tidx + stride]
+                    cute.arch.barrier()
+                    stride = stride // 2
+
+                qk = reduce[0] * softmax_scale
+                if tidx < head_dim:
                     # Online softmax update
                     prev_max = local_max
                     local_max = qk if qk > local_max else local_max
@@ -230,21 +238,31 @@ if HAS_CUTE:
                     prob = cute.math.exp(qk - local_max)
                     acc_o[tidx] = acc_o[tidx] * scale_old + prob * v_cache[kv_idx, head_id, tidx].to(cutlass.Float32)
 
-            if cta_rank == 0 and tidx < head_dim:
-                qk_new = cutlass.Float32(0.0)
-                for d in range(head_dim):
-                    k_new_val = local_qkv[head_dim + d].to(cutlass.Float16).to(cutlass.Float32)
-                    qk_new = qk_new + local_qkv[d].to(cutlass.Float32) * k_new_val
-                qk_new = qk_new * softmax_scale
+            if cta_rank == 0:
+                if tidx < head_dim:
+                    k_new_val = local_qkv[head_dim + tidx].to(cutlass.Float16).to(cutlass.Float32)
+                    reduce[tidx] = local_qkv[tidx].to(cutlass.Float32) * k_new_val
+                else:
+                    reduce[tidx] = cutlass.Float32(0.0)
+                cute.arch.barrier()
 
-                prev_max_new = local_max
-                local_max = qk_new if qk_new > local_max else local_max
-                scale_old_new = cute.math.exp(prev_max_new - local_max)
-                local_sum = local_sum * scale_old_new + cute.math.exp(qk_new - local_max)
+                stride = num_threads // 2
+                while stride > 0:
+                    if tidx < stride:
+                        reduce[tidx] = reduce[tidx] + reduce[tidx + stride]
+                    cute.arch.barrier()
+                    stride = stride // 2
 
-                prob_new = cute.math.exp(qk_new - local_max)
-                v_new_val = local_qkv[2 * head_dim + tidx].to(cutlass.Float16).to(cutlass.Float32)
-                acc_o[tidx] = acc_o[tidx] * scale_old_new + prob_new * v_new_val
+                qk_new = reduce[0] * softmax_scale
+                if tidx < head_dim:
+                    prev_max_new = local_max
+                    local_max = qk_new if qk_new > local_max else local_max
+                    scale_old_new = cute.math.exp(prev_max_new - local_max)
+                    local_sum = local_sum * scale_old_new + cute.math.exp(qk_new - local_max)
+
+                    prob_new = cute.math.exp(qk_new - local_max)
+                    v_new_val = local_qkv[2 * head_dim + tidx].to(cutlass.Float16).to(cutlass.Float32)
+                    acc_o[tidx] = acc_o[tidx] * scale_old_new + prob_new * v_new_val
 
             global_max = cluster_reduce_scalar_max_mbarrier(
                 attn_max_ptr,
