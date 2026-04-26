@@ -149,8 +149,11 @@ def megakernel_reference_forward(
     # ------------------------------------------------------------------ #
     # Stage 3 – Flash-decode attention over previous cache + current KV   #
     # ------------------------------------------------------------------ #
-    k_f = torch.cat([k_cache.to(torch.float32), K_rot.to(torch.float32)], dim=0)
-    v_f = torch.cat([v_cache.to(torch.float32), V.to(torch.float32)], dim=0)
+    # The fused kernel exposes current K/V as fp16/bf16 outputs before the
+    # caller stores them in cache. Use the same values for attention so the
+    # reference models the framework-visible decode state.
+    k_f = torch.cat([k_cache.to(torch.float32), k_new.to(torch.float32)], dim=0)
+    v_f = torch.cat([v_cache.to(torch.float32), v_new.to(torch.float32)], dim=0)
 
     # scores: (1, num_heads, seq_len)
     # Q_rot: (1, num_heads, head_dim) → (num_heads, 1, head_dim)

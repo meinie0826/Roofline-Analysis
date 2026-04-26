@@ -223,7 +223,8 @@ if HAS_CUTE:
             if cta_rank == 0 and tidx < head_dim:
                 qk_new = cutlass.Float32(0.0)
                 for d in range(head_dim):
-                    qk_new = qk_new + local_qkv[d].to(cutlass.Float32) * local_qkv[head_dim + d].to(cutlass.Float32)
+                    k_new_val = local_qkv[head_dim + d].to(cutlass.Float16).to(cutlass.Float32)
+                    qk_new = qk_new + local_qkv[d].to(cutlass.Float32) * k_new_val
                 qk_new = qk_new * softmax_scale
 
                 prev_max_new = local_max
@@ -232,7 +233,8 @@ if HAS_CUTE:
                 local_sum = local_sum * scale_old_new + cute.math.exp(qk_new - local_max)
 
                 prob_new = cute.math.exp(qk_new - local_max)
-                acc_o[tidx] = acc_o[tidx] * scale_old_new + prob_new * local_qkv[2 * head_dim + tidx].to(cutlass.Float32)
+                v_new_val = local_qkv[2 * head_dim + tidx].to(cutlass.Float16).to(cutlass.Float32)
+                acc_o[tidx] = acc_o[tidx] * scale_old_new + prob_new * v_new_val
 
             global_max = cluster_reduce_scalar_max_mbarrier(
                 attn_max_ptr,
