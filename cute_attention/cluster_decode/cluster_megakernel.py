@@ -144,6 +144,7 @@ if HAS_CUTE:
                     for i in range(slice_start, slice_stop):
                         x_val  = hidden[0, i].to(cutlass.Float32)
                         x_norm = x_val * rms_rcp * rms_weight[i].to(cutlass.Float32)
+                        x_norm = x_norm.to(cutlass.Float16).to(cutlass.Float32)
                         w_val  = w_qkv[global_row, i].to(cutlass.Float32)
                         acc    = acc + x_norm * w_val
                     local_qkv[proj * head_dim + out_d] = acc

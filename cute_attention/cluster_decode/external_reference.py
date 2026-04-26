@@ -209,7 +209,79 @@ def _sglang_radix_decode_forward(q, k_new, v_new, k_cache, v_cache, config):
     return out.reshape(config.num_heads, config.head_dim)
 
 
-def sglang_megakernel_reference_forward(
+class _ProvidedGPTJRotary:
+    """SGLang LlamaAttention-compatible RoPE module backed by provided tables."""
+
+    def __init__(self, cos_rope, sin_rope, config: MegakernelConfig):
+        self.cos_rope = cos_rope
+        self.sin_rope = sin_rope
+        self.config = config
+
+    def __call__(self, positions, q, k):
+        q_view = q.reshape(1, self.config.num_heads, self.config.head_dim)
+        k_view = k.reshape(1, self.config.num_heads, self.config.head_dim)
+        q_rot, k_rot = _apply_sglang_gptj_rope(
+            q_view,
+            k_view,
+            self.cos_rope,
+            self.sin_rope,
+        )
+        return q_rot.reshape_as(q), k_rot.reshape_as(k)
+
+
+def _make_sglang_dense_forward_batch(q, k_cache, v_cache, config):
+    """Create the dense decode ForwardBatch adapter used by SGLang attention."""
+    import torch
+
+    forward_batch_info = importlib.import_module(
+        "sglang.srt.model_executor.forward_batch_info"
+    )
+    torch_native_backend = importlib.import_module(
+        "sglang.srt.layers.attention.torch_native_backend"
+    )
+
+    ForwardBatch = forward_batch_info.ForwardBatch
+    ForwardMode = forward_batch_info.ForwardMode
+    TorchNativeAttnBackend = torch_native_backend.TorchNativeAttnBackend
+
+    seq_len = k_cache.shape[0]
+    total_len = seq_len + 1
+    device = q.device
+    k_new_placeholder = torch.zeros(
+        (1, config.num_heads, config.head_dim),
+        device=device,
+        dtype=k_cache.dtype,
+    )
+    v_new_placeholder = torch.zeros_like(k_new_placeholder)
+    token_pool = _DenseTokenToKVPool(
+        k_cache,
+        v_cache,
+        k_new_placeholder,
+        v_new_placeholder,
+    )
+
+    req_to_token = torch.arange(total_len, device=device, dtype=torch.int64).unsqueeze(0)
+    out_cache_loc = torch.tensor([seq_len], device=device, dtype=torch.int64)
+    seq_lens = torch.tensor([total_len], device=device, dtype=torch.int64)
+    forward_batch = ForwardBatch(
+        forward_mode=ForwardMode.DECODE,
+        batch_size=1,
+        input_ids=torch.zeros(1, device=device, dtype=torch.int64),
+        req_pool_indices=torch.zeros(1, device=device, dtype=torch.int64),
+        seq_lens=seq_lens,
+        out_cache_loc=out_cache_loc,
+        seq_lens_sum=total_len,
+        seq_lens_cpu=seq_lens.cpu(),
+        req_to_token_pool=_DenseReqToTokenPool(req_to_token),
+        token_to_kv_pool=token_pool,
+        attn_backend=TorchNativeAttnBackend(SimpleNamespace(device=device)),
+        positions=torch.tensor([seq_len], device=device, dtype=torch.int64),
+        num_token_non_padded_cpu=1,
+    )
+    return forward_batch, token_pool
+
+
+def sglang_subgraph_reference_forward(
     hidden_states,
     w_qkv,
     w_o,
@@ -221,7 +293,7 @@ def sglang_megakernel_reference_forward(
     config: MegakernelConfig | None = None,
     eps: float = 1e-6,
 ):
-    """Reference forward using SGLang RoPE and RadixAttention for dense decode.
+    """Reference forward using SGLang primitives for dense decode.
 
     This instantiates SGLang RMSNorm, GPT-J RoPE, and
     `sglang.srt.layers.radix_attention.RadixAttention` with a minimal dense
@@ -232,6 +304,8 @@ def sglang_megakernel_reference_forward(
     require_torch()
     config = config or MegakernelConfig()
     validate_supported_external_config(config, rope_style="gptj")
+    if not hidden_states.is_cuda:
+        raise RuntimeError("SGLang reference path requires CUDA tensors; sgl_kernel RMSNorm has no CPU backend.")
 
     import torch
 
@@ -264,6 +338,91 @@ def sglang_megakernel_reference_forward(
     output = F.linear(attn_out.reshape(1, hidden_dim), w_o).to(hidden_states.dtype)
 
     return output, k_new, v_new
+
+
+def sglang_layer_reference_forward(
+    hidden_states,
+    w_qkv,
+    w_o,
+    k_cache,
+    v_cache,
+    rms_weight,
+    cos_rope,
+    sin_rope,
+    config: MegakernelConfig | None = None,
+    eps: float = 1e-6,
+):
+    """Reference forward through SGLang's LlamaAttention module boundary.
+
+    This path is the integration-oriented reference. It instantiates SGLang's
+    torch-native `LlamaAttention`, loads the packed QKV and output projection
+    weights into that module, runs SGLang RMSNorm before the module, and uses
+    a dense decode `ForwardBatch` adapter for `RadixAttention`.
+
+    The only deliberate adapter is RoPE: the current megakernel accepts
+    precomputed GPT-J cos/sin tensors, so the SGLang attention module is given
+    a small compatible rotary object backed by the same tensors.
+    """
+    require_torch()
+    config = config or MegakernelConfig()
+    validate_supported_external_config(config, rope_style="gptj")
+    if not hidden_states.is_cuda:
+        raise RuntimeError("SGLang layer reference requires CUDA tensors.")
+
+    import torch
+
+    torch_native_llama = importlib.import_module("sglang.srt.models.torch_native_llama")
+    torch_native_llama.tp_size = 1
+    torch_native_llama.tp_rank = 0
+
+    llama_config = SimpleNamespace(
+        hidden_size=config.hidden_dim,
+        num_attention_heads=config.num_heads,
+        num_key_value_heads=config.num_heads,
+        head_dim=config.head_dim,
+        rope_parameters={"rope_theta": 10000},
+        rope_is_neox_style=False,
+        max_position_embeddings=max(k_cache.shape[0] + 1, 8192),
+    )
+
+    attention = torch_native_llama.LlamaAttention(
+        config=llama_config,
+        hidden_size=config.hidden_dim,
+        num_heads=config.num_heads,
+        num_kv_heads=config.num_heads,
+        layer_id=0,
+        rope_theta=10000,
+        rope_scaling=None,
+        rope_is_neox_style=False,
+        max_position_embeddings=max(k_cache.shape[0] + 1, 8192),
+    ).to(device=hidden_states.device, dtype=hidden_states.dtype)
+    attention.qkv_proj.weight.data.copy_(w_qkv)
+    attention.o_proj.weight.data.copy_(w_o)
+    attention._modules.pop("rotary_emb", None)
+    attention.rotary_emb = _ProvidedGPTJRotary(cos_rope, sin_rope, config)
+
+    h_norm = _sglang_rms_norm(hidden_states, rms_weight, eps=eps)
+    forward_batch, token_pool = _make_sglang_dense_forward_batch(
+        h_norm,
+        k_cache,
+        v_cache,
+        config,
+    )
+
+    output = attention(
+        positions=forward_batch.positions,
+        hidden_states=h_norm,
+        forward_batch=forward_batch,
+    ).to(hidden_states.dtype)
+
+    k_new = token_pool.k_buffer[k_cache.shape[0] : k_cache.shape[0] + 1].to(hidden_states.dtype)
+    v_new = token_pool.v_buffer[v_cache.shape[0] : v_cache.shape[0] + 1].to(hidden_states.dtype)
+    return output, k_new, v_new
+
+
+def sglang_megakernel_reference_forward(*args, **kwargs):
+    """Backward-compatible name for the integration-oriented SGLang reference."""
+    return sglang_layer_reference_forward(*args, **kwargs)
 
 
 def external_reference_status(config: MegakernelConfig | None = None) -> str:

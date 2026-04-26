@@ -12,7 +12,9 @@ from .external_reference import (
     external_reference_status,
     probe_framework_import,
     probe_sglang_import,
+    sglang_layer_reference_forward,
     sglang_megakernel_reference_forward,
+    sglang_subgraph_reference_forward,
     validate_supported_external_config,
 )
 from .megakernel_reference import make_random_megakernel_inputs, megakernel_reference_forward
@@ -25,7 +27,9 @@ __all__ = [
     "external_reference_status",
     "probe_framework_import",
     "probe_sglang_import",
+    "sglang_layer_reference_forward",
     "sglang_megakernel_reference_forward",
+    "sglang_subgraph_reference_forward",
     "validate_supported_external_config",
     # attention-only stages (backward compat)
     "cluster_decode_forward",

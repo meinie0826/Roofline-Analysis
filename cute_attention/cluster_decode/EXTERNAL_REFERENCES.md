@@ -81,12 +81,24 @@ cluster_decode/external_reference.py
   external_reference_status(...)
 ```
 
-`sglang_megakernel_reference_forward(...)` runs the same single-token attention
-subgraph as the megakernel: pre-attention RMSNorm, packed QKV projection, RoPE,
-dense decode attention, and W_o projection. The framework-owned parts are
-SGLang's `RMSNorm`, GPT-J/interleaved RoPE helper, and
-`sglang.srt.layers.radix_attention.RadixAttention` with a minimal dense
-`ForwardBatch` adapter.
+The SGLang reference is split into two layers:
+
+- `sglang_subgraph_reference_forward(...)` is the lightweight debug reference:
+  it uses SGLang's `RMSNorm`, GPT-J/interleaved RoPE helper, and
+  `RadixAttention`, while keeping dense QKV/Wo projections as explicit
+  `torch.nn.functional.linear` calls.
+- `sglang_layer_reference_forward(...)` is the integration-oriented reference:
+  it instantiates SGLang's torch-native `LlamaAttention`, loads the packed QKV
+  and output projection weights into that module, runs SGLang RMSNorm before
+  the module, and feeds a dense decode `ForwardBatch` adapter into
+  `RadixAttention`. This is the default behind
+  `sglang_megakernel_reference_forward(...)`.
+
+The only deliberate adapter in the layer reference is RoPE: the current
+megakernel receives precomputed GPT-J cos/sin tensors, so the SGLang attention
+module is given a compatible rotary object backed by those same tensors. Once
+the kernel owns SGLang's normal position-based RoPE path, this adapter should be
+removed.
 
 The packed projection tensors follow SGLang's loaded Llama attention layout:
 QKV rows are `[all Q; all K; all V]`, and W_o is a row-major dense output

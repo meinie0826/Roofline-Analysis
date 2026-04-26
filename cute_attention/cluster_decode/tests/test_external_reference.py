@@ -16,7 +16,9 @@ from cluster_decode import (
     make_random_megakernel_inputs,
     megakernel_reference_forward,
     probe_sglang_import,
+    sglang_layer_reference_forward,
     sglang_megakernel_reference_forward,
+    sglang_subgraph_reference_forward,
     validate_supported_external_config,
 )
 
@@ -29,6 +31,8 @@ def test_sglang_reference_matches_local_reference():
     status = probe_sglang_import()
     if not status.available:
         pytest.skip(f"SGLang unavailable: {status.error}")
+    if not torch.cuda.is_available():
+        pytest.skip("SGLang reference path requires CUDA tensors.")
 
     config = MegakernelConfig(
         hidden_dim=256,
@@ -39,8 +43,8 @@ def test_sglang_reference_matches_local_reference():
     inputs = make_random_megakernel_inputs(
         config,
         seq_len=32,
-        device="cpu",
-        dtype=torch.float32,
+        device="cuda",
+        dtype=torch.float16,
     )
 
     local = megakernel_reference_forward(**inputs, config=config)
@@ -50,7 +54,34 @@ def test_sglang_reference_matches_local_reference():
     )
 
     for actual, expected in zip(external, local, strict=True):
-        torch.testing.assert_close(actual, expected, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(actual, expected, rtol=2e-2, atol=2e-2)
+
+
+def test_sglang_layer_reference_matches_subgraph_reference():
+    status = probe_sglang_import()
+    if not status.available:
+        pytest.skip(f"SGLang unavailable: {status.error}")
+    if not torch.cuda.is_available():
+        pytest.skip("SGLang reference path requires CUDA tensors.")
+
+    config = MegakernelConfig(
+        hidden_dim=256,
+        num_heads=4,
+        head_dim=64,
+        cluster_size=2,
+    )
+    inputs = make_random_megakernel_inputs(
+        config,
+        seq_len=32,
+        device="cuda",
+        dtype=torch.float16,
+    )
+
+    subgraph = sglang_subgraph_reference_forward(**inputs, config=config)
+    layer = sglang_layer_reference_forward(**inputs, config=config)
+
+    for actual, expected in zip(layer, subgraph, strict=True):
+        torch.testing.assert_close(actual, expected, rtol=2e-2, atol=2e-2)
 
 
 @pytest.mark.skipif(not backends["cute"], reason="CuTe DSL not installed")

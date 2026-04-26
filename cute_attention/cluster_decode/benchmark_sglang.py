@@ -16,7 +16,8 @@ from .cluster_megakernel import cluster_megakernel_forward
 from .common import MegakernelConfig, available_backends
 from .external_reference import (
     probe_sglang_import,
-    sglang_megakernel_reference_forward,
+    sglang_layer_reference_forward,
+    sglang_subgraph_reference_forward,
 )
 from .megakernel_reference import (
     make_random_megakernel_inputs,
@@ -89,15 +90,19 @@ def run_benchmark(args) -> int:
     def local_ref():
         return megakernel_reference_forward(**inputs, config=config)
 
-    def sglang_ref():
-        return sglang_megakernel_reference_forward(**inputs, config=config)
+    def sglang_subgraph_ref():
+        return sglang_subgraph_reference_forward(**inputs, config=config)
+
+    def sglang_layer_ref():
+        return sglang_layer_reference_forward(**inputs, config=config)
 
     def cute_kernel():
         return cluster_megakernel_forward(**inputs, config=config)
 
     # Compile/warm any lazy paths before correctness/benchmark reporting.
     local_out = local_ref()
-    sglang_out = sglang_ref()
+    sglang_subgraph_out = sglang_subgraph_ref()
+    sglang_out = sglang_layer_ref()
     cute_out = cute_kernel()
     _sync()
 
@@ -114,15 +119,21 @@ def run_benchmark(args) -> int:
 
     print("\n=== Reference agreement ===")
     print(
-        "local_ref vs sglang_ref output: "
+        "local_ref vs sglang_layer_ref output: "
         f"max_abs={_max_abs(local_out[0], sglang_out[0]):.6g}, "
         f"mean_abs={_mean_abs(local_out[0], sglang_out[0]):.6g}"
+    )
+    print(
+        "sglang_subgraph_ref vs sglang_layer_ref output: "
+        f"max_abs={_max_abs(sglang_subgraph_out[0], sglang_out[0]):.6g}, "
+        f"mean_abs={_mean_abs(sglang_subgraph_out[0], sglang_out[0]):.6g}"
     )
 
     print("\n=== Latency ===")
     for name, fn in [
         ("local_pytorch_ref", local_ref),
-        ("sglang_megakernel_ref", sglang_ref),
+        ("sglang_subgraph_ref", sglang_subgraph_ref),
+        ("sglang_layer_ref", sglang_layer_ref),
         ("cute_megakernel", cute_kernel),
     ]:
         ms = _time_cuda(fn, warmup=args.warmup, iters=args.iters)
