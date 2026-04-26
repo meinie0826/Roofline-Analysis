@@ -124,6 +124,32 @@ PYTHONPATH=/Users/meiziyuan/Roofline-Analysis/cute_attention \
 python3 -m cluster_decode.debug_dsm_scalar --variant cute-atomic --cluster-size 2
 ```
 
+### 6. SGLang benchmark matrix
+
+Run the fixed correctness + latency matrix and write a CSV:
+
+```bash
+PYTHONPATH=/workspace/Roofline-Analysis/cute_attention \
+python3 -m cluster_decode.benchmark_matrix_sglang \
+  --warmup 5 --iters 20 \
+  --output /workspace/Roofline-Analysis/cute_attention/cluster_decode/result/sglang_matrix.csv
+```
+
+Default matrix:
+
+- shapes: `256x4`, `4096x32`
+- sequence lengths: `128`, `512`, `2048`, `4096`
+- cluster sizes: `2`, `4`
+
+For quick smoke runs:
+
+```bash
+PYTHONPATH=/workspace/Roofline-Analysis/cute_attention \
+python3 -m cluster_decode.benchmark_matrix_sglang \
+  --shapes 256x4 --seq-lens 128,512 --cluster-sizes 2 \
+  --warmup 2 --iters 5
+```
+
 ---
 
 ## Key design decisions vs ClusterFusion CUDA
