@@ -103,3 +103,22 @@ python3 -m pytest cluster_decode/tests/test_external_reference.py -v
 That keeps the fast correctness suite stable while still allowing a stronger
 SGLang-level check on machines with the full dependencies and compatible GPU
 backend installed.
+
+## Benchmark
+
+Use the SGLang benchmark CLI on a CUDA machine with SGLang and CuTeDSL
+available:
+
+```bash
+PYTHONPATH=/workspace/Roofline-Analysis/cute_attention \
+python3 -m cluster_decode.benchmark_sglang \
+  --hidden-dim 256 --num-heads 4 --seq-len 128 --cluster-size 2 \
+  --warmup 5 --iters 20
+```
+
+It reports:
+
+- `cute_megakernel` vs `sglang_radix_ref` correctness error,
+- local PyTorch reference vs SGLang reference agreement,
+- average CUDA latency for local reference, SGLang RadixAttention reference,
+  and CuTe megakernel.
