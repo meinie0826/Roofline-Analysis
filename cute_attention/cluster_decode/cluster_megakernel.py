@@ -332,9 +332,6 @@ if HAS_CUTE:
                         scope="gpu",
                     )
 
-            cute.arch.cluster_arrive()
-            cute.arch.cluster_wait()
-
         @cute.jit
         def _megakernel_host(
             hidden, w_qkv, w_o, k_cache, v_cache,
