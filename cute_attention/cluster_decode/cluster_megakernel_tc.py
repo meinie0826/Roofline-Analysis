@@ -70,6 +70,7 @@ if HAS_CUTE:
         cluster_shape = (cluster_size, 1, 1)
         qkv_elems = 3 * head_dim
         kv_per_cta = (seq_len + cluster_size - 1) // cluster_size
+        num_mma_warps = num_threads // 32
         tc_m = 16
         tc_n = 8
         tc_k = 16
@@ -175,19 +176,22 @@ if HAS_CUTE:
             # This keeps QKV inside the same fused launch while using MMA.  #
             # ============================================================ #
             qkv_thr_mma = qkv_tiled_mma.get_slice(lane_idx)
-            qkv_tCsA = qkv_thr_mma.partition_A(qkv_sA)
-            qkv_tCsB = qkv_thr_mma.partition_B(qkv_sB)
-            qkv_tCsC = qkv_thr_mma.partition_C(qkv_sC)
+            qkv_sA_warp = qkv_sA[warp_idx, None, None]
+            qkv_sB_warp = qkv_sB[warp_idx, None, None]
+            qkv_sC_warp = qkv_sC[warp_idx, None, None]
+            qkv_tCsA = qkv_thr_mma.partition_A(qkv_sA_warp)
+            qkv_tCsB = qkv_thr_mma.partition_B(qkv_sB_warp)
+            qkv_tCsC = qkv_thr_mma.partition_C(qkv_sC_warp)
             qkv_tCrA = qkv_tiled_mma.make_fragment_A(qkv_tCsA)
             qkv_tCrB = qkv_tiled_mma.make_fragment_B(qkv_tCsB)
             qkv_tCrC = qkv_tiled_mma.make_fragment_C(qkv_tCsC)
 
-            for qkv_tile in range(qkv_tc_tiles):
-                if warp_idx == 0:
-                    qkv_tCrC.fill(0.0)
+            qkv_tile = warp_idx
+            while qkv_tile < qkv_tc_tiles:
+                qkv_tCrC.fill(0.0)
 
                 for k_tile in range(qkv_k_tiles):
-                    a_idx = tidx
+                    a_idx = lane_idx
                     while a_idx < tc_m * tc_k:
                         m = a_idx // tc_k
                         k = a_idx - m * tc_k
@@ -196,10 +200,10 @@ if HAS_CUTE:
                         out_d = qkv_idx - proj * head_dim
                         global_row = head_id * head_dim + out_d + proj * hidden_dim
                         global_col = slice_start + k_tile * tc_k + k
-                        qkv_sA[m, k] = w_qkv[global_row, global_col]
-                        a_idx = a_idx + num_threads
+                        qkv_sA_warp[m, k] = w_qkv[global_row, global_col]
+                        a_idx = a_idx + 32
 
-                    b_idx = tidx
+                    b_idx = lane_idx
                     while b_idx < tc_n * tc_k:
                         n = b_idx // tc_k
                         k = b_idx - n * tc_k
@@ -207,31 +211,29 @@ if HAS_CUTE:
                             global_col = slice_start + k_tile * tc_k + k
                             x_val = hidden[0, global_col].to(cutlass.Float32)
                             x_norm = x_val * rms_rcp * rms_weight[global_col].to(cutlass.Float32)
-                            qkv_sB[n, k] = x_norm.to(cutlass.Float16)
+                            qkv_sB_warp[n, k] = x_norm.to(cutlass.Float16)
                         else:
-                            qkv_sB[n, k] = cutlass.Float16(0.0)
-                        b_idx = b_idx + num_threads
+                            qkv_sB_warp[n, k] = cutlass.Float16(0.0)
+                        b_idx = b_idx + 32
 
-                    cute.arch.barrier()
-                    if warp_idx == 0:
-                        cute.autovec_copy(qkv_tCsA, qkv_tCrA)
-                        cute.autovec_copy(qkv_tCsB, qkv_tCrB)
-                        cute.gemm(
-                            qkv_tiled_mma,
-                            qkv_tCrC,
-                            qkv_tCrA,
-                            qkv_tCrB,
-                            qkv_tCrC,
-                        )
-                    cute.arch.barrier()
+                    cute.arch.sync_warp()
+                    cute.autovec_copy(qkv_tCsA, qkv_tCrA)
+                    cute.autovec_copy(qkv_tCsB, qkv_tCrB)
+                    cute.gemm(
+                        qkv_tiled_mma,
+                        qkv_tCrC,
+                        qkv_tCrA,
+                        qkv_tCrB,
+                        qkv_tCrC,
+                    )
+                    cute.arch.sync_warp()
 
-                if warp_idx == 0:
-                    cute.autovec_copy(qkv_tCrC, qkv_tCsC)
-                cute.arch.barrier()
+                cute.autovec_copy(qkv_tCrC, qkv_tCsC)
+                cute.arch.sync_warp()
 
-                if tidx < tc_m:
-                    local_qkv[qkv_tile * tc_m + tidx] = qkv_sC[tidx, 0]
-                cute.arch.barrier()
+                if lane_idx < tc_m:
+                    local_qkv[qkv_tile * tc_m + lane_idx] = qkv_sC_warp[lane_idx, 0]
+                qkv_tile = qkv_tile + num_mma_warps
 
             cute.arch.barrier()
 
@@ -377,60 +379,58 @@ if HAS_CUTE:
             # contributes sum_d attn_out[d] * w_o[col, head_id*head_dim+d].
             # Accumulate all heads directly into the final fp32 output.      #
             # ============================================================ #
-            for wo_tile in range(wo_tc_tiles):
-                if warp_idx == 0:
-                    qkv_tCrC.fill(0.0)
+            wo_tile = warp_idx
+            while wo_tile < wo_tc_tiles:
+                qkv_tCrC.fill(0.0)
 
                 for k_tile in range(wo_k_tiles):
-                    a_idx = tidx
+                    a_idx = lane_idx
                     while a_idx < tc_m * tc_k:
                         m = a_idx // tc_k
                         k = a_idx - m * tc_k
                         out_col = slice_start + wo_tile * tc_m + m
                         in_col = head_id * head_dim + k_tile * tc_k + k
-                        qkv_sA[m, k] = w_o[out_col, in_col]
-                        a_idx = a_idx + num_threads
+                        qkv_sA_warp[m, k] = w_o[out_col, in_col]
+                        a_idx = a_idx + 32
 
-                    b_idx = tidx
+                    b_idx = lane_idx
                     while b_idx < tc_n * tc_k:
                         n = b_idx // tc_k
                         k = b_idx - n * tc_k
                         if n == 0:
                             d = k_tile * tc_k + k
-                            qkv_sB[n, k] = local_qkv[2 * head_dim + d].to(cutlass.Float16)
+                            qkv_sB_warp[n, k] = local_qkv[2 * head_dim + d].to(cutlass.Float16)
                         else:
-                            qkv_sB[n, k] = cutlass.Float16(0.0)
-                        b_idx = b_idx + num_threads
+                            qkv_sB_warp[n, k] = cutlass.Float16(0.0)
+                        b_idx = b_idx + 32
 
-                    cute.arch.barrier()
-                    if warp_idx == 0:
-                        cute.autovec_copy(qkv_tCsA, qkv_tCrA)
-                        cute.autovec_copy(qkv_tCsB, qkv_tCrB)
-                        cute.gemm(
-                            qkv_tiled_mma,
-                            qkv_tCrC,
-                            qkv_tCrA,
-                            qkv_tCrB,
-                            qkv_tCrC,
-                        )
-                    cute.arch.barrier()
+                    cute.arch.sync_warp()
+                    cute.autovec_copy(qkv_tCsA, qkv_tCrA)
+                    cute.autovec_copy(qkv_tCsB, qkv_tCrB)
+                    cute.gemm(
+                        qkv_tiled_mma,
+                        qkv_tCrC,
+                        qkv_tCrA,
+                        qkv_tCrB,
+                        qkv_tCrC,
+                    )
+                    cute.arch.sync_warp()
 
-                if warp_idx == 0:
-                    cute.autovec_copy(qkv_tCrC, qkv_tCsC)
-                cute.arch.barrier()
+                cute.autovec_copy(qkv_tCrC, qkv_tCsC)
+                cute.arch.sync_warp()
 
-                if tidx < tc_m:
-                    out_col = slice_start + wo_tile * tc_m + tidx
+                if lane_idx < tc_m:
+                    out_col = slice_start + wo_tile * tc_m + lane_idx
                     out_ptr = output_acc.iterator + cute.crd2idx(
                         (0, out_col), output_acc.layout
                     )
                     cute.arch.atomic_add(
                         out_ptr.llvm_ptr,
-                        qkv_sC[tidx, 0],
+                        qkv_sC_warp[lane_idx, 0],
                         sem="relaxed",
                         scope="gpu",
                     )
-                cute.arch.barrier()
+                wo_tile = wo_tile + num_mma_warps
 
         @cute.jit
         def _megakernel_host(
@@ -445,9 +445,18 @@ if HAS_CUTE:
                 (tc_m, tc_n, tc_k),
             )
             qkv_tiled_mma = cute.make_tiled_mma(qkv_op)
-            qkv_sA_layout = cute.make_layout((tc_m, tc_k), stride=(tc_k, 1))
-            qkv_sB_layout = cute.make_layout((tc_n, tc_k), stride=(tc_k, 1))
-            qkv_sC_layout = cute.make_layout((tc_m, tc_n), stride=(tc_n, 1))
+            qkv_sA_layout = cute.make_layout(
+                (num_mma_warps, tc_m, tc_k),
+                stride=(tc_m * tc_k, tc_k, 1),
+            )
+            qkv_sB_layout = cute.make_layout(
+                (num_mma_warps, tc_n, tc_k),
+                stride=(tc_n * tc_k, tc_k, 1),
+            )
+            qkv_sC_layout = cute.make_layout(
+                (num_mma_warps, tc_m, tc_n),
+                stride=(tc_m * tc_n, tc_n, 1),
+            )
             _megakernel(
                 qkv_tiled_mma,
                 qkv_sA_layout,
