@@ -49,14 +49,19 @@ CSV_FIELDS = (
     "seed",
     "output_max_abs_vs_sglang_layer",
     "output_mean_abs_vs_sglang_layer",
+    "output_rel_l2_vs_sglang_layer",
     "k_max_abs_vs_sglang_layer",
     "k_mean_abs_vs_sglang_layer",
+    "k_rel_l2_vs_sglang_layer",
     "v_max_abs_vs_sglang_layer",
     "v_mean_abs_vs_sglang_layer",
+    "v_rel_l2_vs_sglang_layer",
     "local_output_max_abs_vs_sglang_layer",
     "local_output_mean_abs_vs_sglang_layer",
+    "local_output_rel_l2_vs_sglang_layer",
     "subgraph_output_max_abs_vs_sglang_layer",
     "subgraph_output_mean_abs_vs_sglang_layer",
+    "subgraph_output_rel_l2_vs_sglang_layer",
     "local_pytorch_ref_ms",
     "sglang_subgraph_ref_ms",
     "sglang_layer_ref_ms",
@@ -104,10 +109,19 @@ def _mean_abs(a, b) -> float:
     return (a.float() - b.float()).abs().mean().item()
 
 
+def _rel_l2(a, b) -> float:
+    diff = a.float() - b.float()
+    denom = b.float().norm()
+    if denom.item() == 0.0:
+        return diff.norm().item()
+    return (diff.norm() / denom).item()
+
+
 def _compare(prefix: str, actual, expected) -> dict[str, float]:
     return {
         f"{prefix}_max_abs_vs_sglang_layer": _max_abs(actual, expected),
         f"{prefix}_mean_abs_vs_sglang_layer": _mean_abs(actual, expected),
+        f"{prefix}_rel_l2_vs_sglang_layer": _rel_l2(actual, expected),
     }
 
 
@@ -221,11 +235,22 @@ def run_matrix(args) -> int:
                     print(f"[RUN] {label}", flush=True)
                     try:
                         row = _run_case(hidden_dim, num_heads, seq_len, cluster_size, args)
+                        subgraph_ms = row["sglang_subgraph_ref_ms"]
+                        subgraph_text = (
+                            "subgraph=skipped speedup=skipped"
+                            if subgraph_ms == ""
+                            else (
+                                f"subgraph={subgraph_ms:.4f}ms "
+                                f"speedup={subgraph_ms / row['cute_megakernel_ms']:.3f}x"
+                            )
+                        )
                         print(
                             "[OK] "
                             f"{label} cute={row['cute_megakernel_ms']:.4f}ms "
+                            f"{subgraph_text} "
                             f"sglang_layer={row['sglang_layer_ref_ms']:.4f}ms "
-                            f"out_max_abs={row['output_max_abs_vs_sglang_layer']:.6g}",
+                            f"out_max_abs={row['output_max_abs_vs_sglang_layer']:.6g} "
+                            f"out_rel_l2={row['output_rel_l2_vs_sglang_layer']:.6g}",
                             flush=True,
                         )
                     except Exception as exc:
