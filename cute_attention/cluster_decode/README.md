@@ -17,7 +17,8 @@ ownership model: each CTA scans its `DIM_PER_BLOCK` hidden slice for RMSNorm/QKV
 and its KV slice for attention, then DSM-reduces the L2 scalar, `3*head_dim` QKV
 vector, softmax max/sum scalars, and attention output vector via inline PTX
 `st.async.shared::cluster` plus mbarrier. Stage 4 W_o is also split by
-`DIM_PER_BLOCK`: each CTA writes the output-column slice it owns for that head.
+`DIM_PER_BLOCK`: each CTA computes the output-column slice it owns for that head
+and atomically accumulates the per-head contribution into the final fp32 output.
 The current caller contract matches decode-style ClusterFusion/SGLang/vLLM:
 the provided dense KV cache contains previous tokens only, and the kernel folds
 the current-token K/V into the online softmax before returning `k_new/v_new`.

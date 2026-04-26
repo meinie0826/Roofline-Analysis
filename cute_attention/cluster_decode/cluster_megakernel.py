@@ -9,8 +9,7 @@ Pipeline per cluster (= per attention head):
   Stage 1 – W_qkv GEMM (hidden slice per CTA + DSM vector reduce)
   Stage 2 – RoPE (GPT-J style)
   Stage 3 – Flash-decode attention (previous KV slice per CTA + current KV)
-  Stage 4 – W_o GEMM (output slice per CTA, per head)
-  Output: sum across heads (done in Python)
+  Stage 4 – W_o GEMM (output slice per CTA + global head reduction)
 """
 
 from __future__ import annotations
@@ -61,7 +60,7 @@ if HAS_CUTE:
             sin_rope:    cute.Tensor,   # (head_dim,)              fp32
             k_out:       cute.Tensor,   # (1, num_heads, head_dim) fp16
             v_out:       cute.Tensor,   # (1, num_heads, head_dim) fp16
-            scratch_wo:  cute.Tensor,   # (num_heads, hidden_dim)  fp32
+            output_acc:  cute.Tensor,   # (1, hidden_dim)          fp32
             softmax_scale: cutlass.Float32,
         ):
             tidx, _, _ = cute.arch.thread_idx()
@@ -309,7 +308,7 @@ if HAS_CUTE:
             # Stage 4 – W_o GEMM (per head, output slice per CTA)           #
             # Reference computes output = attn_vec @ w_o.T, so each head
             # contributes sum_d attn_out[d] * w_o[col, head_id*head_dim+d].
-            # Then Python sums across heads to get final output.           #
+            # Accumulate all heads directly into the final fp32 output.      #
             # ============================================================ #
             for out_col in range(slice_start, slice_stop):
                 if (out_col - slice_start) % num_threads == tidx:
@@ -318,7 +317,15 @@ if HAS_CUTE:
                         a_val = local_qkv[2 * head_dim + d].to(cutlass.Float32)
                         w_val = w_o[out_col, head_id * head_dim + d].to(cutlass.Float32)
                         partial = partial + a_val * w_val
-                    scratch_wo[head_id, out_col] = partial
+                    out_ptr = output_acc.iterator + cute.crd2idx(
+                        (0, out_col), output_acc.layout
+                    )
+                    cute.arch.atomic_add(
+                        out_ptr.llvm_ptr,
+                        partial,
+                        sem="relaxed",
+                        scope="gpu",
+                    )
 
             cute.arch.cluster_arrive()
             cute.arch.cluster_wait()
@@ -327,13 +334,13 @@ if HAS_CUTE:
         def _megakernel_host(
             hidden, w_qkv, w_o, k_cache, v_cache,
             rms_weight, cos_rope, sin_rope,
-            k_out, v_out, scratch_wo,
+            k_out, v_out, output_acc,
             softmax_scale,
         ):
             _megakernel(
                 hidden, w_qkv, w_o, k_cache, v_cache,
                 rms_weight, cos_rope, sin_rope,
-                k_out, v_out, scratch_wo,
+                k_out, v_out, output_acc,
                 softmax_scale,
             ).launch(
                 grid=(num_heads * cluster_size, 1, 1),
@@ -367,7 +374,7 @@ def cluster_megakernel_forward(
 
     k_new  = torch.zeros((1, num_heads, head_dim), device=hidden_states.device, dtype=hidden_states.dtype)
     v_new  = torch.zeros((1, num_heads, head_dim), device=hidden_states.device, dtype=hidden_states.dtype)
-    scratch_wo = torch.zeros((num_heads, hidden_dim), device=hidden_states.device, dtype=torch.float32)
+    output_acc = torch.zeros((1, hidden_dim), device=hidden_states.device, dtype=torch.float32)
 
     def _wrap(t):
         return from_dlpack(t, assumed_align=16).mark_layout_dynamic()
@@ -382,7 +389,7 @@ def cluster_megakernel_forward(
     sin_c    = _wrap(sin_rope)
     knew_c   = _wrap(k_new)
     vnew_c   = _wrap(v_new)
-    swo_c    = _wrap(scratch_wo)
+    out_c    = _wrap(output_acc)
 
     cache_key = (seq_len, config)
     compiled  = _MEGAKERNEL_COMPILED_CACHE.get(cache_key)
@@ -392,7 +399,7 @@ def cluster_megakernel_forward(
             host,
             h_cute, wqkv_c, wo_c, kc_c, vc_c,
             rms_c, cos_c, sin_c,
-            knew_c, vnew_c, swo_c,
+            knew_c, vnew_c, out_c,
             scale,
         )
         _MEGAKERNEL_COMPILED_CACHE[cache_key] = compiled
@@ -400,11 +407,10 @@ def cluster_megakernel_forward(
     compiled(
         h_cute, wqkv_c, wo_c, kc_c, vc_c,
         rms_c, cos_c, sin_c,
-        knew_c, vnew_c, swo_c,
+        knew_c, vnew_c, out_c,
         scale,
     )
     torch.cuda.synchronize()
 
-    # Sum across heads to get final output
-    output = scratch_wo.sum(dim=0).unsqueeze(0).to(hidden_states.dtype)
+    output = output_acc.to(hidden_states.dtype)
     return output, k_new, v_new
