@@ -60,6 +60,22 @@ VARIANTS = {
         / "baselines"
         / "tutorial_fp16_gemm_2_warp_specialized_stage7.py",
     },
+    "ws6r": {
+        "label": "ws_stage6_regular_store",
+        "schedule": "warp_specialized_regular_store",
+        "ab_stages": 6,
+        "script": THIS_DIR
+        / "baselines"
+        / "tutorial_fp16_gemm_2_warp_specialized_regular_store.py",
+    },
+    "ws7r": {
+        "label": "ws_stage7_regular_store",
+        "schedule": "warp_specialized_regular_store",
+        "ab_stages": 7,
+        "script": THIS_DIR
+        / "baselines"
+        / "tutorial_fp16_gemm_2_warp_specialized_stage7_regular_store.py",
+    },
 }
 
 
@@ -133,7 +149,7 @@ def main() -> int:
         "--variants",
         type=parse_variant_list,
         default=parse_variant_list("sw,ws"),
-        help="Comma-separated subset of sw,sw6,sw7,ws,ws6,ws7.",
+        help="Comma-separated subset of sw,sw6,sw7,ws,ws6,ws7,ws6r,ws7r.",
     )
     parser.add_argument("--warmup_iterations", type=int, default=10)
     parser.add_argument("--iterations", type=int, default=100)

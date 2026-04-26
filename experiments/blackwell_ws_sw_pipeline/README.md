@@ -65,14 +65,15 @@ python experiments/blackwell_ws_sw_pipeline/run_k_sweep.py \
   --skip_ref_check
 ```
 
-To include both AB stage counts for both scheduling styles, run:
+To include both AB stage counts for both scheduling styles without exceeding
+the shared-memory limit, run:
 
 ```bash
 python experiments/blackwell_ws_sw_pipeline/run_k_sweep.py \
   --m 8192 \
   --n 8192 \
   --k_values 64,128,256,512,1024,2048,4096,8192 \
-  --variants sw6,sw7,ws6,ws7 \
+  --variants sw6,sw7,ws6,ws6r,ws7r \
   --warmup_iterations 10 \
   --iterations 100 \
   --repeats 3 \
@@ -85,6 +86,28 @@ Variant aliases:
 - `ws` is `ws6`
 - `sw6` / `sw7` use the software-pipeline tutorial with `ab_stages=6/7`
 - `ws6` / `ws7` use the warp-specialized tutorial with `ab_stages=6/7`
+  and TMA-store epilogue
+- `ws6r` / `ws7r` use the warp-specialized tutorial with `ab_stages=6/7`
+  and a regular global-store epilogue instead of TMA store
+
+To isolate the epilogue-store effect, compare TMA-store WS against
+regular-store WS:
+
+```bash
+python experiments/blackwell_ws_sw_pipeline/run_k_sweep.py \
+  --m 8192 \
+  --n 8192 \
+  --k_values 64,128,256,512,1024,2048,4096,8192 \
+  --variants sw6,sw7,ws6,ws6r,ws7r \
+  --warmup_iterations 10 \
+  --iterations 100 \
+  --repeats 3 \
+  --skip_ref_check
+```
+
+`ws7` exceeds the shared-memory limit for the 256x256 tile with TMA-store
+epilogue on sm100a in this setup. `ws7r` removes the epilogue staging buffer
+and is useful for testing whether stage 7 is viable when C is stored directly.
 
 The runner launches each variant as a separate subprocess, records the
 `RESULT,...` line printed by the benchmark, and writes:
