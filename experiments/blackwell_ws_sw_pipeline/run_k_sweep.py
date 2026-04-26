@@ -17,14 +17,48 @@ REPO_ROOT = THIS_DIR.parents[1]
 
 VARIANTS = {
     "sw": {
-        "label": "sw_pipeline",
+        "label": "sw_stage7",
+        "schedule": "sw_pipeline",
+        "ab_stages": 7,
+        "script": THIS_DIR / "baselines" / "tutorial_fp16_gemm_1_sw_pipeline.py",
+    },
+    "sw6": {
+        "label": "sw_stage6",
+        "schedule": "sw_pipeline",
+        "ab_stages": 6,
+        "script": THIS_DIR
+        / "baselines"
+        / "tutorial_fp16_gemm_1_sw_pipeline_stage6.py",
+    },
+    "sw7": {
+        "label": "sw_stage7",
+        "schedule": "sw_pipeline",
+        "ab_stages": 7,
         "script": THIS_DIR / "baselines" / "tutorial_fp16_gemm_1_sw_pipeline.py",
     },
     "ws": {
-        "label": "warp_specialized",
+        "label": "ws_stage6",
+        "schedule": "warp_specialized",
+        "ab_stages": 6,
         "script": THIS_DIR
         / "baselines"
         / "tutorial_fp16_gemm_2_warp_specialized.py",
+    },
+    "ws6": {
+        "label": "ws_stage6",
+        "schedule": "warp_specialized",
+        "ab_stages": 6,
+        "script": THIS_DIR
+        / "baselines"
+        / "tutorial_fp16_gemm_2_warp_specialized.py",
+    },
+    "ws7": {
+        "label": "ws_stage7",
+        "schedule": "warp_specialized",
+        "ab_stages": 7,
+        "script": THIS_DIR
+        / "baselines"
+        / "tutorial_fp16_gemm_2_warp_specialized_stage7.py",
     },
 }
 
@@ -99,7 +133,7 @@ def main() -> int:
         "--variants",
         type=parse_variant_list,
         default=parse_variant_list("sw,ws"),
-        help="Comma-separated subset of sw,ws.",
+        help="Comma-separated subset of sw,sw6,sw7,ws,ws6,ws7.",
     )
     parser.add_argument("--warmup_iterations", type=int, default=10)
     parser.add_argument("--iterations", type=int, default=100)
@@ -135,6 +169,8 @@ def main() -> int:
 
     fieldnames = [
         "variant",
+        "schedule",
+        "ab_stages",
         "m",
         "n",
         "k",
@@ -196,6 +232,8 @@ def main() -> int:
 
                     row = {
                         "variant": VARIANTS[variant]["label"],
+                        "schedule": VARIANTS[variant]["schedule"],
+                        "ab_stages": VARIANTS[variant]["ab_stages"],
                         "m": args.m,
                         "n": args.n,
                         "k": k,
@@ -210,7 +248,9 @@ def main() -> int:
 
                     if completed.returncode == 0:
                         try:
-                            row.update(parse_result_line(completed.stdout))
+                            parsed = parse_result_line(completed.stdout)
+                            parsed.pop("variant", None)
+                            row.update(parsed)
                         except RuntimeError as exc:
                             row["returncode"] = f"parse_error: {exc}"
                     writer.writerow(row)

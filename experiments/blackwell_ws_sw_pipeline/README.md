@@ -65,11 +65,35 @@ python experiments/blackwell_ws_sw_pipeline/run_k_sweep.py \
   --skip_ref_check
 ```
 
+To include both AB stage counts for both scheduling styles, run:
+
+```bash
+python experiments/blackwell_ws_sw_pipeline/run_k_sweep.py \
+  --m 8192 \
+  --n 8192 \
+  --k_values 64,128,256,512,1024,2048,4096,8192 \
+  --variants sw6,sw7,ws6,ws7 \
+  --warmup_iterations 10 \
+  --iterations 100 \
+  --repeats 3 \
+  --skip_ref_check
+```
+
+Variant aliases:
+
+- `sw` is `sw7`
+- `ws` is `ws6`
+- `sw6` / `sw7` use the software-pipeline tutorial with `ab_stages=6/7`
+- `ws6` / `ws7` use the warp-specialized tutorial with `ab_stages=6/7`
+
 The runner launches each variant as a separate subprocess, records the
 `RESULT,...` line printed by the benchmark, and writes:
 
 - `results/k_sweep_<timestamp>.csv`
 - `results/logs_<timestamp>/*.log`
+
+The CSV includes `variant`, `schedule`, and `ab_stages` columns so stage count
+can be grouped separately from SW-vs-WS scheduling.
 
 Use smaller settings for a smoke test:
 
@@ -119,7 +143,7 @@ Recommended workflow:
 1. Run one smoke test to confirm the copied baselines build and launch.
 2. Run the full K-sweep with `--repeats 3`.
 3. Fit `avg_ms` versus `K / 64` separately for `sw_pipeline` and
-   `warp_specialized`.
+   `warp_specialized`, grouping by `ab_stages`.
 4. Compare the fitted intercepts (`A`) and slopes (`B`).
 5. Profile representative points with NCU:
    - small K where `A` dominates, for example `K=64` or `K=128`
