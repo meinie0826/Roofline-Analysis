@@ -166,12 +166,23 @@ def megakernel_reference_forward(
     probs  = torch.softmax(scores, dim=-1)              # (num_heads, 1, seq_len)
     attn_out = torch.bmm(probs, V_bh)                  # (num_heads, 1, head_dim)
     attn_out = attn_out.squeeze(1)                      # (num_heads, head_dim)
-    attn_vec = attn_out.reshape(1, hidden_dim)          # (1, D)
-
     # ------------------------------------------------------------------ #
     # Stage 5 – W_o projection                                            #
     # ------------------------------------------------------------------ #
-    output = (attn_vec @ w_o_f.T).to(hidden_states.dtype)   # (1, D)
+    # Match the megakernel's computation graph: each attention head computes
+    # one contribution vector, then the host sums contributions across heads.
+    scratch_wo = torch.empty(
+        (num_heads, hidden_dim),
+        device=hidden_states.device,
+        dtype=torch.float32,
+    )
+    for h_idx in range(num_heads):
+        cols = slice(h_idx * head_dim, (h_idx + 1) * head_dim)
+        scratch_wo[h_idx] = torch.sum(
+            attn_out[h_idx].unsqueeze(0) * w_o_f[:, cols],
+            dim=1,
+        )
+    output = scratch_wo.sum(dim=0).unsqueeze(0).to(hidden_states.dtype)
 
     return output, k_new, v_new
 
