@@ -64,7 +64,10 @@ if HAS_CUTE:
         hidden_dim   = config.hidden_dim
         num_heads    = config.num_heads
         head_dim     = config.head_dim
-        num_threads  = config.num_threads
+        # The tensor-core path has many independent 16x16 projection tiles and
+        # decode-attention KV lanes.  Use at least 8 warps per CTA even when the
+        # scalar config uses 4 warps, while keeping the public config unchanged.
+        num_threads  = max(config.num_threads, 256)
         dim_per_block = config.dim_per_block
         cluster_size = config.cluster_size
         cluster_shape = (cluster_size, 1, 1)
