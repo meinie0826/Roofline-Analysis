@@ -486,13 +486,13 @@ def run_dense_gemm(
         .mark_compact_shape_dynamic(mode=1, divisibility=n)
     )
 
-    # Entry point to the host JIT function
-    host_function(
+    compiled_host_function = cute.compile(
+        host_function,
         a_tensor,
         b_tensor,
         c_tensor,
-        no_cache=True,
     )
+    compiled_host_function(a_tensor, b_tensor, c_tensor)
 
     # Compute reference result and verify
     if not skip_ref_check:
@@ -509,14 +509,14 @@ def run_dense_gemm(
     if do_benchmark:
         torch.cuda.synchronize()
         for _ in range(warmup_iterations):
-            host_function(a_tensor, b_tensor, c_tensor)
+            compiled_host_function(a_tensor, b_tensor, c_tensor)
         torch.cuda.synchronize()
 
         start_event = torch.cuda.Event(enable_timing=True)
         end_event = torch.cuda.Event(enable_timing=True)
         start_event.record()
         for _ in range(iterations):
-            host_function(a_tensor, b_tensor, c_tensor)
+            compiled_host_function(a_tensor, b_tensor, c_tensor)
         end_event.record()
         torch.cuda.synchronize()
 
