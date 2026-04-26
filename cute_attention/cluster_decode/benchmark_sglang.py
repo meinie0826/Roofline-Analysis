@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Benchmark megakernel against local and SGLang dense references."""
+"""Benchmark megakernel against local and SGLang dense subgraph references."""
 
 from __future__ import annotations
 
@@ -122,7 +122,7 @@ def run_benchmark(args) -> int:
     print("\n=== Latency ===")
     for name, fn in [
         ("local_pytorch_ref", local_ref),
-        ("sglang_radix_ref", sglang_ref),
+        ("sglang_megakernel_ref", sglang_ref),
         ("cute_megakernel", cute_kernel),
     ]:
         ms = _time_cuda(fn, warmup=args.warmup, iters=args.iters)
@@ -133,7 +133,7 @@ def run_benchmark(args) -> int:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Benchmark cluster megakernel against SGLang dense reference."
+        description="Benchmark cluster megakernel against SGLang dense subgraph reference."
     )
     parser.add_argument("--hidden-dim", type=int, default=256)
     parser.add_argument("--num-heads", type=int, default=4)

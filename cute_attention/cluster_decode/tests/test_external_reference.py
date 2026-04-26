@@ -2,7 +2,8 @@
 """Optional SGLang reference checks.
 
 These tests are skipped unless SGLang is installed. They compare the supported
-dense GPT-J RoPE path against the local PyTorch reference.
+dense GPT-J RoPE megakernel subgraph against SGLang's RMSNorm/RoPE/RadixAttention
+path and dense projection semantics.
 """
 from __future__ import annotations
 
@@ -49,7 +50,7 @@ def test_sglang_reference_matches_local_reference():
     )
 
     for actual, expected in zip(external, local, strict=True):
-        torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(actual, expected, rtol=2e-4, atol=2e-4)
 
 
 @pytest.mark.skipif(not backends["cute"], reason="CuTe DSL not installed")

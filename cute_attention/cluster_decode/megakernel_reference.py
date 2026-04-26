@@ -112,12 +112,15 @@ def megakernel_reference_forward(
     # Stage 0 – RMSNorm                                                   #
     # ------------------------------------------------------------------ #
     h_norm = rms_norm(h, rms_weight, eps=eps)           # (1, D) fp32
+    # SGLang/HF-style Llama RMSNorm exposes activation-dtype values to the
+    # following projection. Keep accumulation explicit, but use that boundary.
+    h_norm = h_norm.to(hidden_states.dtype).to(torch.float32)
 
     # ------------------------------------------------------------------ #
     # Stage 1 – W_qkv projection                                          #
     # ------------------------------------------------------------------ #
     # w_qkv layout: [W_q (D×D); W_k (D×D); W_v (D×D)] stacked on dim-0
-    qkv = h_norm @ w_qkv_f.T                            # (1, 3D)
+    qkv = (h_norm @ w_qkv_f.T).to(hidden_states.dtype)  # (1, 3D)
     Q = qkv[:, :hidden_dim]                             # (1, D)
     K = qkv[:, hidden_dim:2*hidden_dim]                 # (1, D)
     V = qkv[:, 2*hidden_dim:]                           # (1, D)
@@ -130,8 +133,8 @@ def megakernel_reference_forward(
     # ------------------------------------------------------------------ #
     # Stage 2 – RoPE                                                      #
     # ------------------------------------------------------------------ #
-    cos = cos_rope.to(torch.float32)
-    sin = sin_rope.to(torch.float32)
+    cos = cos_rope.to(hidden_states.dtype)
+    sin = sin_rope.to(hidden_states.dtype)
 
     Q_rot = torch.empty_like(Q)
     K_rot = torch.empty_like(K)
@@ -158,14 +161,14 @@ def megakernel_reference_forward(
     # scores: (1, num_heads, seq_len)
     # Q_rot: (1, num_heads, head_dim) → (num_heads, 1, head_dim)
     # k_f:   (seq_len, num_heads, head_dim) → (num_heads, head_dim, seq_len)
-    Q_bh  = Q_rot[0].unsqueeze(1)                      # (num_heads, 1, head_dim)
+    Q_bh  = Q_rot[0].to(torch.float32).unsqueeze(1)    # (num_heads, 1, head_dim)
     K_bh  = k_f.permute(1, 2, 0)                       # (num_heads, head_dim, seq_len)
     V_bh  = v_f.permute(1, 0, 2)                       # (num_heads, seq_len, head_dim)
 
     scores = torch.bmm(Q_bh, K_bh) * scale             # (num_heads, 1, seq_len)
     probs  = torch.softmax(scores, dim=-1)              # (num_heads, 1, seq_len)
     attn_out = torch.bmm(probs, V_bh)                  # (num_heads, 1, head_dim)
-    attn_out = attn_out.squeeze(1)                      # (num_heads, head_dim)
+    attn_out = attn_out.squeeze(1).to(hidden_states.dtype).to(torch.float32)
     # ------------------------------------------------------------------ #
     # Stage 5 – W_o projection                                            #
     # ------------------------------------------------------------------ #

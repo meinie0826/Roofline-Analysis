@@ -13,7 +13,6 @@ import importlib
 from types import SimpleNamespace
 
 from .common import MegakernelConfig, require_torch
-from .megakernel_reference import rms_norm
 
 
 @dataclass(frozen=True)
@@ -110,6 +109,19 @@ def _apply_sglang_gptj_rope(q, k, cos_rope, sin_rope):
     )
 
 
+def _sglang_rms_norm(hidden_states, rms_weight, eps):
+    """Run SGLang's RMSNorm module for the pre-attention norm boundary."""
+    layernorm = importlib.import_module("sglang.srt.layers.layernorm")
+    RMSNorm = layernorm.RMSNorm
+    norm = RMSNorm(
+        hidden_states.shape[-1],
+        eps=eps,
+        weight_dtype=rms_weight.dtype,
+    ).to(device=hidden_states.device)
+    norm.weight.data.copy_(rms_weight)
+    return norm(hidden_states)
+
+
 class _DenseReqToTokenPool:
     """Minimal request-to-token map needed by SGLang's torch-native backend."""
 
@@ -194,7 +206,7 @@ def _sglang_radix_decode_forward(q, k_new, v_new, k_cache, v_cache, config):
         forward_batch,
         save_kv_cache=True,
     )
-    return out.reshape(config.num_heads, config.head_dim).to(torch.float32)
+    return out.reshape(config.num_heads, config.head_dim)
 
 
 def sglang_megakernel_reference_forward(
@@ -211,10 +223,11 @@ def sglang_megakernel_reference_forward(
 ):
     """Reference forward using SGLang RoPE and RadixAttention for dense decode.
 
-    This instantiates `sglang.srt.layers.radix_attention.RadixAttention` and
-    runs its `forward` method with a minimal dense `ForwardBatch` adapter. It
-    does not instantiate the full SGLang Llama model layer; packed QKV/RMSNorm
-    and W_o are kept in this harness so weights/layout match the megakernel.
+    This instantiates SGLang RMSNorm, GPT-J RoPE, and
+    `sglang.srt.layers.radix_attention.RadixAttention` with a minimal dense
+    `ForwardBatch` adapter. Dense QKV/W_o are evaluated with the same packed
+    tensor layout that SGLang's Llama attention uses after weight loading:
+    `[all Q; all K; all V]` rows for QKV and row-major output projection.
     """
     require_torch()
     config = config or MegakernelConfig()
@@ -226,12 +239,10 @@ def sglang_megakernel_reference_forward(
     num_heads = config.num_heads
     head_dim = config.head_dim
 
-    h = hidden_states.to(torch.float32)
-    w_qkv_f = w_qkv.to(torch.float32)
-    w_o_f = w_o.to(torch.float32)
+    import torch.nn.functional as F
 
-    h_norm = rms_norm(h, rms_weight, eps=eps)
-    qkv = h_norm @ w_qkv_f.T
+    h_norm = _sglang_rms_norm(hidden_states, rms_weight, eps=eps)
+    qkv = F.linear(h_norm, w_qkv)
     q = qkv[:, :hidden_dim].reshape(1, num_heads, head_dim)
     k = qkv[:, hidden_dim : 2 * hidden_dim].reshape(1, num_heads, head_dim)
     v = qkv[:, 2 * hidden_dim :].reshape(1, num_heads, head_dim)
@@ -250,18 +261,7 @@ def sglang_megakernel_reference_forward(
         config,
     )
 
-    scratch_wo = torch.empty(
-        (num_heads, hidden_dim),
-        device=hidden_states.device,
-        dtype=torch.float32,
-    )
-    for h_idx in range(num_heads):
-        cols = slice(h_idx * head_dim, (h_idx + 1) * head_dim)
-        scratch_wo[h_idx] = torch.sum(
-            attn_out[h_idx].unsqueeze(0) * w_o_f[:, cols],
-            dim=1,
-        )
-    output = scratch_wo.sum(dim=0).unsqueeze(0).to(hidden_states.dtype)
+    output = F.linear(attn_out.reshape(1, hidden_dim), w_o).to(hidden_states.dtype)
 
     return output, k_new, v_new
 

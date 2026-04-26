@@ -160,6 +160,15 @@ if HAS_CUTE:
                 num_threads,
             )
 
+            # SGLang Llama exposes activation-dtype QKV projection outputs to
+            # RoPE/attention. Keep values in fp32 storage for the scalar code,
+            # but quantize at the same semantic boundary.
+            qkv_idx = tidx
+            while qkv_idx < qkv_elems:
+                local_qkv[qkv_idx] = local_qkv[qkv_idx].to(cutlass.Float16).to(cutlass.Float32)
+                qkv_idx = qkv_idx + num_threads
+            cute.arch.barrier()
+
             # ============================================================ #
             # Stage 2 – RoPE (GPT-J style, interleaved pairs)             #
             # ============================================================ #
@@ -168,14 +177,14 @@ if HAS_CUTE:
                 q1 = local_qkv[tidx + 1].to(cutlass.Float32)
                 k0 = local_qkv[head_dim + tidx].to(cutlass.Float32)
                 k1 = local_qkv[head_dim + tidx + 1].to(cutlass.Float32)
-                c0 = cos_rope[tidx]
-                s0 = sin_rope[tidx]
-                c1 = cos_rope[tidx + 1]
-                s1 = sin_rope[tidx + 1]
-                local_qkv[tidx]                = q0 * c0 - q1 * s0
-                local_qkv[tidx + 1]            = q1 * c1 + q0 * s1
-                local_qkv[head_dim + tidx]     = k0 * c0 - k1 * s0
-                local_qkv[head_dim + tidx + 1] = k1 * c1 + k0 * s1
+                c0 = cos_rope[tidx].to(cutlass.Float16).to(cutlass.Float32)
+                s0 = sin_rope[tidx].to(cutlass.Float16).to(cutlass.Float32)
+                c1 = cos_rope[tidx + 1].to(cutlass.Float16).to(cutlass.Float32)
+                s1 = sin_rope[tidx + 1].to(cutlass.Float16).to(cutlass.Float32)
+                local_qkv[tidx]                = (q0 * c0 - q1 * s0).to(cutlass.Float16).to(cutlass.Float32)
+                local_qkv[tidx + 1]            = (q1 * c1 + q0 * s1).to(cutlass.Float16).to(cutlass.Float32)
+                local_qkv[head_dim + tidx]     = (k0 * c0 - k1 * s0).to(cutlass.Float16).to(cutlass.Float32)
+                local_qkv[head_dim + tidx + 1] = (k1 * c1 + k0 * s1).to(cutlass.Float16).to(cutlass.Float32)
 
             # Write K/V outputs
             cute.arch.barrier()
@@ -273,7 +282,7 @@ if HAS_CUTE:
             if tidx < head_dim:
                 acc_o[tidx] = acc_o[tidx] * inv_sum
                 # Store attn output to V slot of local_qkv (reuse)
-                local_qkv[2 * head_dim + tidx] = acc_o[tidx]
+                local_qkv[2 * head_dim + tidx] = acc_o[tidx].to(cutlass.Float16).to(cutlass.Float32)
 
             cute.arch.barrier()
 

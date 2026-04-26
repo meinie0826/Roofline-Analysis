@@ -81,10 +81,17 @@ cluster_decode/external_reference.py
   external_reference_status(...)
 ```
 
-`sglang_megakernel_reference_forward(...)` uses SGLang's GPT-J/interleaved RoPE
-implementation and instantiates `sglang.srt.layers.radix_attention.RadixAttention`
-with a minimal dense `ForwardBatch` adapter. It intentionally keeps RMSNorm,
-packed QKV, and W_o in this harness so the weights/layout match the megakernel.
+`sglang_megakernel_reference_forward(...)` runs the same single-token attention
+subgraph as the megakernel: pre-attention RMSNorm, packed QKV projection, RoPE,
+dense decode attention, and W_o projection. The framework-owned parts are
+SGLang's `RMSNorm`, GPT-J/interleaved RoPE helper, and
+`sglang.srt.layers.radix_attention.RadixAttention` with a minimal dense
+`ForwardBatch` adapter.
+
+The packed projection tensors follow SGLang's loaded Llama attention layout:
+QKV rows are `[all Q; all K; all V]`, and W_o is a row-major dense output
+projection. That is the "layout matching" in the harness; it is not a different
+model structure.
 
 The next step is to add full framework runners behind this gate:
 
@@ -118,7 +125,7 @@ python3 -m cluster_decode.benchmark_sglang \
 
 It reports:
 
-- `cute_megakernel` vs `sglang_radix_ref` correctness error,
+- `cute_megakernel` vs `sglang_megakernel_ref` correctness error,
 - local PyTorch reference vs SGLang reference agreement,
-- average CUDA latency for local reference, SGLang RadixAttention reference,
+- average CUDA latency for local reference, SGLang megakernel subgraph reference,
   and CuTe megakernel.
