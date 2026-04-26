@@ -642,13 +642,13 @@ def run_dense_gemm(
     b_memref = from_dlpack(b).mark_layout_dynamic()
     c_memref = from_dlpack(c).mark_layout_dynamic()
 
-    # Entry point to the host JIT function
-    host_function(
+    compiled_host_function = cute.compile(
+        host_function,
         a_memref,
         b_memref,
         c_memref,
-        no_cache=True,
     )
+    compiled_host_function(a_memref, b_memref, c_memref)
 
     # Compute reference result and verify
     if not skip_ref_check:
@@ -663,14 +663,14 @@ def run_dense_gemm(
     if do_benchmark:
         torch.cuda.synchronize()
         for _ in range(warmup_iterations):
-            host_function(a_memref, b_memref, c_memref)
+            compiled_host_function(a_memref, b_memref, c_memref)
         torch.cuda.synchronize()
 
         start_event = torch.cuda.Event(enable_timing=True)
         end_event = torch.cuda.Event(enable_timing=True)
         start_event.record()
         for _ in range(iterations):
-            host_function(a_memref, b_memref, c_memref)
+            compiled_host_function(a_memref, b_memref, c_memref)
         end_event.record()
         torch.cuda.synchronize()
 
