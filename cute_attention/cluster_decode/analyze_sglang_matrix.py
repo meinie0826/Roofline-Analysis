@@ -53,7 +53,8 @@ def analyze(path: Path) -> int:
     print(f"File: {path}")
     print(
         "D,H,C | points | cute_fixed_ms | cute_slope_us/token | "
-        "subgraph_fixed_ms | subgraph_slope_us/token | cute/subgraph@maxS | rel_l2@maxS"
+        "tc_fixed_ms | tc_slope_us/token | subgraph_fixed_ms | "
+        "subgraph_slope_us/token | cute/subgraph@maxS | tc/subgraph@maxS | rel_l2@maxS"
     )
     print("-" * 128)
 
@@ -61,19 +62,29 @@ def analyze(path: Path) -> int:
         rows = sorted(groups[key], key=lambda row: int(row["seq_len"]))
         seq_lens = [float(row["seq_len"]) for row in rows]
         cute_ms = [_float(row, "cute_megakernel_ms") for row in rows]
+        tc_ms = [_float(row, "tc_megakernel_ms") for row in rows]
         subgraph_ms = [_float(row, "sglang_subgraph_ref_ms") for row in rows]
         if any(value is None for value in cute_ms):
             continue
 
         cute_fixed, cute_slope = _fit_line(seq_lens, [value for value in cute_ms if value is not None])
 
+        tc_text = "n/a | n/a"
+        if not any(value is None for value in tc_ms):
+            tc_fixed, tc_slope = _fit_line(seq_lens, [value for value in tc_ms if value is not None])
+            tc_text = f"{tc_fixed:.4f} | {tc_slope:.4f}"
+
         subgraph_text = "n/a | n/a"
         max_row = rows[-1]
         max_cute = _float(max_row, "cute_megakernel_ms")
+        max_tc = _float(max_row, "tc_megakernel_ms")
         max_subgraph = _float(max_row, "sglang_subgraph_ref_ms")
         ratio_text = "n/a"
         if max_cute is not None and max_subgraph is not None:
             ratio_text = f"{max_cute / max_subgraph:.3f}x"
+        tc_ratio_text = "n/a"
+        if max_tc is not None and max_subgraph is not None:
+            tc_ratio_text = f"{max_tc / max_subgraph:.3f}x"
         if not any(value is None for value in subgraph_ms):
             sub_fixed, sub_slope = _fit_line(
                 seq_lens, [value for value in subgraph_ms if value is not None]
@@ -85,7 +96,7 @@ def analyze(path: Path) -> int:
         d, h, c = key
         print(
             f"{d},{h},{c} | {len(rows)} | {cute_fixed:.4f} | {cute_slope:.4f} | "
-            f"{subgraph_text} | {ratio_text} | {rel_l2_text}"
+            f"{tc_text} | {subgraph_text} | {ratio_text} | {tc_ratio_text} | {rel_l2_text}"
         )
 
     return 0

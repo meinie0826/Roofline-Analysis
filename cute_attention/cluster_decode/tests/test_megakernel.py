@@ -17,6 +17,7 @@ from cluster_decode import (
     cluster_decode_forward,
     cluster_decode_split_forward,
     cluster_megakernel_forward,
+    cluster_megakernel_tc_forward,
     leader_reduce_payload_floats,
     make_random_megakernel_inputs,
     megakernel_reference_forward,
@@ -214,6 +215,38 @@ class TestMegakernelVsReference:
 
         diff = (cuda_out.float() - ref_out.float()).abs()
         rel_l2 = torch.linalg.vector_norm(diff) / torch.linalg.vector_norm(
+            ref_out.float()
+        ).clamp_min(1e-12)
+        assert rel_l2 < 5e-3
+
+
+@pytest.mark.skipif(not backends["torch"], reason="PyTorch not installed")
+@pytest.mark.skipif(
+    not (backends["torch"] and torch.cuda.is_available()),
+    reason="CUDA GPU required",
+)
+class TestTensorCoreMegakernel:
+    """Compare the experimental tensor-core path against the reference."""
+
+    @pytest.mark.parametrize("seq_len", [32, 128])
+    @pytest.mark.parametrize("cluster_size", [2, 4])
+    def test_tc_output_matches_reference(self, seq_len, cluster_size):
+        config = MegakernelConfig(
+            hidden_dim=256,
+            num_heads=4,
+            head_dim=64,
+            cluster_size=cluster_size,
+            num_threads=128,
+        )
+        inputs = make_random_megakernel_inputs(config, seq_len=seq_len, device="cuda")
+
+        ref_out, ref_k, ref_v = megakernel_reference_forward(**inputs, config=config)
+        tc_out, tc_k, tc_v = cluster_megakernel_tc_forward(**inputs, config=config)
+        torch.cuda.synchronize()
+
+        torch.testing.assert_close(tc_k, ref_k, rtol=2e-2, atol=2e-2)
+        torch.testing.assert_close(tc_v, ref_v, rtol=2e-2, atol=2e-2)
+        rel_l2 = torch.linalg.vector_norm((tc_out.float() - ref_out.float())) / torch.linalg.vector_norm(
             ref_out.float()
         ).clamp_min(1e-12)
         assert rel_l2 < 5e-3

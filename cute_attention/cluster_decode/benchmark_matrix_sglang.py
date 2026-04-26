@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover - depends on local env
     torch = None  # type: ignore[assignment]
 
 from .cluster_megakernel import cluster_megakernel_forward
+from .cluster_megakernel_tc import cluster_megakernel_tc_forward
 from .common import MegakernelConfig, available_backends
 from .external_reference import (
     probe_sglang_import,
@@ -62,10 +63,20 @@ CSV_FIELDS = (
     "subgraph_output_max_abs_vs_sglang_layer",
     "subgraph_output_mean_abs_vs_sglang_layer",
     "subgraph_output_rel_l2_vs_sglang_layer",
+    "tc_output_max_abs_vs_sglang_layer",
+    "tc_output_mean_abs_vs_sglang_layer",
+    "tc_output_rel_l2_vs_sglang_layer",
+    "tc_k_max_abs_vs_sglang_layer",
+    "tc_k_mean_abs_vs_sglang_layer",
+    "tc_k_rel_l2_vs_sglang_layer",
+    "tc_v_max_abs_vs_sglang_layer",
+    "tc_v_mean_abs_vs_sglang_layer",
+    "tc_v_rel_l2_vs_sglang_layer",
     "local_pytorch_ref_ms",
     "sglang_subgraph_ref_ms",
     "sglang_layer_ref_ms",
     "cute_megakernel_ms",
+    "tc_megakernel_ms",
 )
 
 
@@ -169,10 +180,14 @@ def _run_case(hidden_dim: int, num_heads: int, seq_len: int, cluster_size: int, 
     def cute_kernel():
         return cluster_megakernel_forward(**inputs, config=config)
 
+    def tc_kernel():
+        return cluster_megakernel_tc_forward(**inputs, config=config)
+
     local_out = None if args.skip_local_ref else local_ref()
     subgraph_out = None if args.skip_subgraph_ref else sglang_subgraph_ref()
     layer_out = sglang_layer_ref()
     cute_out = cute_kernel()
+    tc_out = None if args.skip_tc else tc_kernel()
     _sync()
 
     row.update(_compare("output", cute_out[0], layer_out[0]))
@@ -182,6 +197,10 @@ def _run_case(hidden_dim: int, num_heads: int, seq_len: int, cluster_size: int, 
         row.update(_compare("local_output", local_out[0], layer_out[0]))
     if subgraph_out is not None:
         row.update(_compare("subgraph_output", subgraph_out[0], layer_out[0]))
+    if tc_out is not None:
+        row.update(_compare("tc_output", tc_out[0], layer_out[0]))
+        row.update(_compare("tc_k", tc_out[1], layer_out[1]))
+        row.update(_compare("tc_v", tc_out[2], layer_out[2]))
 
     row["local_pytorch_ref_ms"] = "" if args.skip_local_ref else _time_cuda(local_ref, args.warmup, args.iters)
     row["sglang_subgraph_ref_ms"] = "" if args.skip_subgraph_ref else _time_cuda(
@@ -189,6 +208,7 @@ def _run_case(hidden_dim: int, num_heads: int, seq_len: int, cluster_size: int, 
     )
     row["sglang_layer_ref_ms"] = _time_cuda(sglang_layer_ref, args.warmup, args.iters)
     row["cute_megakernel_ms"] = _time_cuda(cute_kernel, args.warmup, args.iters)
+    row["tc_megakernel_ms"] = "" if args.skip_tc else _time_cuda(tc_kernel, args.warmup, args.iters)
     return row
 
 
@@ -235,6 +255,8 @@ def run_matrix(args) -> int:
                     print(f"[RUN] {label}", flush=True)
                     try:
                         row = _run_case(hidden_dim, num_heads, seq_len, cluster_size, args)
+                        tc_ms = row["tc_megakernel_ms"]
+                        tc_text = "tc=skipped" if tc_ms == "" else f"tc={tc_ms:.4f}ms"
                         subgraph_ms = row["sglang_subgraph_ref_ms"]
                         subgraph_text = (
                             "subgraph=skipped speedup=skipped"
@@ -247,6 +269,7 @@ def run_matrix(args) -> int:
                         print(
                             "[OK] "
                             f"{label} cute={row['cute_megakernel_ms']:.4f}ms "
+                            f"{tc_text} "
                             f"{subgraph_text} "
                             f"sglang_layer={row['sglang_layer_ref_ms']:.4f}ms "
                             f"out_max_abs={row['output_max_abs_vs_sglang_layer']:.6g} "
@@ -292,6 +315,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--output", default="", help="CSV output path.")
     parser.add_argument("--skip-local-ref", action="store_true", help="Skip local PyTorch reference timing.")
     parser.add_argument("--skip-subgraph-ref", action="store_true", help="Skip lightweight SGLang subgraph timing.")
+    parser.add_argument("--skip-tc", action="store_true", help="Skip experimental tensor-core path timing.")
     parser.add_argument("--fail-fast", action="store_true", help="Stop on the first failing case.")
     return parser.parse_args(argv)
 

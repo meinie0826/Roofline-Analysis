@@ -7,6 +7,7 @@ from .cluster_decode_reduce import (
 )
 from .cluster_decode_split import cluster_decode_split_forward
 from .cluster_megakernel import cluster_megakernel_forward
+from .cluster_megakernel_tc import cluster_megakernel_tc_forward
 from .common import ClusterDecodeConfig, MegakernelConfig, available_backends
 from .external_reference import (
     external_reference_status,
@@ -40,6 +41,7 @@ __all__ = [
     "split_kv_decode_reference",
     # megakernel
     "cluster_megakernel_forward",
+    "cluster_megakernel_tc_forward",
     "megakernel_reference_forward",
     "make_random_megakernel_inputs",
 ]
