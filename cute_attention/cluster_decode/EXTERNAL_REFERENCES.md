@@ -1,26 +1,21 @@
-# External References and Benchmarks
+# SGLang External Reference and Benchmarks
 
-This note records what it would take to use SGLang or vLLM directly as
-correctness references and benchmark baselines.
+This note records what it would take to use SGLang directly as a correctness
+reference and benchmark baseline.
 
 ## Import status in this checkout
 
 Probed from the repository root:
 
 ```bash
-PYTHONPATH=3rd/vllm python3 -c "import vllm"
 PYTHONPATH=3rd/sglang/python python3 -c "import sglang"
 ```
 
-Both currently fail in this local Python environment with:
+This currently fails in this local Python environment with:
 
 ```text
 ModuleNotFoundError: No module named 'numpy'
 ```
-
-vLLM also warns that `vllm._version` is missing when imported directly from the
-source tree. That warning is not fatal, but it is another sign that a direct
-framework import should be optional rather than required by the core tests.
 
 ## Can they be used as references?
 
@@ -80,22 +75,21 @@ are unavailable:
 
 ```text
 cluster_decode/external_reference.py
-  probe_framework_imports()
+  probe_sglang_import()
   validate_supported_external_config(...)
-  external_megakernel_reference_forward(...)
+  sglang_megakernel_reference_forward(...)
   external_reference_status(...)
 ```
 
-`external_megakernel_reference_forward(framework, ...)` uses SGLang or vLLM's
-GPT-J/interleaved RoPE implementation, then runs the same dense single-token
-MHA decode math as `megakernel_reference_forward`. It intentionally does not
-instantiate the full framework attention layer yet because those paths require
-paged-cache/runtime metadata.
+`sglang_megakernel_reference_forward(...)` uses SGLang's GPT-J/interleaved RoPE
+implementation, then runs the same dense single-token MHA decode math as
+`megakernel_reference_forward`. It intentionally does not instantiate the full
+SGLang attention layer yet because that path requires paged-cache/runtime
+metadata.
 
 The next step is to add full framework runners behind this gate:
 
 ```text
-  run_vllm_llama_attention_reference(...)   # skipped if unavailable/unsupported
   run_sglang_llama_attention_reference(...) # skipped if unavailable/unsupported
   benchmark_external_vs_megakernel(...)
 ```
@@ -108,5 +102,5 @@ python3 -m pytest cluster_decode/tests/test_external_reference.py -v
 ```
 
 That keeps the fast correctness suite stable while still allowing a stronger
-framework-level check on machines with the full dependencies and compatible GPU
+SGLang-level check on machines with the full dependencies and compatible GPU
 backend installed.

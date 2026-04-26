@@ -1,16 +1,15 @@
-"""Optional SGLang/vLLM integration probes for reference and benchmark work.
+"""Optional SGLang integration probes for reference and benchmark work.
 
-The core megakernel tests deliberately do not import either framework.  Their
-model paths depend on runtime metadata, paged KV cache managers, backend
+The core megakernel tests deliberately do not require SGLang.  Its full Llama
+attention path depends on runtime metadata, paged KV cache managers, backend
 selection, and optional compiled kernels.  This module provides lightweight
-gates so external-reference tests can fail closed with a useful reason.
+gates so SGLang-reference tests can fail closed with a useful reason.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 import importlib
-from typing import Iterable
 
 from .common import MegakernelConfig, require_torch
 from .megakernel_reference import rms_norm
@@ -27,7 +26,7 @@ class FrameworkStatus:
 
 
 def probe_framework_import(name: str) -> FrameworkStatus:
-    """Try importing `sglang` or `vllm` without making it a hard dependency."""
+    """Try importing an optional framework without making it a hard dependency."""
     try:
         module = importlib.import_module(name)
     except Exception as exc:  # pragma: no cover - depends on local env
@@ -40,11 +39,9 @@ def probe_framework_import(name: str) -> FrameworkStatus:
     )
 
 
-def probe_framework_imports(
-    names: Iterable[str] = ("sglang", "vllm"),
-) -> dict[str, FrameworkStatus]:
-    """Return optional import status for all requested frameworks."""
-    return {name: probe_framework_import(name) for name in names}
+def probe_sglang_import() -> FrameworkStatus:
+    """Try importing SGLang without making it a hard dependency."""
+    return probe_framework_import("sglang")
 
 
 def validate_supported_external_config(
@@ -60,7 +57,7 @@ def validate_supported_external_config(
     quantized_kv: bool = False,
     tensor_parallel_size: int = 1,
 ) -> None:
-    """Reject SGLang/vLLM branches that the current megakernel does not model.
+    """Reject SGLang branches that the current megakernel does not model.
 
     This is intended for optional external reference/benchmark tests.  It keeps
     comparisons honest by failing before a framework path silently exercises a
@@ -101,46 +98,18 @@ def _rope_half_tables(cos_rope, sin_rope):
     )[0::2].unsqueeze(0)
 
 
-def _apply_external_gptj_rope(framework: str, q, k, cos_rope, sin_rope):
-    """Apply GPT-J/interleaved RoPE using SGLang or vLLM's implementation."""
+def _apply_sglang_gptj_rope(q, k, cos_rope, sin_rope):
+    """Apply GPT-J/interleaved RoPE using SGLang's implementation."""
     cos_half, sin_half = _rope_half_tables(cos_rope, sin_rope)
-    framework = framework.lower()
-
-    if framework == "sglang":
-        rotary = importlib.import_module("sglang.srt.layers.rotary_embedding.utils")
-        apply_rotary_emb = rotary.apply_rotary_emb
-        return (
-            apply_rotary_emb(q, cos_half, sin_half, is_neox_style=False),
-            apply_rotary_emb(k, cos_half, sin_half, is_neox_style=False),
-        )
-
-    if framework == "vllm":
-        rotary = importlib.import_module(
-            "vllm.model_executor.layers.rotary_embedding.common"
-        )
-        apply_rotary = rotary.ApplyRotaryEmb.forward_static
-        return (
-            apply_rotary(
-                q,
-                cos_half,
-                sin_half,
-                is_neox_style=False,
-                enable_fp32_compute=True,
-            ),
-            apply_rotary(
-                k,
-                cos_half,
-                sin_half,
-                is_neox_style=False,
-                enable_fp32_compute=True,
-            ),
-        )
-
-    raise ValueError(f"Unknown external reference framework: {framework}.")
+    rotary = importlib.import_module("sglang.srt.layers.rotary_embedding.utils")
+    apply_rotary_emb = rotary.apply_rotary_emb
+    return (
+        apply_rotary_emb(q, cos_half, sin_half, is_neox_style=False),
+        apply_rotary_emb(k, cos_half, sin_half, is_neox_style=False),
+    )
 
 
-def external_megakernel_reference_forward(
-    framework: str,
+def sglang_megakernel_reference_forward(
     hidden_states,
     w_qkv,
     w_o,
@@ -152,12 +121,12 @@ def external_megakernel_reference_forward(
     config: MegakernelConfig | None = None,
     eps: float = 1e-6,
 ):
-    """Reference forward using SGLang/vLLM RoPE for the supported dense path.
+    """Reference forward using SGLang RoPE for the supported dense path.
 
-    This intentionally does not instantiate the full framework attention layer:
-    those paths require paged-cache/runtime metadata. Instead, the external
-    framework owns the RoPE semantics, while the dense single-token MHA decode
-    math mirrors `megakernel_reference_forward`.
+    This intentionally does not instantiate SGLang's full attention layer yet:
+    that path requires paged-cache/runtime metadata. Instead, SGLang owns the
+    RoPE semantics, while the dense single-token MHA decode math mirrors
+    `megakernel_reference_forward`.
     """
     require_torch()
     config = config or MegakernelConfig()
@@ -180,7 +149,7 @@ def external_megakernel_reference_forward(
     k = qkv[:, hidden_dim : 2 * hidden_dim].reshape(1, num_heads, head_dim)
     v = qkv[:, 2 * hidden_dim :].reshape(1, num_heads, head_dim)
 
-    q_rot, k_rot = _apply_external_gptj_rope(framework, q, k, cos_rope, sin_rope)
+    q_rot, k_rot = _apply_sglang_gptj_rope(q, k, cos_rope, sin_rope)
 
     k_new = k_rot.to(hidden_states.dtype)
     v_new = v.to(hidden_states.dtype)
@@ -216,12 +185,11 @@ def external_reference_status(config: MegakernelConfig | None = None) -> str:
     except ValueError as exc:
         config_status = str(exc)
 
-    imports = probe_framework_imports()
     parts = [config_status]
-    for status in imports.values():
-        if status.available:
-            suffix = f" {status.version}" if status.version else ""
-            parts.append(f"{status.name}: available{suffix}")
-        else:
-            parts.append(f"{status.name}: unavailable ({status.error})")
+    status = probe_sglang_import()
+    if status.available:
+        suffix = f" {status.version}" if status.version else ""
+        parts.append(f"sglang: available{suffix}")
+    else:
+        parts.append(f"sglang: unavailable ({status.error})")
     return "\n".join(parts)

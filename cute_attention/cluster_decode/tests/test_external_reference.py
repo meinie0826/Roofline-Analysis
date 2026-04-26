@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Optional SGLang/vLLM reference checks.
+"""Optional SGLang reference checks.
 
-These tests are skipped unless the frameworks are installed. They compare the
-supported dense GPT-J RoPE path against the local PyTorch reference.
+These tests are skipped unless SGLang is installed. They compare the supported
+dense GPT-J RoPE path against the local PyTorch reference.
 """
 from __future__ import annotations
 
@@ -10,10 +10,10 @@ import pytest
 
 from cluster_decode import (
     MegakernelConfig,
-    external_megakernel_reference_forward,
     make_random_megakernel_inputs,
     megakernel_reference_forward,
-    probe_framework_import,
+    probe_sglang_import,
+    sglang_megakernel_reference_forward,
     validate_supported_external_config,
 )
 
@@ -21,11 +21,10 @@ from cluster_decode import (
 torch = pytest.importorskip("torch")
 
 
-@pytest.mark.parametrize("framework", ["sglang", "vllm"])
-def test_external_reference_matches_local_reference(framework):
-    status = probe_framework_import(framework)
+def test_sglang_reference_matches_local_reference():
+    status = probe_sglang_import()
     if not status.available:
-        pytest.skip(f"{framework} unavailable: {status.error}")
+        pytest.skip(f"SGLang unavailable: {status.error}")
 
     config = MegakernelConfig(
         hidden_dim=256,
@@ -41,8 +40,7 @@ def test_external_reference_matches_local_reference(framework):
     )
 
     local = megakernel_reference_forward(**inputs, config=config)
-    external = external_megakernel_reference_forward(
-        framework,
+    external = sglang_megakernel_reference_forward(
         **inputs,
         config=config,
     )
