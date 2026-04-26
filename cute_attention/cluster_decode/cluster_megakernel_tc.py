@@ -29,6 +29,23 @@ from .common import (
 _MEGAKERNEL_TC_COMPILED_CACHE: dict = {}
 
 
+def resolve_tc_cluster_size(hidden_dim: int, requested_cluster_size: int) -> int:
+    """Choose the internal CTA-cluster fanout for the TC megakernel.
+
+    The tensor-core path is projection-bound: each CTA owns a hidden slice for
+    QKV/WO GEMV tiles.  On Blackwell the portable CTA-cluster size is 8, so use
+    that wider fanout when the model dimension allows it even if the caller's
+    logical config was tuned for the scalar path.
+    """
+    if (
+        requested_cluster_size < 8
+        and hidden_dim % 8 == 0
+        and (hidden_dim // 8) % 16 == 0
+    ):
+        return 8
+    return requested_cluster_size
+
+
 if HAS_CUTE:
     from .cluster_primitives import (
         cluster_reduce_scalar_max_mbarrier,
@@ -65,11 +82,14 @@ if HAS_CUTE:
         num_heads    = config.num_heads
         head_dim     = config.head_dim
         # The tensor-core path has many independent 16x16 projection tiles and
-        # decode-attention KV lanes.  Use at least 8 warps per CTA even when the
-        # scalar config uses 4 warps, while keeping the public config unchanged.
+        # decode-attention KV lanes. Use at least 8 warps per CTA even when the
+        # scalar config uses 4 warps.
         num_threads  = max(config.num_threads, 256)
-        dim_per_block = config.dim_per_block
-        cluster_size = config.cluster_size
+        # Projection dominates this path and each CTA only computes one hidden
+        # slice. Widening the internal cluster fanout from 2/4 to 8 halves the
+        # projection K-loop versus C=4 while preserving the public semantics.
+        cluster_size = resolve_tc_cluster_size(hidden_dim, config.cluster_size)
+        dim_per_block = hidden_dim // cluster_size
         cluster_shape = (cluster_size, 1, 1)
         qkv_elems = 3 * head_dim
         kv_per_cta = (seq_len + cluster_size - 1) // cluster_size
@@ -148,20 +168,10 @@ if HAS_CUTE:
                 local_l2 = local_l2 + val * val
                 col = col + num_threads
 
-            # Intra-CTA tree reduce to one partial L2 per CTA.
-            reduce[tidx] = local_l2
-            cute.arch.barrier()
-            stride = num_threads // 2
-            while stride > 0:
-                if tidx < stride:
-                    reduce[tidx] = reduce[tidx] + reduce[tidx + stride]
-                cute.arch.barrier()
-                stride = stride // 2
-
             total_l2 = cluster_reduce_scalar_sum_mbarrier(
                 cluster_l2_ptr,
                 cluster_l2_mbar_ptr,
-                reduce[0],
+                _block_sum_f32(local_l2, reduce, tidx, num_threads),
                 tidx,
                 cluster_size,
             )
@@ -549,7 +559,8 @@ def cluster_megakernel_tc_forward(
     validate_megakernel_inputs(hidden_states, w_qkv, w_o, k_cache, v_cache, rms_weight, config)
     if config.head_dim % 16 != 0:
         raise ValueError("tensor-core QKV path requires head_dim to be divisible by 16.")
-    if config.dim_per_block % 16 != 0:
+    tc_cluster_size = resolve_tc_cluster_size(config.hidden_dim, config.cluster_size)
+    if (config.hidden_dim // tc_cluster_size) % 16 != 0:
         raise ValueError("tensor-core QKV path requires dim_per_block to be divisible by 16.")
 
     import torch

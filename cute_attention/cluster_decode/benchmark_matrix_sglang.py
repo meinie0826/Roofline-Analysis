@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover - depends on local env
     torch = None  # type: ignore[assignment]
 
 from .cluster_megakernel import cluster_megakernel_forward
+from .cluster_megakernel_tc import resolve_tc_cluster_size
 from .common import MegakernelConfig, available_backends
 from .external_reference import (
     SGLangLayerRunner,
@@ -35,7 +36,7 @@ MATRIX_SHAPES = (
     (4096, 32),
 )
 MATRIX_SEQ_LENS = (128, 512, 2048, 4096)
-MATRIX_CLUSTER_SIZES = (2, 4)
+MATRIX_CLUSTER_SIZES = (2, 4, 8)
 
 
 CSV_FIELDS = (
@@ -46,6 +47,7 @@ CSV_FIELDS = (
     "head_dim",
     "seq_len",
     "cluster_size",
+    "tc_cluster_size",
     "num_threads",
     "dtype",
     "seed",
@@ -164,6 +166,7 @@ def _run_case(hidden_dim: int, num_heads: int, seq_len: int, cluster_size: int, 
         "head_dim": config.head_dim,
         "seq_len": seq_len,
         "cluster_size": cluster_size,
+        "tc_cluster_size": resolve_tc_cluster_size(hidden_dim, cluster_size),
         "num_threads": args.num_threads,
         "dtype": args.dtype,
         "seed": args.seed,
@@ -305,7 +308,7 @@ def run_matrix(args) -> int:
                         print(
                             "[OK] "
                             f"{label} cute={row['cute_megakernel_ms']:.4f}ms "
-                            f"{tc_text} "
+                            f"{tc_text} tcC={row['tc_cluster_size']} "
                             f"{subgraph_text} "
                             f"{persistent_text} "
                             f"sglang_layer={row['sglang_layer_ref_ms']:.4f}ms "
@@ -323,6 +326,7 @@ def run_matrix(args) -> int:
                             "head_dim": hidden_dim // num_heads,
                             "seq_len": seq_len,
                             "cluster_size": cluster_size,
+                            "tc_cluster_size": resolve_tc_cluster_size(hidden_dim, cluster_size),
                             "num_threads": args.num_threads,
                             "dtype": args.dtype,
                             "seed": args.seed,
@@ -344,7 +348,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run SGLang-reference benchmark matrix for cluster megakernel.")
     parser.add_argument("--shapes", default="", help="Comma list of hidden_dim x num_heads, e.g. 256x4,4096x32.")
     parser.add_argument("--seq-lens", default="", help="Comma list of sequence lengths, e.g. 128,512,2048.")
-    parser.add_argument("--cluster-sizes", default="", help="Comma list of cluster sizes, e.g. 2,4.")
+    parser.add_argument("--cluster-sizes", default="", help="Comma list of cluster sizes, e.g. 2,4,8.")
     parser.add_argument("--num-threads", type=int, default=128)
     parser.add_argument("--dtype", default="float16", choices=["float16", "bfloat16"])
     parser.add_argument("--seed", type=int, default=42)

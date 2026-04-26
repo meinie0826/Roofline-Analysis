@@ -43,7 +43,7 @@ class MegakernelConfig:
     head_dim: int = 128
 
     # Cluster / threading
-    cluster_size: int = 4       # 2 or 4 CTAs per cluster
+    cluster_size: int = 4       # 2, 4, or 8 CTAs per cluster
     num_threads: int = 128      # BLOCK_SIZE = 4 warps * 32
 
     # Softmax scale (None → 1/sqrt(head_dim))
@@ -76,8 +76,8 @@ class MegakernelConfig:
             raise ValueError("hidden_dim must be divisible by num_heads.")
         if self.hidden_dim // self.num_heads != self.head_dim:
             raise ValueError("head_dim must equal hidden_dim // num_heads.")
-        if self.cluster_size not in (2, 4):
-            raise ValueError("cluster_size must be 2 or 4.")
+        if self.cluster_size not in (2, 4, 8):
+            raise ValueError("cluster_size must be 2, 4, or 8.")
         if self.num_threads % 32 != 0:
             raise ValueError("num_threads must be a multiple of 32.")
 

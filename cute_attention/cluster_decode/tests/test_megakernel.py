@@ -228,7 +228,7 @@ class TestTensorCoreMegakernel:
     """Compare the experimental tensor-core path against the reference."""
 
     @pytest.mark.parametrize("seq_len", [32, 128])
-    @pytest.mark.parametrize("cluster_size", [2, 4])
+    @pytest.mark.parametrize("cluster_size", [2, 4, 8])
     def test_tc_output_matches_reference(self, seq_len, cluster_size):
         config = MegakernelConfig(
             hidden_dim=256,

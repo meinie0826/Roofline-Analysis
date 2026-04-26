@@ -153,7 +153,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--hidden-dim", type=int, default=256)
     parser.add_argument("--num-heads", type=int, default=4)
     parser.add_argument("--seq-len", type=int, default=128)
-    parser.add_argument("--cluster-size", type=int, default=2, choices=[2, 4])
+    parser.add_argument("--cluster-size", type=int, default=2, choices=[2, 4, 8])
     parser.add_argument("--num-threads", type=int, default=128)
     parser.add_argument("--dtype", default="float16", choices=["float16", "bfloat16"])
     parser.add_argument("--seed", type=int, default=42)

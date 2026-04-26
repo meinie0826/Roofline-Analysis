@@ -22,10 +22,10 @@ try:
 except ImportError:  # pragma: no cover - depends on local env
     torch = None  # type: ignore[assignment]
 
-from .cluster_megakernel_tc import _apply_rope_gptj_batched, cluster_megakernel_tc_forward
+from .cluster_megakernel_tc import cluster_megakernel_tc_forward, resolve_tc_cluster_size
 from .common import MegakernelConfig
 from .external_reference import SGLangLayerRunner, SGLangSubgraphRunner, probe_sglang_import
-from .megakernel_reference import make_random_megakernel_inputs, rms_norm
+from .megakernel_reference import apply_rope_gptj, make_random_megakernel_inputs, rms_norm
 
 
 def _require_runtime() -> None:
@@ -96,7 +96,17 @@ class TensorCoreBreakdown:
             self.qkv()
         cos = self.inputs["cos_rope"].to(self.dtype)
         sin = self.inputs["sin_rope"].to(self.dtype)
-        self.q_rot, k_rot = _apply_rope_gptj_batched(self.q, self.k, cos, sin)
+        q_rot = torch.empty_like(self.q)
+        k_rot = torch.empty_like(self.k)
+        for head_idx in range(self.num_heads):
+            q_rot[0, head_idx], k_rot[0, head_idx] = apply_rope_gptj(
+                self.q[0, head_idx].float(),
+                self.k[0, head_idx].float(),
+                cos.float(),
+                sin.float(),
+            )
+        self.q_rot = q_rot.to(self.dtype)
+        k_rot = k_rot.to(self.dtype)
         self.k_new = k_rot.to(self.dtype)
         self.v_new = self.v.to(self.dtype)
         return self.q_rot, self.k_new, self.v_new
@@ -171,7 +181,8 @@ def run(args) -> int:
     print("=== Tensor-core path breakdown ===")
     print(
         f"D={args.hidden_dim} H={args.num_heads} S={args.seq_len} "
-        f"C={args.cluster_size} dtype={args.dtype}"
+        f"C={args.cluster_size} tcC={resolve_tc_cluster_size(args.hidden_dim, args.cluster_size)} "
+        f"dtype={args.dtype}"
     )
     for name, ms in timings:
         print(f"{name:16s} {ms:.4f} ms")
@@ -183,7 +194,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--hidden-dim", type=int, default=4096)
     parser.add_argument("--num-heads", type=int, default=32)
     parser.add_argument("--seq-len", type=int, default=4096)
-    parser.add_argument("--cluster-size", type=int, default=4, choices=[2, 4])
+    parser.add_argument("--cluster-size", type=int, default=4, choices=[2, 4, 8])
     parser.add_argument("--num-threads", type=int, default=128)
     parser.add_argument("--dtype", default="float16", choices=["float16", "bfloat16"])
     parser.add_argument("--seed", type=int, default=42)
