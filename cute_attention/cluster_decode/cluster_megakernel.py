@@ -14,6 +14,8 @@ Pipeline per cluster (= per attention head):
 
 from __future__ import annotations
 
+import operator
+
 from .common import (
     HAS_CUTE,
     MegakernelConfig,
@@ -33,6 +35,27 @@ if HAS_CUTE:
         cluster_reduce_scalar_sum_mbarrier,
         cluster_reduce_vector_sum_mbarrier,
     )
+
+    @cute.jit
+    def _block_sum_f32(local_val, reduce, tidx, num_threads: int):
+        """Reduce one fp32 value across a CTA with warp shuffles.
+
+        Compared with the old shared-memory tree reduction, this keeps the
+        per-token QK dot path to one CTA barrier instead of log2(block) barriers.
+        """
+        lane_idx = cute.arch.lane_idx()
+        warp_idx = cute.arch.warp_idx()
+        warps_per_block = num_threads // 32
+
+        warp_val = cute.arch.warp_reduction(local_val, operator.add)
+        if lane_idx == 0:
+            reduce[warp_idx] = warp_val
+        cute.arch.barrier()
+
+        block_val = cutlass.Float32(0.0)
+        if lane_idx < warps_per_block:
+            block_val = reduce[lane_idx]
+        return cute.arch.warp_reduction(block_val, operator.add)
 
     def _make_cluster_megakernel_host(
         seq_len: int,
@@ -213,20 +236,11 @@ if HAS_CUTE:
                 kv_stop = seq_len
 
             for kv_idx in range(kv_start, kv_stop):
+                qk_part = cutlass.Float32(0.0)
                 if tidx < head_dim:
-                    reduce[tidx] = local_qkv[tidx].to(cutlass.Float32) * k_cache[kv_idx, head_id, tidx].to(cutlass.Float32)
-                else:
-                    reduce[tidx] = cutlass.Float32(0.0)
-                cute.arch.barrier()
+                    qk_part = local_qkv[tidx].to(cutlass.Float32) * k_cache[kv_idx, head_id, tidx].to(cutlass.Float32)
 
-                stride = num_threads // 2
-                while stride > 0:
-                    if tidx < stride:
-                        reduce[tidx] = reduce[tidx] + reduce[tidx + stride]
-                    cute.arch.barrier()
-                    stride = stride // 2
-
-                qk = reduce[0] * softmax_scale
+                qk = _block_sum_f32(qk_part, reduce, tidx, num_threads) * softmax_scale
                 if tidx < head_dim:
                     # Online softmax update
                     prev_max = local_max
@@ -238,21 +252,12 @@ if HAS_CUTE:
                     acc_o[tidx] = acc_o[tidx] * scale_old + prob * v_cache[kv_idx, head_id, tidx].to(cutlass.Float32)
 
             if cta_rank == 0:
+                qk_new_part = cutlass.Float32(0.0)
                 if tidx < head_dim:
                     k_new_val = local_qkv[head_dim + tidx].to(cutlass.Float16).to(cutlass.Float32)
-                    reduce[tidx] = local_qkv[tidx].to(cutlass.Float32) * k_new_val
-                else:
-                    reduce[tidx] = cutlass.Float32(0.0)
-                cute.arch.barrier()
+                    qk_new_part = local_qkv[tidx].to(cutlass.Float32) * k_new_val
 
-                stride = num_threads // 2
-                while stride > 0:
-                    if tidx < stride:
-                        reduce[tidx] = reduce[tidx] + reduce[tidx + stride]
-                    cute.arch.barrier()
-                    stride = stride // 2
-
-                qk_new = reduce[0] * softmax_scale
+                qk_new = _block_sum_f32(qk_new_part, reduce, tidx, num_threads) * softmax_scale
                 if tidx < head_dim:
                     prev_max_new = local_max
                     local_max = qk_new if qk_new > local_max else local_max
