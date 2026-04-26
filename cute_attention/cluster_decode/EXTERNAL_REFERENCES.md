@@ -74,14 +74,22 @@ An external correctness/benchmark harness should refuse or skip:
 
 ## Recommended harness shape
 
-Add a separate optional module instead of importing frameworks in normal tests:
+The repository now has a lightweight optional probe module instead of importing
+frameworks in normal tests:
 
 ```text
 cluster_decode/external_reference.py
   probe_framework_imports()
   validate_supported_external_config(...)
-  run_vllm_llama_attention_reference(...)   # optional, skipped if unavailable
-  run_sglang_llama_attention_reference(...) # optional, skipped if unavailable
+  external_reference_status(...)
+```
+
+This is intentionally a gate, not yet a full framework runner. The next step is
+to add framework-specific runners behind this gate:
+
+```text
+  run_vllm_llama_attention_reference(...)   # skipped if unavailable/unsupported
+  run_sglang_llama_attention_reference(...) # skipped if unavailable/unsupported
   benchmark_external_vs_megakernel(...)
 ```
 
