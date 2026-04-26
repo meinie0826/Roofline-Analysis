@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import importlib
+from types import SimpleNamespace
 
 from .common import MegakernelConfig, require_torch
 from .megakernel_reference import rms_norm
@@ -109,6 +110,93 @@ def _apply_sglang_gptj_rope(q, k, cos_rope, sin_rope):
     )
 
 
+class _DenseReqToTokenPool:
+    """Minimal request-to-token map needed by SGLang's torch-native backend."""
+
+    def __init__(self, req_to_token):
+        self.req_to_token = req_to_token
+
+
+class _DenseTokenToKVPool:
+    """Dense KV pool adapter for SGLang RadixAttention decode forward."""
+
+    def __init__(self, k_cache, v_cache, k_new, v_new):
+        import torch
+
+        self.k_buffer = torch.cat([k_cache, torch.zeros_like(k_new)], dim=0).contiguous()
+        self.v_buffer = torch.cat([v_cache, torch.zeros_like(v_new)], dim=0).contiguous()
+
+    def set_kv_buffer(self, layer, loc, cache_k, cache_v):
+        self.k_buffer[loc] = cache_k.reshape(-1, layer.tp_k_head_num, layer.qk_head_dim)
+        self.v_buffer[loc] = cache_v.reshape(-1, layer.tp_v_head_num, layer.v_head_dim)
+
+    def get_key_buffer(self, layer_id: int):
+        return self.k_buffer
+
+    def get_value_buffer(self, layer_id: int):
+        return self.v_buffer
+
+
+def _sglang_radix_decode_forward(q, k_new, v_new, k_cache, v_cache, config):
+    """Run SGLang RadixAttention.forward on a dense single-token decode batch."""
+    import torch
+
+    forward_batch_info = importlib.import_module(
+        "sglang.srt.model_executor.forward_batch_info"
+    )
+    radix_attention = importlib.import_module("sglang.srt.layers.radix_attention")
+    torch_native_backend = importlib.import_module(
+        "sglang.srt.layers.attention.torch_native_backend"
+    )
+
+    ForwardBatch = forward_batch_info.ForwardBatch
+    ForwardMode = forward_batch_info.ForwardMode
+    RadixAttention = radix_attention.RadixAttention
+    TorchNativeAttnBackend = torch_native_backend.TorchNativeAttnBackend
+
+    seq_len = k_cache.shape[0]
+    total_len = seq_len + 1
+    device = q.device
+
+    layer = RadixAttention(
+        num_heads=config.num_heads,
+        head_dim=config.head_dim,
+        scaling=config.resolve_scale(),
+        num_kv_heads=config.num_heads,
+        layer_id=0,
+    )
+    backend = TorchNativeAttnBackend(SimpleNamespace(device=device))
+
+    req_to_token = torch.arange(total_len, device=device, dtype=torch.int64).unsqueeze(0)
+    out_cache_loc = torch.tensor([seq_len], device=device, dtype=torch.int64)
+    seq_lens = torch.tensor([total_len], device=device, dtype=torch.int64)
+
+    forward_batch = ForwardBatch(
+        forward_mode=ForwardMode.DECODE,
+        batch_size=1,
+        input_ids=torch.zeros(1, device=device, dtype=torch.int64),
+        req_pool_indices=torch.zeros(1, device=device, dtype=torch.int64),
+        seq_lens=seq_lens,
+        out_cache_loc=out_cache_loc,
+        seq_lens_sum=total_len,
+        seq_lens_cpu=seq_lens.cpu(),
+        req_to_token_pool=_DenseReqToTokenPool(req_to_token),
+        token_to_kv_pool=_DenseTokenToKVPool(k_cache, v_cache, k_new, v_new),
+        attn_backend=backend,
+        positions=torch.tensor([seq_len], device=device, dtype=torch.int64),
+        num_token_non_padded_cpu=1,
+    )
+
+    out = layer.forward(
+        q.reshape(1, config.hidden_dim),
+        k_new.reshape(1, config.hidden_dim),
+        v_new.reshape(1, config.hidden_dim),
+        forward_batch,
+        save_kv_cache=True,
+    )
+    return out.reshape(config.num_heads, config.head_dim).to(torch.float32)
+
+
 def sglang_megakernel_reference_forward(
     hidden_states,
     w_qkv,
@@ -121,12 +209,12 @@ def sglang_megakernel_reference_forward(
     config: MegakernelConfig | None = None,
     eps: float = 1e-6,
 ):
-    """Reference forward using SGLang RoPE for the supported dense path.
+    """Reference forward using SGLang RoPE and RadixAttention for dense decode.
 
-    This intentionally does not instantiate SGLang's full attention layer yet:
-    that path requires paged-cache/runtime metadata. Instead, SGLang owns the
-    RoPE semantics, while the dense single-token MHA decode math mirrors
-    `megakernel_reference_forward`.
+    This instantiates `sglang.srt.layers.radix_attention.RadixAttention` and
+    runs its `forward` method with a minimal dense `ForwardBatch` adapter. It
+    does not instantiate the full SGLang Llama model layer; packed QKV/RMSNorm
+    and W_o are kept in this harness so weights/layout match the megakernel.
     """
     require_torch()
     config = config or MegakernelConfig()
@@ -137,7 +225,6 @@ def sglang_megakernel_reference_forward(
     hidden_dim = config.hidden_dim
     num_heads = config.num_heads
     head_dim = config.head_dim
-    scale = config.resolve_scale()
 
     h = hidden_states.to(torch.float32)
     w_qkv_f = w_qkv.to(torch.float32)
@@ -154,11 +241,14 @@ def sglang_megakernel_reference_forward(
     k_new = k_rot.to(hidden_states.dtype)
     v_new = v.to(hidden_states.dtype)
 
-    k_f = torch.cat([k_cache.to(torch.float32), k_new.to(torch.float32)], dim=0)
-    v_f = torch.cat([v_cache.to(torch.float32), v_new.to(torch.float32)], dim=0)
-    scores = torch.bmm(q_rot[0].unsqueeze(1), k_f.permute(1, 2, 0)) * scale
-    probs = torch.softmax(scores, dim=-1)
-    attn_out = torch.bmm(probs, v_f.permute(1, 0, 2)).squeeze(1)
+    attn_out = _sglang_radix_decode_forward(
+        q_rot,
+        k_new,
+        v_new,
+        k_cache,
+        v_cache,
+        config,
+    )
 
     scratch_wo = torch.empty(
         (num_heads, hidden_dim),

@@ -49,7 +49,7 @@ The current megakernel supports:
 - no tensor-parallel all-reduce inside the op.
 
 For ClusterFusion's non-SGLang Llama path, GPT-J/interleaved RoPE is a good
-match. For default SGLang/vLLM Llama paths, Neox-style RoPE is the important
+match. For default SGLang Llama paths, Neox-style RoPE is the important
 remaining mismatch.
 
 ## Branches to explicitly reject for now
@@ -82,10 +82,9 @@ cluster_decode/external_reference.py
 ```
 
 `sglang_megakernel_reference_forward(...)` uses SGLang's GPT-J/interleaved RoPE
-implementation, then runs the same dense single-token MHA decode math as
-`megakernel_reference_forward`. It intentionally does not instantiate the full
-SGLang attention layer yet because that path requires paged-cache/runtime
-metadata.
+implementation and instantiates `sglang.srt.layers.radix_attention.RadixAttention`
+with a minimal dense `ForwardBatch` adapter. It intentionally keeps RMSNorm,
+packed QKV, and W_o in this harness so the weights/layout match the megakernel.
 
 The next step is to add full framework runners behind this gate:
 
@@ -94,7 +93,7 @@ The next step is to add full framework runners behind this gate:
   benchmark_external_vs_megakernel(...)
 ```
 
-Core `pytest cluster_decode/tests/` should stay independent of SGLang/vLLM.
+Core `pytest cluster_decode/tests/` should stay independent of SGLang.
 The optional reference checks live in:
 
 ```bash
