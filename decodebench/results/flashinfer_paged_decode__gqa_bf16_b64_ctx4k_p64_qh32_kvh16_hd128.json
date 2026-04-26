@@ -1,0 +1,19 @@
+{
+  "run_id": null,
+  "status": "failed",
+  "timestamp": "2026-04-25T10:37:46.029538+00:00",
+  "python_executable": "ncu",
+  "backend": "flashinfer_paged_decode",
+  "kernel_path": "FlashInfer BatchDecodeWithPagedKVCacheWrapper / XQA",
+  "layer": "kernel",
+  "workload_id": "gqa_bf16_b64_ctx4k_p64_qh32_kvh16_hd128",
+  "attention": "GQA",
+  "kv_dtype": "bf16",
+  "page_size": 64,
+  "batch_size": 64,
+  "context_len": 4096,
+  "returncode": 1,
+  "command": "ncu --target-processes all --csv --page raw --launch-skip 20 --launch-count 32 --log-file /workspace/Roofline-Analysis/decodebench/results/ncu/flashinfer_paged_decode__gqa_bf16_b64_ctx4k_p64_qh32_kvh16_hd128.ncu.csv --section ComputeWorkloadAnalysis /workspace/Roofline-Analysis/.venv/bin/python decodebench/flashinfer_benchmark.py --batch-size 64 --context-len 4096 --num-q-heads 32 --num-kv-heads 16 --head-dim 128 --kv-dtype bf16 --page-size 64 --warmup-steps 20 --repeat 100 --output /workspace/Roofline-Analysis/decodebench/results/flashinfer_paged_decode__gqa_bf16_b64_ctx4k_p64_qh32_kvh16_hd128.json",
+  "output": "Traceback (most recent call last):\n  File \"/workspace/Roofline-Analysis/decodebench/flashinfer_benchmark.py\", line 109, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/flashinfer_benchmark.py\", line 64, in main\n    kernel = FlashInferPagedDecodeKernel(shape)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/flashinfer_kernel.py\", line 72, in __init__\n    self.k_cache, self.v_cache = self._make_kv_cache()\n                                 ^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/Roofline-Analysis/decodebench/flashinfer_kernel.py\", line 85, in _make_kv_cache\n    torch.randn(*cache_shape, dtype=self.kv_dtype, device=self.device),\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 1024.00 MiB. GPU 0 has a total capacity of 178.35 GiB of which 319.12 MiB is free. Process 249494 has 2.75 GiB memory in use. Including non-PyTorch memory, this process has 1.75 GiB memory in use. Of the allocated memory 1.00 GiB is allocated by PyTorch, and 1.50 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)\n",
+  "short_reason": "torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 1024.00 MiB. GPU 0 has a total capacity of 178.35 GiB of which 319.12 MiB is free. Process 249494 has 2.75 GiB memory in use. Including non-PyTorch memory, this process has 1.75 GiB memory in use. Of the allocated memory 1.00 GiB is allocated by PyTorch, and 1.50 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)"
+}

@@ -1,0 +1,27 @@
+==PROF== Connected to process 254339 (/usr/bin/python3.12)
+==PROF== Connected to process 254431 (/usr/bin/nvidia-smi)
+==PROF== Connected to process 254432 (/usr/bin/nvidia-smi)
+==PROF== Connected to process 254433 (/usr/bin/nvidia-smi)
+==PROF== Disconnected from process 254431
+==PROF== Disconnected from process 254432
+==PROF== Disconnected from process 254433
+==PROF== Connected to process 254490 (/usr/bin/nvidia-smi)
+==PROF== Disconnected from process 254490
+==PROF== Connected to process 254493 (/usr/bin/nvidia-smi)
+==PROF== Connected to process 254494 (/usr/bin/nvidia-smi)
+==PROF== Disconnected from process 254493
+==PROF== Disconnected from process 254494
+==PROF== Connected to process 254528 (/usr/bin/nvidia-smi)
+==PROF== Disconnected from process 254528
+==PROF== Connected to process 254537 (/usr/bin/nvidia-smi)
+==PROF== Disconnected from process 254537
+==PROF== Connected to process 254570 (/usr/bin/nvidia-smi)
+==PROF== Disconnected from process 254570
+==PROF== Connected to process 254588 (/usr/bin/nvidia-smi)
+==PROF== Disconnected from process 254588
+==PROF== Connected to process 254606 (/usr/bin/nvidia-smi)
+==PROF== Disconnected from process 254606
+==PROF== Connected to process 254624 (/usr/bin/nvidia-smi)
+==PROF== Disconnected from process 254624
+==PROF== Connected to process 254642 (/usr/bin/nvidia-smi)
+==PROF== Disconnected from process 254642

@@ -1,0 +1,2408 @@
+{
+  "run_id": "20260425T103543Z",
+  "timestamp": "2026-04-25T10:38:07.772473+00:00",
+  "gpu": "NVIDIA B200",
+  "backend": "flashinfer_paged_decode",
+  "kernel_path": "FlashInfer BatchDecodeWithPagedKVCacheWrapper",
+  "layer": "kernel",
+  "workload_id": "gqa_bf16_b64_ctx4k_p64_qh32_kvh4_hd128",
+  "attention": "GQA",
+  "kv_dtype": "bf16",
+  "page_size": 64,
+  "batch_size": 64,
+  "context_len": 4096,
+  "decode_steps": 1,
+  "compare_latency_us": 392.2240138053894,
+  "kernel_latency_avg_us": 15861.705004572868,
+  "kernel_latency_p50_us": 392.2240138053894,
+  "kernel_latency_p95_us": 403.48801016807556,
+  "approx_kv_bytes_read": 536870912,
+  "approx_effective_kv_bandwidth_gb_s": 1368.7864411748649,
+  "peak_allocated_gb": 0.68054528,
+  "selected_backend": "flashinfer_paged_decode",
+  "fallback": false,
+  "fallback_reason": null,
+  "notes": "Kernel-only paged decode benchmark. No model TPS/TPOT. Bandwidth is approximate K/V bytes divided by p50 kernel time.",
+  "ncu_metric_rows": 8736,
+  "ncu_kernel_count": 2,
+  "ncu_tensor_core_metric_names": [
+    "sm__inst_executed_pipe_tensor_subpipe_dmma.avg.pct_of_peak_sustained_active",
+    "sm__inst_executed_pipe_tensor_subpipe_dmma.avg.pct_of_peak_sustained_elapsed",
+    "sm__inst_executed_pipe_tensor_subpipe_hmma.avg.pct_of_peak_sustained_active",
+    "sm__inst_executed_pipe_tensor_subpipe_hmma.avg.pct_of_peak_sustained_elapsed",
+    "sm__inst_executed_pipe_tensor_subpipe_imma.avg.pct_of_peak_sustained_active",
+    "sm__inst_executed_pipe_tensor_subpipe_imma.avg.pct_of_peak_sustained_elapsed",
+    "sm__mem_tensor_cycles_active.avg.pct_of_peak_sustained_active",
+    "sm__mem_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed",
+    "sm__mem_tensor_cycles_active.max.pct_of_peak_sustained_active",
+    "sm__mem_tensor_cycles_active.max.pct_of_peak_sustained_elapsed",
+    "sm__mem_tensor_cycles_active.min.pct_of_peak_sustained_active",
+    "sm__mem_tensor_cycles_active.min.pct_of_peak_sustained_elapsed",
+    "sm__mem_tensor_cycles_active.sum.pct_of_peak_sustained_active",
+    "sm__mem_tensor_cycles_active.sum.pct_of_peak_sustained_elapsed",
+    "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_active",
+    "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed",
+    "sm__pipe_tensor_cycles_active.max.pct_of_peak_sustained_active",
+    "sm__pipe_tensor_cycles_active.max.pct_of_peak_sustained_elapsed",
+    "sm__pipe_tensor_cycles_active.min.pct_of_peak_sustained_active",
+    "sm__pipe_tensor_cycles_active.min.pct_of_peak_sustained_elapsed",
+    "sm__pipe_tensor_cycles_active.sum.pct_of_peak_sustained_active",
+    "sm__pipe_tensor_cycles_active.sum.pct_of_peak_sustained_elapsed",
+    "sm__pipe_tensor_subpipe_dmma_cycles_active.avg.pct_of_peak_sustained_active",
+    "sm__pipe_tensor_subpipe_dmma_cycles_active.avg.pct_of_peak_sustained_elapsed",
+    "sm__pipe_tensor_subpipe_hmma_cycles_active.avg.pct_of_peak_sustained_active",
+    "sm__pipe_tensor_subpipe_hmma_cycles_active.avg.pct_of_peak_sustained_elapsed",
+    "sm__pipe_tensor_subpipe_imma_cycles_active.avg.pct_of_peak_sustained_active",
+    "sm__pipe_tensor_subpipe_imma_cycles_active.avg.pct_of_peak_sustained_elapsed"
+  ],
+  "ncu_tensor_core_util_pct": 0.0,
+  "ncu_tensor_core_metric": "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_active",
+  "ncu_tensor_core_summary": {
+    "sm__inst_executed_pipe_tensor_subpipe_dmma.avg.pct_of_peak_sustained_active": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__inst_executed_pipe_tensor_subpipe_dmma.avg.pct_of_peak_sustained_elapsed": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__inst_executed_pipe_tensor_subpipe_hmma.avg.pct_of_peak_sustained_active": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__inst_executed_pipe_tensor_subpipe_hmma.avg.pct_of_peak_sustained_elapsed": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__inst_executed_pipe_tensor_subpipe_imma.avg.pct_of_peak_sustained_active": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__inst_executed_pipe_tensor_subpipe_imma.avg.pct_of_peak_sustained_elapsed": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__mem_tensor_cycles_active.avg.pct_of_peak_sustained_active": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__mem_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__mem_tensor_cycles_active.max.pct_of_peak_sustained_active": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__mem_tensor_cycles_active.max.pct_of_peak_sustained_elapsed": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__mem_tensor_cycles_active.min.pct_of_peak_sustained_active": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__mem_tensor_cycles_active.min.pct_of_peak_sustained_elapsed": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__mem_tensor_cycles_active.sum.pct_of_peak_sustained_active": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__mem_tensor_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_active": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__pipe_tensor_cycles_active.max.pct_of_peak_sustained_active": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__pipe_tensor_cycles_active.max.pct_of_peak_sustained_elapsed": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__pipe_tensor_cycles_active.min.pct_of_peak_sustained_active": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__pipe_tensor_cycles_active.min.pct_of_peak_sustained_elapsed": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__pipe_tensor_cycles_active.sum.pct_of_peak_sustained_active": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__pipe_tensor_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__pipe_tensor_subpipe_dmma_cycles_active.avg.pct_of_peak_sustained_active": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__pipe_tensor_subpipe_dmma_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__pipe_tensor_subpipe_hmma_cycles_active.avg.pct_of_peak_sustained_active": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__pipe_tensor_subpipe_hmma_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__pipe_tensor_subpipe_imma_cycles_active.avg.pct_of_peak_sustained_active": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    },
+    "sm__pipe_tensor_subpipe_imma_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+      "max_pct": 0.0,
+      "avg_pct": 0.0,
+      "time_weighted_pct": 0.0
+    }
+  },
+  "ncu_tensor_core_max_kernel_util_pct": 0.0,
+  "ncu_tensor_core_max_kernel_name": "void PersistentVariableLengthMergeStatesKernel<8, 16, 8, 4, __nv_bfloat16, __nv_bfloat16, int>(T5 *, float *, T7 *, T6 *, float *, unsigned int, unsigned int *, unsigned int)",
+  "ncu_tensor_core_max_kernel_metric": "sm__inst_executed_pipe_tensor_subpipe_dmma.avg.pct_of_peak_sustained_active",
+  "ncu_kernels": [
+    {
+      "kernel_name": "void PersistentVariableLengthMergeStatesKernel<8, 16, 8, 4, __nv_bfloat16, __nv_bfloat16, int>(T5 *, float *, T7 *, T6 *, float *, unsigned int, unsigned int *, unsigned int)",
+      "metrics": {
+        "gpu__time_duration.sum": {
+          "value": 15296.0,
+          "unit": ""
+        },
+        "launch__barrier_count": {
+          "value": 1.0,
+          "unit": ""
+        },
+        "launch__block_dim_x": {
+          "value": 16.0,
+          "unit": ""
+        },
+        "launch__block_dim_y": {
+          "value": 8.0,
+          "unit": ""
+        },
+        "launch__block_dim_z": {
+          "value": 1.0,
+          "unit": ""
+        },
+        "launch__block_size": {
+          "value": 128.0,
+          "unit": ""
+        },
+        "launch__cluster_dim_x": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__cluster_dim_y": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__cluster_dim_z": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__cluster_max_active": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__cluster_max_potential_size": {
+          "value": 8.0,
+          "unit": ""
+        },
+        "launch__cluster_scheduling_policy": {
+          "value": "PolicySpread",
+          "unit": ""
+        },
+        "launch__cluster_size": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__context_id": {
+          "value": 1.0,
+          "unit": ""
+        },
+        "launch__device_id": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__execution_model": {
+          "value": "SIMT",
+          "unit": ""
+        },
+        "launch__func_cache_config": {
+          "value": "CachePreferNone",
+          "unit": ""
+        },
+        "launch__function_pcs": {
+          "value": 1.0,
+          "unit": ""
+        },
+        "launch__grid_dim_x": {
+          "value": 1776.0,
+          "unit": ""
+        },
+        "launch__grid_dim_y": {
+          "value": 1.0,
+          "unit": ""
+        },
+        "launch__grid_dim_z": {
+          "value": 1.0,
+          "unit": ""
+        },
+        "launch__grid_size": {
+          "value": 1776.0,
+          "unit": ""
+        },
+        "launch__occupancy_cluster_gpu_pct": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "launch__occupancy_cluster_pct": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "launch__occupancy_limit_barriers": {
+          "value": 32.0,
+          "unit": ""
+        },
+        "launch__occupancy_limit_blocks": {
+          "value": 32.0,
+          "unit": ""
+        },
+        "launch__occupancy_limit_registers": {
+          "value": 12.0,
+          "unit": ""
+        },
+        "launch__occupancy_limit_shared_mem": {
+          "value": 13.0,
+          "unit": ""
+        },
+        "launch__occupancy_limit_warps": {
+          "value": 16.0,
+          "unit": ""
+        },
+        "launch__occupancy_per_barrier_count": {
+          "value": 828.0,
+          "unit": ""
+        },
+        "launch__occupancy_per_block_size": {
+          "value": 2445.0,
+          "unit": ""
+        },
+        "launch__occupancy_per_cluster_size": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__occupancy_per_register_count": {
+          "value": 5396.0,
+          "unit": ""
+        },
+        "launch__occupancy_per_shared_mem_size": {
+          "value": 4076.0,
+          "unit": ""
+        },
+        "launch__persisting_l2_cache_size": {
+          "value": 24870912.0,
+          "unit": ""
+        },
+        "launch__preferred_cluster_dim_x": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__preferred_cluster_dim_y": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__preferred_cluster_dim_z": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__preferred_cluster_size": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__registers_per_thread": {
+          "value": 40.0,
+          "unit": ""
+        },
+        "launch__registers_per_thread_allocated": {
+          "value": 40.0,
+          "unit": ""
+        },
+        "launch__shared_mem_config_size": {
+          "value": 135168.0,
+          "unit": ""
+        },
+        "launch__shared_mem_per_block": {
+          "value": 9728.0,
+          "unit": ""
+        },
+        "launch__shared_mem_per_block_allocated": {
+          "value": 9728.0,
+          "unit": ""
+        },
+        "launch__shared_mem_per_block_driver": {
+          "value": 1024.0,
+          "unit": ""
+        },
+        "launch__shared_mem_per_block_dynamic": {
+          "value": 8704.0,
+          "unit": ""
+        },
+        "launch__shared_mem_per_block_static": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__sm_count": {
+          "value": 148.0,
+          "unit": ""
+        },
+        "launch__stack_size": {
+          "value": 1024.0,
+          "unit": ""
+        },
+        "launch__stream_id": {
+          "value": 7.0,
+          "unit": ""
+        },
+        "launch__thread_count": {
+          "value": 227328.0,
+          "unit": ""
+        },
+        "launch__tpc_count": {
+          "value": 74.0,
+          "unit": ""
+        },
+        "launch__tpc_enabled": {
+          "value": "all",
+          "unit": ""
+        },
+        "launch__user_grid_dim_x": {
+          "value": 1776.0,
+          "unit": ""
+        },
+        "launch__user_grid_dim_y": {
+          "value": 1.0,
+          "unit": ""
+        },
+        "launch__user_grid_dim_z": {
+          "value": 1.0,
+          "unit": ""
+        },
+        "launch__user_grid_size": {
+          "value": 1776.0,
+          "unit": ""
+        },
+        "launch__uses_blocks_as_clusters": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__uses_cdp": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__uses_green_context": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__uses_mps": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__uses_vgpu": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__waves_per_multiprocessor": {
+          "value": 1.0,
+          "unit": ""
+        },
+        "profiler__perfworks_session_reuse": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_accessible.avg": {
+          "value": 711154410.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_accessible.max": {
+          "value": 711154410.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_accessible.min": {
+          "value": 711154410.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_accessible.sum": {
+          "value": 7822698510.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_backed_up.avg": {
+          "value": 711154410.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_backed_up.max": {
+          "value": 711154410.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_backed_up.min": {
+          "value": 711154410.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_backed_up.sum": {
+          "value": 7822698510.0,
+          "unit": ""
+        },
+        "profiler__replayer_passes": {
+          "value": 11.0,
+          "unit": ""
+        },
+        "profiler__replayer_passes_type_warmup": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "sm__inst_executed.avg.per_cycle_active": {
+          "value": 2.91,
+          "unit": ""
+        },
+        "sm__inst_executed.avg.per_cycle_elapsed": {
+          "value": 1.68,
+          "unit": ""
+        },
+        "sm__inst_executed.max.per_cycle_active": {
+          "value": 3.14,
+          "unit": ""
+        },
+        "sm__inst_executed.max.per_cycle_elapsed": {
+          "value": 1.82,
+          "unit": ""
+        },
+        "sm__inst_executed.min.per_cycle_active": {
+          "value": 2.74,
+          "unit": ""
+        },
+        "sm__inst_executed.min.per_cycle_elapsed": {
+          "value": 1.58,
+          "unit": ""
+        },
+        "sm__inst_executed.sum.per_cycle_active": {
+          "value": 430.08,
+          "unit": ""
+        },
+        "sm__inst_executed.sum.per_cycle_elapsed": {
+          "value": 248.89,
+          "unit": ""
+        },
+        "sm__inst_executed_pipe_adu.avg.pct_of_peak_sustained_active": {
+          "value": 15.57,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_adu.avg.pct_of_peak_sustained_elapsed": {
+          "value": 9.01,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_adu.max.pct_of_peak_sustained_active": {
+          "value": 16.55,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_adu.max.pct_of_peak_sustained_elapsed": {
+          "value": 9.58,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_adu.min.pct_of_peak_sustained_active": {
+          "value": 14.85,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_adu.min.pct_of_peak_sustained_elapsed": {
+          "value": 8.59,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_adu.sum.pct_of_peak_sustained_active": {
+          "value": 15.57,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_adu.sum.pct_of_peak_sustained_elapsed": {
+          "value": 9.01,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.avg.pct_of_peak_sustained_active": {
+          "value": 51.73,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.avg.pct_of_peak_sustained_elapsed": {
+          "value": 29.93,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.max.pct_of_peak_sustained_active": {
+          "value": 59.47,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.max.pct_of_peak_sustained_elapsed": {
+          "value": 34.41,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.min.pct_of_peak_sustained_active": {
+          "value": 48.73,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.min.pct_of_peak_sustained_elapsed": {
+          "value": 28.2,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.sum.pct_of_peak_sustained_active": {
+          "value": 51.73,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.sum.pct_of_peak_sustained_elapsed": {
+          "value": 29.93,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.avg.pct_of_peak_sustained_active": {
+          "value": 1.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.58,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.max.pct_of_peak_sustained_active": {
+          "value": 1.13,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.66,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.min.pct_of_peak_sustained_active": {
+          "value": 0.94,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.55,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.sum.pct_of_peak_sustained_active": {
+          "value": 1.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.58,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.avg.pct_of_peak_sustained_active": {
+          "value": 28.87,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.avg.pct_of_peak_sustained_elapsed": {
+          "value": 16.71,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.max.pct_of_peak_sustained_active": {
+          "value": 33.38,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.max.pct_of_peak_sustained_elapsed": {
+          "value": 19.32,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.min.pct_of_peak_sustained_active": {
+          "value": 27.12,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.min.pct_of_peak_sustained_elapsed": {
+          "value": 15.69,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.sum.pct_of_peak_sustained_active": {
+          "value": 28.87,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.sum.pct_of_peak_sustained_elapsed": {
+          "value": 16.71,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma_type_fp16.avg.pct_of_peak_sustained_active": {
+          "value": 0.56,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma_type_fp16.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.32,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.avg.pct_of_peak_sustained_active": {
+          "value": 20.24,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.avg.pct_of_peak_sustained_elapsed": {
+          "value": 11.71,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.max.pct_of_peak_sustained_active": {
+          "value": 21.81,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.max.pct_of_peak_sustained_elapsed": {
+          "value": 12.62,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.min.pct_of_peak_sustained_active": {
+          "value": 19.1,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.min.pct_of_peak_sustained_elapsed": {
+          "value": 11.05,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.sum.pct_of_peak_sustained_active": {
+          "value": 20.24,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.sum.pct_of_peak_sustained_elapsed": {
+          "value": 11.71,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tensor_subpipe_dmma.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tensor_subpipe_dmma.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tensor_subpipe_hmma.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tensor_subpipe_hmma.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tensor_subpipe_imma.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tensor_subpipe_imma.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.avg.pct_of_peak_sustained_active": {
+          "value": 5.91,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.avg.pct_of_peak_sustained_elapsed": {
+          "value": 3.42,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.max.pct_of_peak_sustained_active": {
+          "value": 6.35,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.max.pct_of_peak_sustained_elapsed": {
+          "value": 3.67,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.min.pct_of_peak_sustained_active": {
+          "value": 5.6,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.min.pct_of_peak_sustained_elapsed": {
+          "value": 3.24,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.sum.pct_of_peak_sustained_active": {
+          "value": 5.91,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.sum.pct_of_peak_sustained_elapsed": {
+          "value": 3.42,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.avg.pct_of_peak_sustained_active": {
+          "value": 25.79,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.avg.pct_of_peak_sustained_elapsed": {
+          "value": 14.92,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.max.pct_of_peak_sustained_active": {
+          "value": 27.95,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.max.pct_of_peak_sustained_elapsed": {
+          "value": 16.18,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.min.pct_of_peak_sustained_active": {
+          "value": 24.22,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.min.pct_of_peak_sustained_elapsed": {
+          "value": 14.02,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.sum.pct_of_peak_sustained_active": {
+          "value": 25.79,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.sum.pct_of_peak_sustained_elapsed": {
+          "value": 14.92,
+          "unit": "%"
+        },
+        "sm__inst_issued.avg.pct_of_peak_sustained_elapsed": {
+          "value": 42.04,
+          "unit": "%"
+        },
+        "sm__inst_issued.avg.per_cycle_active": {
+          "value": 2.91,
+          "unit": ""
+        },
+        "sm__inst_issued.max.pct_of_peak_sustained_elapsed": {
+          "value": 45.4,
+          "unit": "%"
+        },
+        "sm__inst_issued.max.per_cycle_active": {
+          "value": 3.14,
+          "unit": ""
+        },
+        "sm__inst_issued.min.pct_of_peak_sustained_elapsed": {
+          "value": 39.62,
+          "unit": "%"
+        },
+        "sm__inst_issued.min.per_cycle_active": {
+          "value": 2.74,
+          "unit": ""
+        },
+        "sm__inst_issued.sum.pct_of_peak_sustained_elapsed": {
+          "value": 42.04,
+          "unit": "%"
+        },
+        "sm__inst_issued.sum.per_cycle_active": {
+          "value": 430.08,
+          "unit": ""
+        },
+        "sm__instruction_throughput.avg.pct_of_peak_sustained_elapsed": {
+          "value": 42.04,
+          "unit": "%"
+        },
+        "sm__instruction_throughput.max.pct_of_peak_sustained_elapsed": {
+          "value": 45.4,
+          "unit": "%"
+        },
+        "sm__instruction_throughput.min.pct_of_peak_sustained_elapsed": {
+          "value": 39.62,
+          "unit": "%"
+        },
+        "sm__instruction_throughput.sum.pct_of_peak_sustained_elapsed": {
+          "value": 42.04,
+          "unit": "%"
+        },
+        "sm__maximum_warps_avg_per_active_cycle": {
+          "value": 48.0,
+          "unit": ""
+        },
+        "sm__maximum_warps_per_active_cycle_pct": {
+          "value": 75.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 51.73,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 29.93,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.max.pct_of_peak_sustained_active": {
+          "value": 59.47,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.max.pct_of_peak_sustained_elapsed": {
+          "value": 34.41,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.min.pct_of_peak_sustained_active": {
+          "value": 48.73,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.min.pct_of_peak_sustained_elapsed": {
+          "value": 28.2,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.sum.pct_of_peak_sustained_active": {
+          "value": 51.73,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+          "value": 29.93,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 29.61,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 17.13,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.max.pct_of_peak_sustained_active": {
+          "value": 32.09,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.max.pct_of_peak_sustained_elapsed": {
+          "value": 18.57,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.min.pct_of_peak_sustained_active": {
+          "value": 27.78,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.min.pct_of_peak_sustained_elapsed": {
+          "value": 16.08,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.sum.pct_of_peak_sustained_active": {
+          "value": 29.61,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+          "value": 17.13,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_shared_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_shared_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_subpipe_dmma_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_subpipe_dmma_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_subpipe_hmma_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_subpipe_hmma_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_subpipe_imma_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_subpipe_imma_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "smsp__maximum_warps_avg_per_active_cycle": {
+          "value": 12.0,
+          "unit": ""
+        }
+      }
+    },
+    {
+      "kernel_name": "void BatchDecodeWithPagedKVCacheKernel<0, 2, 1, 8, 16, 8, 1, DefaultAttention<0, 0, 0, 0>, Params>(T9)",
+      "metrics": {
+        "gpu__time_duration.sum": {
+          "value": 556320.0,
+          "unit": ""
+        },
+        "launch__barrier_count": {
+          "value": 1.0,
+          "unit": ""
+        },
+        "launch__block_dim_x": {
+          "value": 16.0,
+          "unit": ""
+        },
+        "launch__block_dim_y": {
+          "value": 8.0,
+          "unit": ""
+        },
+        "launch__block_dim_z": {
+          "value": 1.0,
+          "unit": ""
+        },
+        "launch__block_size": {
+          "value": 128.0,
+          "unit": ""
+        },
+        "launch__cluster_dim_x": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__cluster_dim_y": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__cluster_dim_z": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__cluster_max_active": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__cluster_max_potential_size": {
+          "value": 8.0,
+          "unit": ""
+        },
+        "launch__cluster_scheduling_policy": {
+          "value": "PolicySpread",
+          "unit": ""
+        },
+        "launch__cluster_size": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__context_id": {
+          "value": 1.0,
+          "unit": ""
+        },
+        "launch__device_id": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__execution_model": {
+          "value": "SIMT",
+          "unit": ""
+        },
+        "launch__func_cache_config": {
+          "value": "CachePreferNone",
+          "unit": ""
+        },
+        "launch__function_pcs": {
+          "value": 1.0,
+          "unit": ""
+        },
+        "launch__grid_dim_x": {
+          "value": 256.0,
+          "unit": ""
+        },
+        "launch__grid_dim_y": {
+          "value": 4.0,
+          "unit": ""
+        },
+        "launch__grid_dim_z": {
+          "value": 1.0,
+          "unit": ""
+        },
+        "launch__grid_size": {
+          "value": 1024.0,
+          "unit": ""
+        },
+        "launch__occupancy_cluster_gpu_pct": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "launch__occupancy_cluster_pct": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "launch__occupancy_limit_barriers": {
+          "value": 32.0,
+          "unit": ""
+        },
+        "launch__occupancy_limit_blocks": {
+          "value": 32.0,
+          "unit": ""
+        },
+        "launch__occupancy_limit_registers": {
+          "value": 8.0,
+          "unit": ""
+        },
+        "launch__occupancy_limit_shared_mem": {
+          "value": 13.0,
+          "unit": ""
+        },
+        "launch__occupancy_limit_warps": {
+          "value": 16.0,
+          "unit": ""
+        },
+        "launch__occupancy_per_barrier_count": {
+          "value": 720.0,
+          "unit": ""
+        },
+        "launch__occupancy_per_block_size": {
+          "value": 1677.0,
+          "unit": ""
+        },
+        "launch__occupancy_per_cluster_size": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__occupancy_per_register_count": {
+          "value": 5396.0,
+          "unit": ""
+        },
+        "launch__occupancy_per_shared_mem_size": {
+          "value": 3656.0,
+          "unit": ""
+        },
+        "launch__persisting_l2_cache_size": {
+          "value": 24870912.0,
+          "unit": ""
+        },
+        "launch__preferred_cluster_dim_x": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__preferred_cluster_dim_y": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__preferred_cluster_dim_z": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__preferred_cluster_size": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__registers_per_thread": {
+          "value": 64.0,
+          "unit": ""
+        },
+        "launch__registers_per_thread_allocated": {
+          "value": 64.0,
+          "unit": ""
+        },
+        "launch__shared_mem_config_size": {
+          "value": 135168.0,
+          "unit": ""
+        },
+        "launch__shared_mem_per_block": {
+          "value": 10240.0,
+          "unit": ""
+        },
+        "launch__shared_mem_per_block_allocated": {
+          "value": 10240.0,
+          "unit": ""
+        },
+        "launch__shared_mem_per_block_driver": {
+          "value": 1024.0,
+          "unit": ""
+        },
+        "launch__shared_mem_per_block_dynamic": {
+          "value": 9216.0,
+          "unit": ""
+        },
+        "launch__shared_mem_per_block_static": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__sm_count": {
+          "value": 148.0,
+          "unit": ""
+        },
+        "launch__stack_size": {
+          "value": 1024.0,
+          "unit": ""
+        },
+        "launch__stream_id": {
+          "value": 7.0,
+          "unit": ""
+        },
+        "launch__thread_count": {
+          "value": 131072.0,
+          "unit": ""
+        },
+        "launch__tpc_count": {
+          "value": 74.0,
+          "unit": ""
+        },
+        "launch__tpc_enabled": {
+          "value": "all",
+          "unit": ""
+        },
+        "launch__user_grid_dim_x": {
+          "value": 256.0,
+          "unit": ""
+        },
+        "launch__user_grid_dim_y": {
+          "value": 4.0,
+          "unit": ""
+        },
+        "launch__user_grid_dim_z": {
+          "value": 1.0,
+          "unit": ""
+        },
+        "launch__user_grid_size": {
+          "value": 1024.0,
+          "unit": ""
+        },
+        "launch__uses_blocks_as_clusters": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__uses_cdp": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__uses_green_context": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__uses_mps": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__uses_vgpu": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "launch__waves_per_multiprocessor": {
+          "value": 0.86,
+          "unit": ""
+        },
+        "profiler__perfworks_session_reuse": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_accessible.avg": {
+          "value": 711154410.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_accessible.max": {
+          "value": 711154410.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_accessible.min": {
+          "value": 711154410.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_accessible.sum": {
+          "value": 7822698510.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_backed_up.avg": {
+          "value": 711154410.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_backed_up.max": {
+          "value": 711154410.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_backed_up.min": {
+          "value": 711154410.0,
+          "unit": ""
+        },
+        "profiler__replayer_bytes_mem_backed_up.sum": {
+          "value": 7822698510.0,
+          "unit": ""
+        },
+        "profiler__replayer_passes": {
+          "value": 11.0,
+          "unit": ""
+        },
+        "profiler__replayer_passes_type_warmup": {
+          "value": 0.0,
+          "unit": ""
+        },
+        "sm__inst_executed.avg.per_cycle_active": {
+          "value": 3.27,
+          "unit": ""
+        },
+        "sm__inst_executed.avg.per_cycle_elapsed": {
+          "value": 3.02,
+          "unit": ""
+        },
+        "sm__inst_executed.max.per_cycle_active": {
+          "value": 3.31,
+          "unit": ""
+        },
+        "sm__inst_executed.max.per_cycle_elapsed": {
+          "value": 3.05,
+          "unit": ""
+        },
+        "sm__inst_executed.min.per_cycle_active": {
+          "value": 2.84,
+          "unit": ""
+        },
+        "sm__inst_executed.min.per_cycle_elapsed": {
+          "value": 2.62,
+          "unit": ""
+        },
+        "sm__inst_executed.sum.per_cycle_active": {
+          "value": 484.29,
+          "unit": ""
+        },
+        "sm__inst_executed.sum.per_cycle_elapsed": {
+          "value": 446.53,
+          "unit": ""
+        },
+        "sm__inst_executed_pipe_adu.avg.pct_of_peak_sustained_active": {
+          "value": 6.18,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_adu.avg.pct_of_peak_sustained_elapsed": {
+          "value": 5.7,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_adu.max.pct_of_peak_sustained_active": {
+          "value": 6.26,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_adu.max.pct_of_peak_sustained_elapsed": {
+          "value": 5.77,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_adu.min.pct_of_peak_sustained_active": {
+          "value": 5.36,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_adu.min.pct_of_peak_sustained_elapsed": {
+          "value": 4.94,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_adu.sum.pct_of_peak_sustained_active": {
+          "value": 6.18,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_adu.sum.pct_of_peak_sustained_elapsed": {
+          "value": 5.7,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.avg.pct_of_peak_sustained_active": {
+          "value": 64.83,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.avg.pct_of_peak_sustained_elapsed": {
+          "value": 59.77,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.max.pct_of_peak_sustained_active": {
+          "value": 65.59,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.max.pct_of_peak_sustained_elapsed": {
+          "value": 60.47,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.min.pct_of_peak_sustained_active": {
+          "value": 56.22,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.min.pct_of_peak_sustained_elapsed": {
+          "value": 51.84,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.sum.pct_of_peak_sustained_active": {
+          "value": 64.83,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_alu.sum.pct_of_peak_sustained_elapsed": {
+          "value": 59.77,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.avg.pct_of_peak_sustained_active": {
+          "value": 0.02,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.02,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.max.pct_of_peak_sustained_active": {
+          "value": 0.02,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.02,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.min.pct_of_peak_sustained_active": {
+          "value": 0.02,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.02,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.sum.pct_of_peak_sustained_active": {
+          "value": 0.02,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_cbu.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.02,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.avg.pct_of_peak_sustained_active": {
+          "value": 36.56,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.avg.pct_of_peak_sustained_elapsed": {
+          "value": 33.71,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.max.pct_of_peak_sustained_active": {
+          "value": 36.99,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.max.pct_of_peak_sustained_elapsed": {
+          "value": 34.11,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.min.pct_of_peak_sustained_active": {
+          "value": 31.71,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.min.pct_of_peak_sustained_elapsed": {
+          "value": 29.23,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.sum.pct_of_peak_sustained_active": {
+          "value": 36.56,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma.sum.pct_of_peak_sustained_elapsed": {
+          "value": 33.71,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma_type_fp16.avg.pct_of_peak_sustained_active": {
+          "value": 0.02,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fma_type_fp16.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.02,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.max.pct_of_peak_sustained_active": {
+          "value": 0.01,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_fp64.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.avg.pct_of_peak_sustained_active": {
+          "value": 36.01,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.avg.pct_of_peak_sustained_elapsed": {
+          "value": 33.2,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.max.pct_of_peak_sustained_active": {
+          "value": 36.43,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.max.pct_of_peak_sustained_elapsed": {
+          "value": 33.59,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.min.pct_of_peak_sustained_active": {
+          "value": 31.23,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.min.pct_of_peak_sustained_elapsed": {
+          "value": 28.79,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.sum.pct_of_peak_sustained_active": {
+          "value": 36.01,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_lsu.sum.pct_of_peak_sustained_elapsed": {
+          "value": 33.2,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tc.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tensor_subpipe_dmma.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tensor_subpipe_dmma.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tensor_subpipe_hmma.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tensor_subpipe_hmma.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tensor_subpipe_imma.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tensor_subpipe_imma.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tex.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tma.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_tmem.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.avg.pct_of_peak_sustained_active": {
+          "value": 1.64,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.avg.pct_of_peak_sustained_elapsed": {
+          "value": 1.51,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.max.pct_of_peak_sustained_active": {
+          "value": 1.66,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.max.pct_of_peak_sustained_elapsed": {
+          "value": 1.53,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.min.pct_of_peak_sustained_active": {
+          "value": 1.42,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.min.pct_of_peak_sustained_elapsed": {
+          "value": 1.31,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.sum.pct_of_peak_sustained_active": {
+          "value": 1.64,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_uniform.sum.pct_of_peak_sustained_elapsed": {
+          "value": 1.51,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_workid.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.avg.pct_of_peak_sustained_active": {
+          "value": 11.6,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.avg.pct_of_peak_sustained_elapsed": {
+          "value": 10.69,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.max.pct_of_peak_sustained_active": {
+          "value": 11.73,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.max.pct_of_peak_sustained_elapsed": {
+          "value": 10.82,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.min.pct_of_peak_sustained_active": {
+          "value": 10.06,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.min.pct_of_peak_sustained_elapsed": {
+          "value": 9.27,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.sum.pct_of_peak_sustained_active": {
+          "value": 11.6,
+          "unit": "%"
+        },
+        "sm__inst_executed_pipe_xu.sum.pct_of_peak_sustained_elapsed": {
+          "value": 10.69,
+          "unit": "%"
+        },
+        "sm__inst_issued.avg.pct_of_peak_sustained_elapsed": {
+          "value": 75.43,
+          "unit": "%"
+        },
+        "sm__inst_issued.avg.per_cycle_active": {
+          "value": 3.27,
+          "unit": ""
+        },
+        "sm__inst_issued.max.pct_of_peak_sustained_elapsed": {
+          "value": 76.31,
+          "unit": "%"
+        },
+        "sm__inst_issued.max.per_cycle_active": {
+          "value": 3.31,
+          "unit": ""
+        },
+        "sm__inst_issued.min.pct_of_peak_sustained_elapsed": {
+          "value": 65.41,
+          "unit": "%"
+        },
+        "sm__inst_issued.min.per_cycle_active": {
+          "value": 2.84,
+          "unit": ""
+        },
+        "sm__inst_issued.sum.pct_of_peak_sustained_elapsed": {
+          "value": 75.43,
+          "unit": "%"
+        },
+        "sm__inst_issued.sum.per_cycle_active": {
+          "value": 484.29,
+          "unit": ""
+        },
+        "sm__instruction_throughput.avg.pct_of_peak_sustained_elapsed": {
+          "value": 75.43,
+          "unit": "%"
+        },
+        "sm__instruction_throughput.max.pct_of_peak_sustained_elapsed": {
+          "value": 76.31,
+          "unit": "%"
+        },
+        "sm__instruction_throughput.min.pct_of_peak_sustained_elapsed": {
+          "value": 65.41,
+          "unit": "%"
+        },
+        "sm__instruction_throughput.sum.pct_of_peak_sustained_elapsed": {
+          "value": 75.43,
+          "unit": "%"
+        },
+        "sm__maximum_warps_avg_per_active_cycle": {
+          "value": 32.0,
+          "unit": ""
+        },
+        "sm__maximum_warps_per_active_cycle_pct": {
+          "value": 50.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__mem_tensor_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 64.83,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 59.77,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.max.pct_of_peak_sustained_active": {
+          "value": 65.59,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.max.pct_of_peak_sustained_elapsed": {
+          "value": 60.47,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.min.pct_of_peak_sustained_active": {
+          "value": 56.22,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.min.pct_of_peak_sustained_elapsed": {
+          "value": 51.84,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.sum.pct_of_peak_sustained_active": {
+          "value": 64.83,
+          "unit": "%"
+        },
+        "sm__pipe_alu_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+          "value": 59.77,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 36.63,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 33.77,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.max.pct_of_peak_sustained_active": {
+          "value": 37.07,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.max.pct_of_peak_sustained_elapsed": {
+          "value": 34.18,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.min.pct_of_peak_sustained_active": {
+          "value": 31.76,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.min.pct_of_peak_sustained_elapsed": {
+          "value": 29.28,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.sum.pct_of_peak_sustained_active": {
+          "value": 36.63,
+          "unit": "%"
+        },
+        "sm__pipe_fma_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+          "value": 33.77,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.max.pct_of_peak_sustained_active": {
+          "value": 0.01,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_fp64_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_shared_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_shared_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tc_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_subpipe_dmma_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_subpipe_dmma_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_subpipe_hmma_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_subpipe_hmma_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_subpipe_imma_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_subpipe_imma_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.avg.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.max.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.max.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.min.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.min.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.sum.pct_of_peak_sustained_active": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "sm__pipe_tma_cycles_active.sum.pct_of_peak_sustained_elapsed": {
+          "value": 0.0,
+          "unit": "%"
+        },
+        "smsp__maximum_warps_avg_per_active_cycle": {
+          "value": 8.0,
+          "unit": ""
+        }
+      }
+    }
+  ],
+  "ncu_profiled": true,
+  "ncu_csv": "/workspace/Roofline-Analysis/decodebench/results/ncu/flashinfer_paged_decode__gqa_bf16_b64_ctx4k_p64_qh32_kvh4_hd128.ncu.csv",
+  "ncu_command": "ncu --target-processes all --csv --page raw --launch-skip 20 --launch-count 32 --log-file /workspace/Roofline-Analysis/decodebench/results/ncu/flashinfer_paged_decode__gqa_bf16_b64_ctx4k_p64_qh32_kvh4_hd128.ncu.csv --section ComputeWorkloadAnalysis /workspace/Roofline-Analysis/.venv/bin/python decodebench/flashinfer_benchmark.py --batch-size 64 --context-len 4096 --num-q-heads 32 --num-kv-heads 4 --head-dim 128 --kv-dtype bf16 --page-size 64 --warmup-steps 20 --repeat 100 --output /workspace/Roofline-Analysis/decodebench/results/flashinfer_paged_decode__gqa_bf16_b64_ctx4k_p64_qh32_kvh4_hd128.json",
+  "ncu_metrics_requested": [],
+  "ncu_metric_warnings": [
+    "Using NCU sections without explicit metrics; Tensor Core fields will be inferred from section CSV rows."
+  ]
+}
