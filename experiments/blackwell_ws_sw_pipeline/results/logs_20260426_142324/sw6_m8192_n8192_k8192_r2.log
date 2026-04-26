@@ -1,0 +1,18 @@
+===================================================================
+Running Blackwell fp16 GEMM example 1 with:
+  mnk:       [8192, 8192, 8192]
+  tolerance: 0.1
+  benchmark: True
+  warmup:    10
+  iters:     100
+  skip_ref:  True
+===================================================================
+
+=== Performance Results ===
+  Avg latency: 0.652659 ms
+  Performance: 1684.665178 TFLOP/s
+RESULT,variant=sw_pipeline,m=8192,n=8192,k=8192,avg_ms=0.652658844,tflops=1684.665178284,iterations=100
+PASS
+
+
+--- STDERR ---

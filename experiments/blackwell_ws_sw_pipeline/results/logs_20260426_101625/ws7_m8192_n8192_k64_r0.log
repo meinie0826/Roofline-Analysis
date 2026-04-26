@@ -1,0 +1,51 @@
+===================================================================
+Running Blackwell fp16 GEMM example 2 with:
+  mnk:       [8192, 8192, 64]
+  tolerance: 0.1
+  benchmark: True
+  warmup:    10
+  iters:     100
+  skip_ref:  True
+===================================================================
+
+
+Error: kernel '@kernels::@kernel_cutlass_kernel_TiledMMA_ThrLayoutVMNK21111000_PermutationMNK____MMAAtom_ThrID21_ShapeMNK25625616_TVLayoutA2128161281256_TVLayoutB2128161281256_TVLayoutC21282561281256_CopyAtom_ThrI_0' launch shared memory exceeds current GPU arch Arch.sm_100a allowed. Allocated: 246016 bytes. Max: 232448 bytes.
+
+
+
+--- STDERR ---
+Traceback (most recent call last):
+  File "/workspace/Roofline-Analysis/experiments/blackwell_ws_sw_pipeline/baselines/tutorial_fp16_gemm_2_warp_specialized_stage7.py", line 745, in <module>
+    run_dense_gemm(
+  File "/workspace/Roofline-Analysis/experiments/blackwell_ws_sw_pipeline/baselines/tutorial_fp16_gemm_2_warp_specialized_stage7.py", line 663, in run_dense_gemm
+    compiled_host_function(a_memref, b_memref, c_memref)
+  File "/workspace/Roofline-Analysis/.venv/lib/python3.12/site-packages/nvidia_cutlass_dsl/python_packages/cutlass/base_dsl/jit_executor.py", line 799, in run_compiled_program
+    raise DSLCudaRuntimeError(error_code, error_name)
+cutlass.base_dsl.common.DSLCudaRuntimeError: DSLCudaRuntimeError: CUDA_ERROR_INVALID_VALUE (error code: 1) 
+[91m⚠️ Invalid parameter passed to CUDA operation.[0m
+
+[93mThis is likely a bug - please report it with:[0m 
+
+[0m
+[1mError Code:[0m 1
+
+[94m🔍 Additional Context:[0m 
+- [1mError name: CUDA_ERROR_INVALID_VALUE
+- Error code: 1
+- CUDA_TOOLKIT_PATH: not set
+- Target SM ARCH: not set[0m
+
+[94m📊 GPU Information:[0m
+[1m- CUDA devices available: 8 (current: <CUdevice 0>)
+- Architecture: [94mBlackwell[0m ([92msm_100a[0m)
+- Compatible SM archs: [92msm_100a[0m
+- Total Memory: [94m178.35 GB[0m
+
+[1mCompatibility Check:[0m
+[91m❌ Error: Target SM ARCH unknown is not compatible
+💡 Please use one of SM ARCHs: [92msm_100a[0m
+
+[92m💡 Suggestions:[0m
+ [92m1. Your GPU model[0m
+ [92m2. SM ARCH setting[0m
+ [92m3. Steps to reproduce[0m
