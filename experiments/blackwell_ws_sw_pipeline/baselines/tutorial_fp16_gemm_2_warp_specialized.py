@@ -297,7 +297,7 @@ def kernel(
 
     # TMA warp
     if warp_idx == tma_warp_id:
-        for k_tile_idx in range(num_k_tiles):
+        for k_tile_idx in cutlass.range(num_k_tiles, unroll=1):
             # Wait for A/B buffers to be empty before loading into them
             handle = ab_producer.acquire_and_advance()
 
@@ -333,7 +333,7 @@ def kernel(
         if is_leader_cta:
             acc_empty = acc_producer.acquire_and_advance()
 
-            for k_tile_idx in range(num_k_tiles):
+            for k_tile_idx in cutlass.range(num_k_tiles, unroll=1):
                 # Wait for TMA copies to complete
                 handle = ab_consumer.wait_and_advance()
 
@@ -638,9 +638,21 @@ def run_dense_gemm(
     a = make_tensors(m, k, cutlass_torch.dtype(io_dtype))
     b = make_tensors(n, k, cutlass_torch.dtype(io_dtype))
     c = make_tensors(m, n, cutlass_torch.dtype(io_dtype))
-    a_memref = from_dlpack(a).mark_layout_dynamic()
-    b_memref = from_dlpack(b).mark_layout_dynamic()
-    c_memref = from_dlpack(c).mark_layout_dynamic()
+    a_memref = (
+        from_dlpack(a, assumed_align=32)
+        .mark_layout_dynamic(leading_dim=1)
+        .mark_compact_shape_dynamic(mode=1, divisibility=k)
+    )
+    b_memref = (
+        from_dlpack(b, assumed_align=32)
+        .mark_layout_dynamic(leading_dim=1)
+        .mark_compact_shape_dynamic(mode=1, divisibility=k)
+    )
+    c_memref = (
+        from_dlpack(c, assumed_align=32)
+        .mark_layout_dynamic(leading_dim=1)
+        .mark_compact_shape_dynamic(mode=1, divisibility=n)
+    )
 
     compiled_host_function = cute.compile(
         host_function,
